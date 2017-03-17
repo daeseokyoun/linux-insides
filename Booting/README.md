@@ -1,10 +1,9 @@
-# Kernel Boot Process
+# Kernel Boot Process (커널 부트 과정)
 
-This chapter describes the linux kernel boot process. Here you will see a
-couple of posts which describes the full cycle of the kernel loading process:
+이 챕터는 리눅스 커널 부팅 프로세스에 관해 기술한다. 여기에는 커널 로딩 과정 모두를 담았고 배울 수 있다.:
 
-* [From the bootloader to kernel](linux-bootstrap-1.md) - describes all stages from turning on the computer to running the first instruction of the kernel.
-* [First steps in the kernel setup code](linux-bootstrap-2.md) - describes first steps in the kernel setup code. You will see heap initialization, query of different parameters like EDD, IST and etc...
-* [Video mode initialization and transition to protected mode](linux-bootstrap-3.md) - describes video mode initialization in the kernel setup code and transition to protected mode.
-* [Transition to 64-bit mode](linux-bootstrap-4.md) - describes preparation for transition into 64-bit mode and details of transition.
-* [Kernel Decompression](linux-bootstrap-5.md) - describes preparation before kernel decompression and details of direct decompression.
+* [부트로더로 부터 커널로](linux-bootstrap-1.md) - 컴퓨터의 전원을 인가하는 시3점 부터 커널의 처음 명령어를 수행하는 내용을 기술.
+* [커널 설정 코드에서 첫 수행](linux-bootstrap-2.md) - 커널 설정 코드에서 처음 수행하는 것을 기술. 힙 초기화와 EDD, IST 등의 다른 인자화의 수행을 확인 할 수 있다.
+* [비디오 모드 초기화와 보호 모드로 전환](linux-bootstrap-3.md) - 커널 설정 코드내에서 비디오 모드 초기화와 보호 모드로 전환 하는 과정을 기술.
+* [64 비트 모드로 전환](linux-bootstrap-4.md) - 64 비트 모드의 전환을 위한 준비와 전환에 대한 상세 설명.
+* [커널 압축 해제](linux-bootstrap-5.md) - 커널 압축 해제 전 준비 사항과 커널 자신의 압축 해제에 대한 상세 설명.

@@ -1,32 +1,30 @@
-Kernel booting process. Part 1.
+커널 부팅 과정. part 1.
 ================================================================================
 
-From the bootloader to the kernel
+부트로더에서 커널로
 --------------------------------------------------------------------------------
 
-If you have been reading my previous [blog posts](http://0xax.blogspot.com/search/label/asm), then you can see that, for some time, I have been starting to get involved in low-level programming. I have written some posts about x86_64 assembly programming for Linux and, at the same time, I have also started to dive into the Linux source code. I have a great interest in understanding how low-level things work, how programs run on my computer, how are they located in memory, how the kernel manages processes & memory, how the network stack works at a low level, and many many other things. So, I have decided to write yet another series of posts about the Linux kernel for **x86_64**.
+만약 당신이 나의 이전 [블로그 포스트](http://0xax.blogspot.com/search/label/asm)를 읽어봤다면, 얼마간 나는 low-level 프로그래밍에 관련된 일을 시작했음을 알 수 있을 것이다. 나는 그와 동시에 리눅스에서 x86_64 어셈블리 프로그래밍에 관련에서 글을 썻고, 리눅스 커널 소스 분석을 시작했다. 나는 low-level 에서 일어나는 일, 컴퓨터에서 프로그램이 어떻게 수행되는지, 프로그램이 메모리에 어떻게 위치하는지, 커널은 프로세스와 메모리를 어떻게 관리하는지, low-level 관점에서 network stack 은 어떻게 동작하는지 그리고 많은 다른 부분에 대해 큰 관심을 갖게 되었다. 그래서, 나는 **x86_64** 를 위한 리눅스 커널에 대해 또 다른 일련의 시리즈의 글을 쓰기로 결정했다.
 
-Note that I'm not a professional kernel hacker and I don't write code for the kernel at work. It's just a hobby. I just like low-level stuff, and it is interesting for me to see how these things work. So if you notice anything confusing, or if you have any questions/remarks, ping me on twitter [0xAX](https://twitter.com/0xAX), drop me an [email](anotherworldofworld@gmail.com) or just create an [issue](https://github.com/0xAX/linux-insides/issues/new). I appreciate it. All posts will also be accessible at [linux-insides](https://github.com/0xAX/linux-insides) and, if you find something wrong with my English or the post content, feel free to send a pull request.
+나는 전문적인 리눅스 커널 해커도 아니고 리눅스 커널과 관련된 일을 하지도 않는다. 이것은 단지 취미일 뿐이다. 나는 low-level 에서 일어나는 것을 좋아한다. 그래서 만약 혼란스러운 어떤 것을 알려주거나 질문들이 있다면, twither [0xAX](https://twitter.com/0xAX) 나 [email](anotherworldofworld@gmail.com)을 보내거나 그냥 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 달라. 나는 그런 것들에 감사한다. 모든 글을은 [linux-insides](https://github.com/0xAX/linux-insides) 에서 접근가능하고, 영어사용이나 글 내용에 문제가 있다면, 수정 후 pull request 를 보내길 바란다. 한글로 번역된 내용은 [linux-insides](https://github.com/0xAX/linux-insides) 이고, 번역에 문제나 글 내용의 수정 사항이 있다면 [issue](https://github.com/daeseokyoun/linux-insides/issues/new)를 이용 바란다.
 
+*이것은 공식적인 문서가 아니라 단지 배우고 지식을 공유하기 위함이라는 것을 알려드린다.*
 
-*Note that this isn't official documentation, just learning and sharing knowledge.*
+**요구 지식**
 
-**Required knowledge**
+* C 언어를 이해
+* 어셈블리 언어의 이해(AT&T syntax)
 
-* Understanding C code
-* Understanding assembly code (AT&T syntax)
+여기까지는 단순한 소개였고 이제는 리눅스 커널과 low-level 의 내용을 배워보도록 하자.
 
-Anyway, if you just start to learn some tools, I will try to explain some parts during this and the following posts. Alright, this is the end of the simple introduction, and now we can start to dive into the kernel and low-level stuff.
+모든 코드는 3.18 커널 기준으로 되어 있다. 만약 여기에 변경이 있다면, 나는 그 포스트를 업데이트 할 것이다.
 
-All code is actually for the 3.18 kernel. If there are changes, I will update the posts accordingly.
-
-The Magical Power Button, What happens next?
+컴퓨터의 전원 인가시(파워 버트을 누르면), 다음에 일어나는 일은 무엇일까?
 --------------------------------------------------------------------------------
 
-Although this is a series of posts about the Linux kernel, we will not be starting from the kernel code - at least not, in this paragraph. As soon as you press the magical power button on your laptop or desktop computer, it starts working. The motherboard sends a signal to the [power supply](https://en.wikipedia.org/wiki/Power_supply). After receiving the signal, the power supply provides the proper amount of electricity to the computer. Once the motherboard receives the [power good signal](https://en.wikipedia.org/wiki/Power_good_signal), it tries to start the CPU. The CPU resets all leftover data in its registers and sets up predefined values for each of them.
+비록 이 문서는 리눅스 커널에 관련된 시리즈의 글이지만, 우리는 리눅스 커널에서 부터 시작하지는 않을 것이다. 당신의 노트북이나 PC의 파워 버튼을 눌렀을 때, 일어나는 일부터 시작한다. 마더보드는 처음 신호를 [power supply-한글](https://namu.wiki/w/%ED%8C%8C%EC%9B%8C%20%EC%84%9C%ED%94%8C%EB%9D%BC%EC%9D%B4)로 보낸다. 신호를 받고 나면, Power supply 는 컴퓨터에 알맞은 전력으로 전원을 공급한다. 일단 마더보드에서 [power good signal](https://en.wikipedia.org/wiki/Power_good_signal)를 받으면, 마더보드는 CPU를 수행하려고 한다. CPU 는 모든 레지스트의 남은 데이터를 리셋하고 각각을 위해 미리 정의된 값으로 설정한다.
 
-
-[80386](https://en.wikipedia.org/wiki/Intel_80386) and later CPUs define the following predefined data in CPU registers after the computer resets:
+[80386-한글](https://ko.wikipedia.org/wiki/%EC%9D%B8%ED%85%94_80386) 과 이후의 CPU 들은 컴퓨터 리셋 이후에 CPU의 레지스터에 다음과 같은 미리 정의된 값으로 설정한다:
 
 ```
 IP          0xfff0
@@ -34,40 +32,40 @@ CS selector 0xf000
 CS base     0xffff0000
 ```
 
-The processor starts working in [real mode](https://en.wikipedia.org/wiki/Real_mode). Let's back up a little and try to understand memory segmentation in this mode. Real mode is supported on all x86-compatible processors, from the [8086](https://en.wikipedia.org/wiki/Intel_8086) all the way to the modern Intel 64-bit CPUs. The 8086 processor has a 20-bit address bus, which means that it could work with a 0-0xFFFFF address space (1 megabyte). But it only has 16-bit registers, which have a maximum address of 2^16 - 1 or 0xffff (64 kilobytes). [Memory segmentation](http://en.wikipedia.org/wiki/Memory_segmentation) is used to make use of all the address space available. All memory is divided into small, fixed-size segments of 65536 bytes (64 KB). Since we cannot address memory above 64 KB with 16 bit registers, an alternate method is devised. An address consists of two parts: a segment selector, which has a base address, and an offset from this base address. In real mode, the associated base address of a segment selector is `Segment Selector * 16`. Thus, to get a physical address in memory, we need to multiply the segment selector part by 16 and add the offset:
+프로세서는 리얼 모드([real mode-한글](https://ko.wikipedia.org/wiki/%EB%A6%AC%EC%96%BC_%EB%AA%A8%EB%93%9C))에서 시작한다. 이 모드에서 메모리 세그먼트를 이해 해보도록 하자. Real mode 는 모든 x86 호완 프로세서([8086](https://ko.wikipedia.org/wiki/%EC%9D%B8%ED%85%94_8086) 에서 부터 최근 64비트 CPU 까지)에서 지원된다. 8086 프로세서는 20 비트의 주소 버스를 갖고 있고, 이것은 주소 공간 0 ~ 0xFFFFF (1 MB)에서 수행가능 하다는 의미 이다. 하지만 그 CPU는 16비트 레지스터만 갖고 있고, 이것은 최대 주소는 2^16 - 1(0xffff) -64 KB- 이라는 것이다. [메모리 세그먼트](https://ko.wikipedia.org/wiki/%EB%A9%94%EB%AA%A8%EB%A6%AC_%EC%84%B8%EA%B7%B8%EB%A8%BC%ED%8A%B8)는 모든 가용한 주소 공간을 사용할 수 있도록 한다. 모든 메모리는 작은, 65536 바이트(64KB)의 고정 크기 세그먼트로 나누어진다. 16비트 레지스터로 64 KB 이상의 메모리 접근이 불가능 하기 때문에 고안된 방법이다. 하나의 주소는 두 개의 부분으로 구성된다.: 베이스 주소인 세그먼트 셀렉터, 그리고 베이스 주소의 오프셋이다. Real mode 에서, 세그먼트 셀렉터의 연관된 기본 주소는 `세그먼트 셀렉터 * 16` 이다. 그러므로, 메모리의 물리적 주소를 얻기 위해서는, 우리는 세그먼트 셀렉터 부분에 16을 곱하고 오프셋을 더하면 된다:
 
 ```
-PhysicalAddress = Segment Selector * 16 + Offset
+물리 주소 = 세그먼트 셀렉터 * 16 + 오프셋
+(PhysicalAddress = Segment Selector * 16 + Offset)
 ```
 
-For example, if `CS:IP` is `0x2000:0x0010`, then the corresponding physical address will be:
-
+예를 들어, 만약 `CD:IP` 가 `0x2000:0x0010`이라면, 그에 대응되는 물리 주소는 아래와 같다:
 ```python
 >>> hex((0x2000 << 4) + 0x0010)
 '0x20010'
 ```
 
-But, if we take the largest segment selector and offset, `0xffff:0xffff`, then the resulting address will be:
-
+그러나, 만약 우리가 가장 큰 주소를 사용하려면, `0xffff:0xffff`을 사용할 수 있다. 그러면 아래와 같은 주소를 얻을 수 있다:
 ```python
 >>> hex((0xffff << 4) + 0xffff)
 '0x10ffef'
 ```
 
-which is 65520 bytes past the first megabyte. Since only one megabyte is accessible in real mode, `0x10ffef` becomes `0x00ffef` with disabled [A20](https://en.wikipedia.org/wiki/A20_line).
+[A20 라인](https://sites.google.com/site/simplicitydrivendevelopment/un-yeongcheje/x86-un-yeongcheje-guhyeon/interrupt-and-exception)이 켜지기 전에 real mode 에서는 단지 1MB 만 접근이 가능하므로, `0x10ffef`의 주소는 `0x00ffef` 가 될 것이다.
 
-Ok, now we know about real mode and memory addressing. Let's get back to discussing register values after reset:
+이제 우리는 real mode 와 메모리 주소지정에 대해 알아보았다. 이제 리셋 이후의 레지스터 값에 대한 논의로 돌아가자.:
 
-The `CS` register consists of two parts: the visible segment selector, and the hidden base address. While the base address is normally formed by multiplying the segment selector value by 16, during a hardware reset the segment selector in the CS register is loaded with 0xf000 and the base address is loaded with 0xffff0000; the processor uses this special base address until `CS` is changed.
+`CS` 레지스터는 두 개의 부분으로 구성된다: 보이는 부분-Visable part-(세그먼트 셀렉터)와 보이지 않는 부분-Hidden Part-(베이스 주소)로 나뉜다. 베이스 주소는 일반적으로 세그먼트 셀렉터에 16을 곱한 값으로 만들어지는 반면에 하드웨어 리셋 동안 CS 레지스터의 세그먼트 셀렉터에는 0xf000 이 로드되고 베이스 주소는 0xffff0000 이 로드 된다. 프로세서는 이 특별한 베이스 주소를 'CS' 가 바뀔 때까지 사용한다.
+[추가 잠조 자료-한글](http://zkakira.tistory.com/entry/%EC%9A%B4%EC%98%81%EC%B2%B4%EC%A0%9C%EC%9D%98-%EB%A9%94%EB%AA%A8%EB%A6%AC-%EC%A3%BC%EC%86%8C-%EC%A7%80%EC%A0%95%EB%B0%A9%EC%8B%9D-Segment)
 
-The starting address is formed by adding the base address to the value in the EIP register:
+시작 주소는 EIP 레지스터 값에 베이스 주소를 더한 형태이다.:
 
 ```python
 >>> 0xffff0000 + 0xfff0
 '0xfffffff0'
 ```
 
-We get `0xfffffff0`, which is 4GB (16 bytes). This point is called the [Reset vector](http://en.wikipedia.org/wiki/Reset_vector). This is the memory location at which the CPU expects to find the first instruction to execute after reset. It contains a [jump](http://en.wikipedia.org/wiki/JMP_%28x86_instruction%29) (`jmp`) instruction that usually points to the BIOS entry point. For example, if we look in the [coreboot](http://www.coreboot.org/) source code, we see:
+우리는 `0xfffffff0`(4GB - 16 bytes) 를 얻었다. 이 지점은 [리셋 벡터](http://en.wikipedia.org/wiki/Reset_vector) 라 불린다. 리셋 이후에 실행되기 위한 첫 명령어를 찾을 수 있는 메모리 위치 이다. 그것은 BIOS 엔트리 포인트로 진입할 수 있는 [jump](https://ko.wikipedia.org/wiki/%EB%AA%85%EB%A0%B9%EC%96%B4_%EC%A7%91%ED%95%A9) (`jmp`) 명령어를 포함한다. 예를 들어, 만약 우리가 [coreboot](http://www.coreboot.org/) 소스를 보게 된다면, 아래와 같이 나온다:
 
 ```assembly
     .section ".reset"
@@ -79,7 +77,7 @@ reset_vector:
     ...
 ```
 
-Here we can see the `jmp` instruction [opcode](http://ref.x86asm.net/coder32.html#xE9), which is 0xe9, and its destination address at `_start - ( . + 2)`. We can also see that the `reset` section is 16 bytes, and that it starts at `0xfffffff0`:
+여기에 우리가 `jmp` 명령의 [opcode](http://ref.x86asm.net/coder32.html#xE9)를 보면, 0xe9 라는 것을 알수 있고, `_start - ( . + 2)`에 목적지 주소가 있다. 우리는 또한 `reset` 섹션이 16바이트라는 것을 볼 수 있고 그것의 시작 주소는 `0xfffffff0` 이라는 걸 알 수 있다.:
 
 ```
 SECTIONS {
@@ -93,7 +91,7 @@ SECTIONS {
 }
 ```
 
-Now the BIOS starts; after initializing and checking the hardware, the BIOS needs to find a bootable device. A boot order is stored in the BIOS configuration, controlling which devices the BIOS attempts to boot from. When attempting to boot from a hard drive, the BIOS tries to find a boot sector. On hard drives partitioned with an MBR partition layout, the boot sector is stored in the first 446 bytes of the first sector, where each sectoris 512 bytes. The final two bytes of the first sector are `0x55` and `0xaa`, which designates to the BIOS that this device is bootable. For example:
+이제 BIOS 가 시작된다; 하드웨어의 확인 및 초기화 이후에, BIOS는 부팅 가능한 장치를 찾는다. 부트 순서는 BIOS 설정에 저장되어 있고, BIOS 가 어떤 장치로 부터 시작해야 하는지 컨트롤 한다. 하드 드라이브로 부터 부팅을 시도할 때, BIOS는 부트섹터를 찾으려고 한다. 하드 드라이브 MBR 파티션을 포함하여 파티션이 나누어져 있는데, 부트 섹터는 첫번째 섹터의 446 바이트에 저장되어 있다. 첫 섹터의 마지막 두 바이트는 `0x55` 와 `0xaa` 인데 이것은 이 장치는 부팅에 사용 가능한 장치라는 것을 알려준다. 예를 들면:
 
 ```assembly
 ;
@@ -117,17 +115,17 @@ db 0x55
 db 0xaa
 ```
 
-Build and run this with:
+위 어셈블리를 빌드하고 실행하기:
 
 ```
 nasm -f bin boot.nasm && qemu-system-x86_64 boot
 ```
 
-This will instruct [QEMU](http://qemu.org) to use the `boot` binary that we just built as a disk image. Since the binary generated by the assembly code above fulfills the requirements of the boot sector (the origin is set to `0x7c00` and we end with the magic sequence), QEMU will treat the binary as the master boot record (MBR) of a disk image.
+이것은 디스크 이미지로 빌드된 `boot` 바이너리로 [QEMU](http://qemu.org)에서 사용되어 질 것이다. 부트섹터의 요구사항을 만족하는 위의 어셈블리 코드로 생성된 바이너리를 이용하면(BIOS는 이 코드를 0x7c00 에 로드하여 수행한다.), QEMU는 디스크 이미지의 마스터 부트 레코드(MBR-Master Boot Record) 로 생각할 것이다.
 
-You will see:
+결과는:
 
-![Simple bootloader which prints only `!`](http://oi60.tinypic.com/2qbwup0.jpg)
+![`!` 찍는 간단한 부트로더](http://oi60.tinypic.com/2qbwup0.jpg)
 
 In this example we can see that the code will be executed in 16 bit real mode and will start at `0x7c00` in memory. After starting, it calls the [0x10](http://www.ctyme.com/intr/rb-0106.htm) interrupt, which just prints the `!` symbol; it fills the remaining 510 bytes with zeros and finishes with the two magic bytes `0xaa` and `0x55`.
 

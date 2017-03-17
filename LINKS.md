@@ -1,27 +1,27 @@
-Useful links
+유용한 링크
 ========================
 
-Linux boot
+리눅스 부트
 ------------------------
 
-* [Linux/x86 boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt)
-* [Linux kernel parameters](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt)
+* [리눅스/x86 부트 프로토콜](https://www.kernel.org/doc/Documentation/x86/boot.txt)
+* [리눅스 커널 인자들](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt)
 
-Protected mode
+Protected mode(보호 모드)
 ------------------------
 
 * [64-ia-32-architectures-software-developer-vol-3a-part-1-manual.pdf](http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html)
 
-Memory management in the Linux kernel
+리눅스 커널에서 메모리 관리
 --------------------------------------
 
-* [Notes on the linux kernel VM subsystem by @lorenzo-stoakes](https://github.com/lorenzo-stoakes/linux-vm-notes)
+* [리눅스 커널의 VM 서브 시스템에 관련된 노트@lorenzo-stoakes](https://github.com/lorenzo-stoakes/linux-vm-notes)
 
-Serial programming
+시리얼 프로그래밍
 ------------------------
 
-* [8250 UART Programming](http://en.wikibooks.org/wiki/Serial_Programming/8250_UART_Programming#UART_Registers)
-* [Serial ports on OSDEV](http://wiki.osdev.org/Serial_Ports)
+* [8250 UART 프로그래밍](http://en.wikibooks.org/wiki/Serial_Programming/8250_UART_Programming#UART_Registers)
+* [OSDEV 에서 시리얼 포트](http://wiki.osdev.org/Serial_Ports)
 
 VGA
 ------------------------
@@ -31,27 +31,27 @@ VGA
 IO
 ------------------------
 
-* [IO port programming](http://www.tldp.org/HOWTO/text/IO-Port-Programming)
+* [IO 포트 프로그래밍](http://www.tldp.org/HOWTO/text/IO-Port-Programming)
 
-GCC and GAS
+GCC 와 GAS
 ------------------------
 
-* [GCC type attributes](https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html)
-* [Assembler Directives](http://www.chemie.fu-berlin.de/chemnet/use/info/gas/gas_toc.html#TOC65)
+* [GCC 타입 속성](https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html)
+* [어셈블러 옵션](http://www.chemie.fu-berlin.de/chemnet/use/info/gas/gas_toc.html#TOC65)
 
 
-Important data structures
+중요한 데이터 자료 구조
 --------------------------
 
-* [task_struct definition](http://lxr.free-electrons.com/source/include/linux/sched.h#L1274)
+* [task_struct 정의](http://lxr.free-electrons.com/source/include/linux/sched.h#L1274)
 
-Other architectures
+다른 아키텍쳐
 ------------------------
 
-* [PowerPC and Linux Kernel Inside](http://www.systemcomputing.org/ppc/)
+* [PowerPC 와 리눅스 커널 내부](http://www.systemcomputing.org/ppc/)
 
-Useful links
+유용한 링크
 ------------------------
 
-* [Linux x86 Program Start Up](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
-* [Memory Layout in Program Execution (32 bits)](http://fgiasson.com/articles/memorylayout.txt)
+* [Linux x86 프로그램 시작](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
+* [프로그램 실행 시 메모리 구조 (32 비트)](http://fgiasson.com/articles/memorylayout.txt)

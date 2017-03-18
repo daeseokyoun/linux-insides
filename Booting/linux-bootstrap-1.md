@@ -329,10 +329,10 @@ cs = 0x1020
 
 이제 구현을 살펴보자.
 
-Segment registers align
+세그먼트 레지스터 정렬(align)
 --------------------------------------------------------------------------------
 
-First of all, the kernel ensures that `ds` and `es` segment registers point to the same address. Next, it clears the direction flag using the `cld` instruction:
+첫번째로, 커널은 `ds` 와 `es` 세그먼트 레지스터가 같은 주소를 가리키고 있다는 것을 확실히 한다. 그 다음, 그것을 `cld` 명령어를 사용하여 클리어 한다.([cld 명령어](https://en.wikipedia.org/wiki/Direction_flag)):
 
 ```assembly
     movw    %ds, %ax
@@ -340,7 +340,7 @@ First of all, the kernel ensures that `ds` and `es` segment registers point to t
     cld
 ```
 
-As I wrote earlier, grub2 loads kernel setup code at address `0x10000` and `cs` at `0x1020` because execution doesn't start from the start of file, but from
+내가 위쪽에서 썻듯이, grub2 는 커널 설정 코드를 `0x10000` 에 `0x10200` 에는 `cs` 를 로드한다. 왜냐하면 실행은 파일의 처음에서 시작하는 것이 아니라 아래에서 부터 시작한다.:
 
 ```assembly
 _start:
@@ -348,7 +348,7 @@ _start:
     .byte start_of_setup-1f
 ```
 
-`jump`, which is at a 512 byte offset from [4d 5a](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L47). It also needs to align `cs` from `0x10200` to `0x10000`, as well as all other segment registers. After that, we set up the stack:
+[4d 5a](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L47) 로 부터 512 바이트 떨어진 곳에 `jump` 한다. 그것은 또한 다른 세그먼트 레지스터 뿐만 아니라, `cs` 를 `0x10200` 에서 `0x10000` 에 정렬해야 한다. 그다음엔, 우리는 스택을 설정한다:
 
 ```assembly
     pushw   %ds
@@ -356,12 +356,12 @@ _start:
     lretw
 ```
 
-which pushes the value of `ds` to the stack with the address of the [6](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L494) label and executes the `lretw` instruction. When the `lretw` instruction is called, it loads the address of label `6` into the [instruction pointer](https://en.wikipedia.org/wiki/Program_counter) register and loads `cs` with the value of `ds`. Afterwards, `ds` and `cs` will have the same values.
+`ds`의 값을 라벨 [6](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L597) 주소에 있는 것과 함께 넣어준고 `lretw`를 수행한다. `lretw` 명령어가 불리면, 그것은 라벨 `6` 의 주소를 [instruction pointer 명령 포인터](https://en.wikipedia.org/wiki/Program_counter) 레지스터에 로드하고 `ds`의 값과 함께 `cs`도 로드한다. 그렇게 하면, `ds`와 `cs` 는 같은 값을 가지게 될 것이다.
 
-Stack Setup
+스택 설정
 --------------------------------------------------------------------------------
 
-Almost all of the setup code is in preparation for the C language environment in real mode. The next [step](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L467) is checking the `ss` register value and making a correct stack if `ss` is wrong:
+설정 코드의 대부분은 real mode 내에 C 언어 환경 준비를 위한 것이다. 다음 [단계](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L467)는 `ss` 레지스터 값을 확인 하고 `ss`가 잘못된 값을 갖고 있다면 수정한다.:
 
 ```assembly
     movw    %ss, %dx
@@ -370,15 +370,15 @@ Almost all of the setup code is in preparation for the C language environment in
     je      2f
 ```
 
-This can lead to 3 different scenarios:
+이것은 3개의 다른 시나리오를 만들 수 있다.:
 
-* `ss` has valid value 0x10000 (as do all other segment registers beside `cs`)
-* `ss` is invalid and `CAN_USE_HEAP` flag is set     (see below)
-* `ss` is invalid and `CAN_USE_HEAP` flag is not set (see below)
+* `ss` 는 정상적인 0x10000 을 가진다.(`cs`를 포함한 다른 레지스터도 마찬가지 입니다.)
+* `ss`는 잘못된 값이며 `CAN_USE_HEAP` 플래그를 셋합니다.(아래에 계속)
+* `ss`는 잘못된 값이며 `CAN_USE_HEAP` 플래그를 셋하지 않습니다.(아래의 계속)
 
-Let's look at all three of these scenarios in turn:
+이 세가지 시나리오를 차례대로 살펴보도록 하자:
 
-* `ss` has a correct address (0x10000). In this case, we go to label [2](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L481):
+* `ss` 가 정상적인 주소(0x10000)을 가졌다. 이경우에, 우리는 라벨 [2](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L584)로:
 
 ```assembly
 2:  andw    $~3, %dx
@@ -389,11 +389,11 @@ Let's look at all three of these scenarios in turn:
     sti
 ```
 
-Here we can see the alignment of `dx` (contains `sp` given by bootloader) to 4 bytes and a check for whether or not it is zero. If it is zero, we put `0xfffc` (4 byte aligned address before the maximum segment size of 64 KB) in `dx`. If it is not zero, we continue to use `sp`, given by the bootloader (0xf7f4 in my case). After this, we put the `ax` value into `ss`, which stores the correct segment address of `0x10000` and sets up a correct `sp`. We now have a correct stack:
+여기서 우리는 `dx`(부트로더에서 주어진 `sp`를 포함한다)의 4 바이트 정렬과 0인지 아닌지 검사하는 과정을 볼 수 있다. 만약 0 이라면, 우리는 `0xfffc`를 `dx`에 넣어준다.(최대 64 KB 세그먼트 크기의 4 바이트 정렬된 주소) 만약 0 이 아니라면, 우리는 부트로더로 부터 주어진 `sp` 를 사용한다.(여기서는 0xf7f4) 이 다음에, 우리는 `0x10000` 의 정상적인 세크먼트 주소를 갖고 있는 `ax` 값을 `ss`로 넣어주고 `sp` 를 정상적으로 설정한다. 우리는 스택을 갖게 되었다.:
 
-![stack](http://oi58.tinypic.com/16iwcis.jpg)
+![스택](http://oi58.tinypic.com/16iwcis.jpg)
 
-* In the second scenario, (`ss` != `ds`). First, we put the value of [_end](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L52) (the address of the end of the setup code) into `dx` and check the `loadflags` header field using the `testb` instruction to see whether we can use the heap. [loadflags](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L321) is a bitmask header which is defined as:
+* 두 번째 시나리오에서는, (`ss` != `ds`) 이다. 처음, 우리는 [_end](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L52) (이 주소는 설정코드의 마지막 주소) 의 값을 `dx`로 넣어주고 `loadflags` 헤더 항목을 `testb` 명령을 사용해서 우리가 heap을 사용할 수 있는지 없는지 확인한다. [loadflags](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L321) 는 비트마스크 헤더로 아래와 같이 정의 되어 있다:
 
 ```C
 #define LOADED_HIGH     (1<<0)
@@ -402,7 +402,7 @@ Here we can see the alignment of `dx` (contains `sp` given by bootloader) to 4 b
 #define CAN_USE_HEAP    (1<<7)
 ```
 
-and, as we can read in the boot protocol,
+그리고 우리가 부트 프로토콜을 읽어 보면,
 
 ```
 Field name: loadflags
@@ -414,30 +414,30 @@ Field name: loadflags
     heap_end_ptr is valid.  If this field is clear, some setup code
     functionality will be disabled.
 ```
+만약 `CAN_USE_HEAP` 비트가 설정되어 있으면, 우리는 `heap_end_ptr` 를 `dx`(`_end` 를 가리키고 있음)에 넣고 `STACK_SIZE` 값을 더해 준다(최소 스택 크기는 512 바이트 이다). 이 다음에, 만약 `dx` 가 캐리가 되지 않는다면, (그것은 캐리되지 않을 것이다. `dx = _end + 512`) 라벨 2로 (이전 경우와 같이) 점프하고 알맞은 스택을 만든다.
 
-If the `CAN_USE_HEAP` bit is set, we put `heap_end_ptr` into `dx` (which points to `_end`) and add `STACK_SIZE` (minimum stack size, 512 bytes) to it. After this, if `dx` is not carried (it will not be carried, dx = _end + 512), jump to label `2` (as in the previous case) and make a correct stack.
+![스택](http://oi62.tinypic.com/dr7b5w.jpg)
 
-![stack](http://oi62.tinypic.com/dr7b5w.jpg)
+* `CAN_USE_HEAP` 플래그가 설정되지 않았을 때, 우리는 최소 스택을 `_end` 에서 `_end + STACK_SIZE` 까지 사용할 수 있다:
 
-* When `CAN_USE_HEAP` is not set, we just use a minimal stack from `_end` to `_end + STACK_SIZE`:
+![최소 스택](http://oi60.tinypic.com/28w051y.jpg)
 
-![minimal stack](http://oi60.tinypic.com/28w051y.jpg)
-
-BSS Setup
+BSS 설정
 --------------------------------------------------------------------------------
 
 The last two steps that need to happen before we can jump to the main C code are setting up the [BSS](https://en.wikipedia.org/wiki/.bss) area and checking the "magic" signature. First, signature checking:
+마지막 두 단계는 메인 C 코드로 넘어가기 전에 [BSS](https://en.wikipedia.org/wiki/.bss) 설정을 하고 매직 시그너처를 확인하는 일어나야 한다.
 
 ```assembly
     cmpl    $0x5a5aaa55, setup_sig
     jne     setup_bad
 ```
 
-This simply compares the [setup_sig](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L39) with the magic number `0x5a5aaa55`. If they are not equal, a fatal error is reported.
+이것은 간단히 [setup_sig](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L39) 와 매직 숫자인 `0x5a5aaa55` 와 비교한다. 만얀 같지 않으면, 치명적인 에러가 리포팅 된다.
 
-If the magic number matches, knowing we have a set of correct segment registers and a stack, we only need to set up the BSS section before jumping into the C code.
+만약 매직 숫자가 같으면, 이것은 알맞은 세그먼트 레지스터들과 스택이 설정되었다는 것을 알게 되고, 우리는 C 코드로 점프하기 전에 BSS 섹션 설정만 하면 된다.
 
-The BSS section is used to store statically allocated, uninitialized data. Linux carefully ensures this area of memory is first zeroed using the following code:
+BSS 섹션은 정적으로 할당된 것을 저장하기 위해(초기화 되지 않는 데이터) 사용된다. 리눅스는 아래의 코드로 그 영이 모두 0으로 초기화를 시킨다.:
 
 ```assembly
     movw    $__bss_start, %di
@@ -448,29 +448,29 @@ The BSS section is used to store statically allocated, uninitialized data. Linux
     rep; stosl
 ```
 
-First, the [__bss_start](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L47) address is moved into `di`. Next, the `_end + 3` address (+3 - aligns to 4 bytes) is moved into `cx`. The `eax` register is cleared (using a `xor` instruction), and the bss section size (`cx`-`di`) is calculated and put into `cx`. Then, `cx` is divided by four (the size of a 'word'), and the `stosl` instruction is used repeatedly, storing the value of `eax` (zero) into the address pointed to by `di`, automatically increasing `di` by four, repeating until `cx` reaches zero). The net effect of this code is that zeros are written through all words in memory from `__bss_start` to `_end`:
+첫째로, [__bss_start](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L47) 의 주소는 `di` 로 옮겨진다. 다음, `_end + 3` 주소는(+3 - 4바이트 정렬) `cx` 로 옮겨진다. `eax` 레지스터는 클리어 된다.(`xor` 명령을 사용), 그리고 bss 섹션 크기(`cx` - `di`) 는 계산되어 `cx`로 넣는다. 그런다음, `cx`는 4로 나누어지고(word 크기 단위로) `stosl` 명령어가 반복적으로 사용되고, `eax`(0 값) 의 값은 `di`가 가리키는 주소내에 저장되고, 자동적으로 `di` 는 4씩 증가하게 하는 것을 `cx` 가 0 이 될때 까지 한다. 이 코드의 그물 효과는 `__bss_start`에서 `_end`까지의 메모리를 워드 단위로 0으로 채우는 것을 보여준다.:
 
 ![bss](http://oi59.tinypic.com/29m2eyr.jpg)
 
-Jump to main
+메인으로 점프
 --------------------------------------------------------------------------------
 
-That's all - we have the stack and BSS, so we can jump to the `main()` C function:
+이제 다 됐다. - 우리는 스택과 BSS 영역을 갖고 있고 우리는 C 함수인 `main()`으로 점프 할 수 있다:
 
 ```assembly
     calll main
 ```
 
-The `main()` function is located in [arch/x86/boot/main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c). You can read about what this does in the next part.
+이 `main()` 함수는 [arch/x86/boot/main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c)에 위치한다. 당ㅇ신은 다음 파트에서 이 함수가 무엇을 하는지 읽을 수 있다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the first part about Linux kernel insides. If you have questions or suggestions, ping me on twitter [0xAX](https://twitter.com/0xAX), drop me an [email](anotherworldofworld@gmail.com), or just create an [issue](https://github.com/0xAX/linux-internals/issues/new). In the next part, we will see the first C code that executes in the Linux kernel setup, the implementation of memory routines such as `memset`, `memcpy`, `earlyprintk`, early console implementation and initialization, and much more.
+이것은 리눅스 커널 인사이드에 관련된 첫번째 파트의 끝이다. 만약 당신이 질문이나 제안이 있다면, 나의 트위터[0xAX](https://twitter.com/0xAX)로 남기던가, [email](anotherworldofworld@gmail.com) 보내던가, 아니면  [issue](https://github.com/0xAX/linux-internals/issues/new)를 만들거나 해주면 된다. 다음 파트에서는, 우리가 리눅스 커널 설정에 첫 C 코드를 살펴보고 `memset`, `memcpy`, `earlyprintk`와 같은 메모리 루틴들의 구현과 콘솔 구현 및 초기화 등의 다양한 것을 다룰 것이다.
 
-**Please note that English is not my first language and I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-internals).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
   * [Intel 80386 programmer's reference manual 1986](http://css.csail.mit.edu/6.858/2014/readings/i386.pdf)

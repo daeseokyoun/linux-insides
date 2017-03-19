@@ -154,39 +154,39 @@ Every segment register has a visible and hidden part.
 * 보여지는 부분(Visible) - 세그먼트 셀렉터가 여기에 저장
 * 숨겨진 부분(Hidden) - 세그먼트 디스크립터(베이스, 제한(limit), 속성, 플래그들)
 
-The following steps are needed to get the physical address in the protected mode:
+보호 모드에서 물리주소를 얻기 위해서는 다음과 같은 단계를 거처야 한다:
 
-* The segment selector must be loaded in one of the segment registers
-* The CPU tries to find a segment descriptor by GDT address + Index from selector and load the descriptor into the *hidden* part of the segment register
-* Base address (from segment descriptor) + offset will be the linear address of the segment which is the physical address (if paging is disabled).
+* 세그먼트 셀렉터는 세그먼트 레지스터 중 하나에 반드시 로드되어 있어야 한다.
+* CPU 는 셀렉터로 부터 GDT 주소 + 인덱스에 있는 세그먼트 디스크립터를 찾고, 세그먼트 레지스터의 *hidden(숨겨진)* 부분에 이 디스크립터를 로드 해야 한다.
+* 베이스 주소 (세그먼트 디스크립터로 부터) + 오프셋은 세그먼트의 선형 주소가 될 것이고 이것이 물리주소이다.(만약 페이징이 활성화되지 않은 상태라면)
 
-Schematically it will look like this:
+개략적으로 그것은 아래와 같이 보일 것이다.:
 
 ![linear address](http://oi62.tinypic.com/2yo369v.jpg)
 
-The algorithm for the transition from real mode into protected mode is:
+이 알고리즘은 real mode 에서 보호 모드로 전환을 하기 위한 것이다:
 
-* Disable interrupts
-* Describe and load GDT with `lgdt` instruction
-* Set PE (Protection Enable) bit in CR0 (Control Register 0)
-* Jump to protected mode code
+* 인터럽트 중지
+* `lgdt` 명령어로 GDT 를 기술하고 로드
+* CR0 (Control Register 0) 에 있는 PE (Protection Enable) 비트를 셋
+* 보호 모드로 진입
 
-We will see the complete transition to protected mode in the linux kernel in the next part, but before we can move to protected mode, we need to do some more preparations.
+우리는 다음 파트에서 리눅스 커널의 보호 모드로 전환하는 것을 완벽하게 살펴볼 것이다. 그전에 보호모드에 진입하려면, 몇 가지 준비사항에 대해 알아 볼 필요가 있다.
 
-Let's look at [arch/x86/boot/main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c). We can see some routines there which perform keyboard initialization, heap initialization, etc... Let's take a look.
+[arch/x86/boot/main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c)를 살펴보자. 우리는 키보드 초기화, 힙 초기화등의 과정들을 볼 수 있다.
 
-Copying boot parameters into the "zeropage"
+부트 파라미터(인자)를 "zeropage"내로 복사.
 --------------------------------------------------------------------------------
 
-We will start from the `main` routine in "main.c". First function which is called in `main` is [`copy_boot_params(void)`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L30). It copies the kernel setup header into the field of the `boot_params` structure which is defined in the [arch/x86/include/uapi/asm/bootparam.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L113).
+우리는 "main.c" 파일에서 `main` 루틴에서 시작할 것이다. `main` 에서 처음 불리는 함수는 [`copy_boot_params(void)`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L30). 이다. 이것은 커널 설정 해더를 [arch/x86/include/uapi/asm/bootparam.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L113)에 정의된 `boot_params` 구조체로 복사한다.
 
-The `boot_params` structure contains the `struct setup_header hdr` field. This structure contains the same fields as defined in [linux boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) and is filled by the boot loader and also at kernel compile/build time. `copy_boot_params` does two things:
+`boot_params` 구조체는 `struct setup_header hdr` 자료구조를 포함한다. 이 자료 구조는 [linux boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt)에 정의된 같은 항목들을 포함하고, 이 자료구조는 부트로더에서 또는 커널 컴파일/빌드 시점에 내용이 채워진다. `copy_boot_params` 는 두 가지 일을 한다:
 
-1. Copies `hdr` from [header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L281) to the `boot_params` structure in `setup_header` field
+1. `hdr` 을 [header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L281) 에서 `boot_params` 구조체의 `setup_header` 항목으로 복사한다.
 
-2. Updates pointer to the kernel command line if the kernel was loaded with the old command line protocol.
+2. 만약 커널이 이미 지난 스타일의 커맨드 라인 프로토콜에 의해 로드되었다면 커널 커맨드 라인을 업데이트 한다.
 
-Note that it copies `hdr` with `memcpy` function which is defined in the [copy.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/copy.S) source file. Let's have a look inside:
+`hdr` 은 [copy.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/copy.S) 에 구현된 `memcpy`를 이용하여 복사된다. 그 내부를 살펴보자:
 
 ```assembly
 GLOBAL(memcpy)
@@ -206,40 +206,41 @@ GLOBAL(memcpy)
 ENDPROC(memcpy)
 ```
 
-Yeah, we just moved to C code and now assembly again :) First of all we can see that `memcpy` and other routines which are defined here, start and end with the two macros: `GLOBAL` and `ENDPROC`. `GLOBAL` is described in [arch/x86/include/asm/linkage.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/linkage.h) which defines `globl` directive and the label for it. `ENDPROC` is described in [include/linux/linkage.h](https://github.com/torvalds/linux/blob/master/include/linux/linkage.h) which marks the `name` symbol as a function name and ends with the size of the `name` symbol.
+우리는 이제 막 C 코드로 진입을 했고 다시 에셈블리 코드를 보게 되었다. 이 파일의 처음으로 보여지는 `memcpy` 와 다른 함수들의 구현들을 볼 수 있을 것이고, 이 함수들의 시작과 끝을 `GLOBAL` 과 `ENDPROC`이라는 두 개의 매크로를 이용했다. `GLOBAL` 은 [arch/x86/include/asm/linkage.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/linkage.h) 에 정의되어 있고, 전달되는 이름을 `global` 로 심볼을 외부 참조가 가능하도록 만든다. `ENDPROC` 은 [include/linux/linkage.h](https://github.com/torvalds/linux/blob/master/include/linux/linkage.h) 에 있고, 그 함수 이름으로의 `name`의 심볼 크기와 그 끝을 알려주는 역할을 한다.
 
-Implementation of `memcpy` is easy. At first, it pushes values from the `si` and `di` registers to the stack to preserve their values because they will change during the `memcpy`. `memcpy` (and other functions in copy.S) use `fastcall` calling conventions. So it gets its incoming parameters from the `ax`, `dx` and `cx` registers.  Calling `memcpy` looks like this:
+`memcpy`의 구현은 아주 간단하다. 첫째로, `memcpy`를 수행하는 동안 값이 변경될 `si` 와 `di` 레지스터의 이전 값을 보존하기 위해 스택에 넣어둔다. `memcpy` (그리고 copy.S 의 다른 함수들도)는 `fastcall` 함수 호출 규약(calling conventions)을 사용한다.([calling conventions-한글](http://wendys.tistory.com/22)) 그래서 들어오는 인자들을 각각 순서대로 `ax`, `dx` 그리고 `cx` 레지스터에 저장한다. `memcpy` 호출을 아래와 같이 이루어 진다.:
 
 ```c
 memcpy(&boot_params.hdr, &hdr, sizeof hdr);
 ```
 
-So,
-* `ax` will contain the address of the `boot_params.hdr`
-* `dx` will contain the address of `hdr`
-* `cx` will contain the size of `hdr` in bytes.
+그래서,
+* `ax` 는 `boot_params.hdr`의 주소를 가진다.
+* `dx` 는 `hdr` 의 주소를 가진다.
+* `cx` 는 `hdr`의 크기를 바이트 단위로 가진다.
 
-`memcpy` puts the address of `boot_params.hdr` into `di` and saves the size on the stack. After this it shifts to the right on 2 size (or divide on 4) and copies from `si` to `di` by 4 bytes. After this we restore the size of `hdr` again, align it by 4 bytes and copy the rest of the bytes from `si` to `di` byte by byte (if there is more). Restore `si` and `di` values from the stack in the end and after this copying is finished.
+`memcpy` 는 `boot_params.hdr`의 주소를 `di` 에 넣고 스택에 그 크기를 저장한다. 다음에 크기를 2 만큰 우측 쉬프트 연산(4로 나누는 것)을 하고 `si` 에서 `di` 에 4 바이트 만큼 복사한다. 이 다음엔 다시 `hdr` 의 크기를 스택에서 꺼내고, 4 바이트 정렬을 한다. 그리고 나머지 바이트를 `si`에서 `di`로 바이트 단위로 복사한다.(복사할 것이 남았다면) 복사가 완료되면 스택으로 부터 원래 `si`와 `di` 값을 꺼내어 복구한다.
 
-Console initialization
+콘솔 초기화
 --------------------------------------------------------------------------------
 
-After `hdr` is copied into `boot_params.hdr`, the next step is console initialization by calling the `console_init` function which is defined in [arch/x86/boot/early_serial_console.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/early_serial_console.c).
+`hdr`이 `boot_params.hdr`로 복사 되면, 다음 단계로는 [arch/x86/boot/early_serial_console.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/early_serial_console.c)에 정의된 `console_init` 함수를 호출하여 콘솔을 초기화한다.
 
-It tries to find the `earlyprintk` option in the command line and if the search was successful, it parses the port address and baud rate of the serial port and initializes the serial port. Value of `earlyprintk` command line option can be one of these:
+그것은 커맨드 라인에 `earlyprintk` 옵션이 있는지 찾고, 만약 검색이 성공적이었다면, 그것은 포트 주소와 시리얼 포트의 baud rate 를 파싱하고 시리얼 포트를 초기화한다. `earlyprintk` 와 연관된 커맨드 라인 옵션의 값을 아래와 같은 형식으로 찾을 수 있다.:
 
 * serial,0x3f8,115200
 * serial,ttyS0,115200
 * ttyS0,115200
 
 After serial port initialization we can see the first output:
+시리얼 포트 초기화 이후에 우리는 첫 출력을 볼 수 있다.
 
 ```C
 if (cmdline_find_option_bool("debug"))
     puts("early console in setup code\n");
 ```
 
-The definition of `puts` is in [tty.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/tty.c). As we can see it prints character by character in a loop by calling the `putchar` function. Let's look into the `putchar` implementation:
+`puts` 는 [tty.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/tty.c) 에 구현되어 있다. 이것은 `putchar` 함수를 루프 내에서 호출하여 character 단위로 출력한다는 것을 볼 수 있다. `putchar`의 구현을 살펴보자.:
 
 ```C
 void __attribute__((section(".inittext"))) putchar(int ch)
@@ -254,9 +255,9 @@ void __attribute__((section(".inittext"))) putchar(int ch)
 }
 ```
 
-`__attribute__((section(".inittext")))` means that this code will be in the `.inittext` section. We can find it in the linker file [setup.ld](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L19).
+`__attribute__((section(".inittext")))` 은 `.inittext` 내에 이 코드를 놓을 것이라는 의미이다. 우리는 [setup.ld](https://github.com/torvalds/linux/blob/master/arch/x86/boot/setup.ld#L19) 의 링커 파일에서 찾을 수 있다.
 
-First of all, `putchar` checks for the `\n` symbol and if it is found, prints `\r` before. After that it outputs the character on the VGA screen by calling the BIOS with the `0x10` interrupt call:
+첫번재로, `putchar`은 `\n` 심볼을 확인하고 만약 `\n`이라면, `\r`을 출력한다. 그 다음에 BIOS 에서 `0x10` 인터럽트 호출과 함께 VGA 화면에 문자 하나가 출력된다.:
 
 ```C
 static void __attribute__((section(".inittext"))) bios_putchar(int ch)
@@ -272,10 +273,10 @@ static void __attribute__((section(".inittext"))) bios_putchar(int ch)
 }
 ```
 
-Here `initregs` takes the `biosregs` structure and first fills `biosregs` with zeros using the `memset` function and then fills it with register values.
+여기에 `initregs`는 `biosregs` 구조체를 받아 `biosregs`를 `memset`을 이용해서 0 으로 채우고 거기에 레지스터가 갖고 있는 값들로 채워준다.
 
 ```C
-    memset(reg, 0, sizeof *reg);
+    memset(reg, 0, sizeof \*reg);
     reg->eflags |= X86_EFLAGS_CF;
     reg->ds = ds();
     reg->es = ds();
@@ -283,7 +284,7 @@ Here `initregs` takes the `biosregs` structure and first fills `biosregs` with z
     reg->gs = gs();
 ```
 
-Let's look at the [memset](https://github.com/torvalds/linux/blob/master/arch/x86/boot/copy.S#L36) implementation:
+[memset](https://github.com/torvalds/linux/blob/master/arch/x86/boot/copy.S#L36) 구현을 살펴보자:
 
 ```assembly
 GLOBAL(memset)
@@ -302,15 +303,15 @@ GLOBAL(memset)
 ENDPROC(memset)
 ```
 
-As you can read above, it uses the `fastcall` calling conventions like the `memcpy` function, which means that the function gets parameters from `ax`, `dx` and `cx` registers.
+위의 코드를 보면, `memcpy`와 같이 `fastcall` 함수 호출 규약을 사용한다. 그래서 각 인자들을 `ax`, `dx` 그리고 `cx` 레지스터에 저장한다.
 
-Generally `memset` is like a memcpy implementation. It saves the value of the `di` register on the stack and puts the `ax` value into `di` which is the address of the `biosregs` structure. Next is the `movzbl` instruction, which copies the `dl` value to the low 2 bytes of the `eax` register. The remaining 2 high bytes  of `eax` will be filled with zeros.
+일반적으로 `memset` 은 memcpy 구현과 같다. 그것을 `di`레지스터 값을 스택에 저장하고 `ax`의 값(`biosregs` 구조체의 주소)을 `di`로 넣는다. 다음에 `movzbl` 명령어를 사용하여 `dl` 의 값을 하위 2 바이트를 `eax` 레지스터로 복사한다. `eax`의 남은 상위 2바이트는 0으로 채워질 것이다.
 
-The next instruction multiplies `eax` with `0x01010101`. It needs to because `memset` will copy 4 bytes at the same time. For example, we need to fill a structure with `0x7` with memset. `eax` will contain `0x00000007` value in this case. So if we multiply `eax` with `0x01010101`, we will get `0x07070707` and now we can copy these 4 bytes into the structure. `memset` uses `rep; stosl` instructions for copying `eax` into `es:di`.
+다음 명령어는 `eax`에 `0x01010101`을 곱하는 것이다. 이것은 `memset` 이 이와 동시에 4 바이트 복사를 하기 때문에 필요하다. 예를 들어, 우리가 memset 으로 어떤 구조체에 `0x7` 을 채운다면, `eax`는 `0x00000007` 의 값을 갖고 있을 것이다. 만약 `eax`에 `0x01010101`을 곱하면, 우리는 `0x07070707` 을 얻을 것이고, 이제 우리는 이 4 바이트를 구조체로 복사 할 수 있을 것이다. `memset`은 `eax`의 값을 `es:di`에 복사하기 위해 `rep; stosl` 명령어를 사용한다.
 
-The rest of the `memset` function does almost the same as `memcpy`.
+`memset` 함수의 나머지 부분은 `memcpy`와 거의 같다.
 
-After the `biosregs` structure is filled with `memset`, `bios_putchar` calls the [0x10](http://www.ctyme.com/intr/rb-0106.htm) interrupt which prints a character. Afterwards it checks if the serial port was initialized or not and writes a character there with [serial_putchar](https://github.com/torvalds/linux/blob/master/arch/x86/boot/tty.c#L30) and `inb/outb` instructions if it was set.
+`biosregs` 구조체가 `memset`으로 채워지고 나면, `bios_putchar` 가 [0x10](http://www.ctyme.com/intr/rb-0106.htm) 인터럽트와 함께 호출되어 문자 하나를 출력한다. 그런 다음에 이 함수는 시리억 포트가 초기화 되어 있는지 확인 하여 설정되어 있다면 문자 하나를 [serial_putchar](https://github.com/torvalds/linux/blob/master/arch/x86/boot/tty.c#L30)와 `inb/outb` 명령어를 통해 쓴다.
 
 Heap initialization
 --------------------------------------------------------------------------------

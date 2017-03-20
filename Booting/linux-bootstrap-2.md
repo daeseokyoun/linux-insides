@@ -276,7 +276,7 @@ static void __attribute__((section(".inittext"))) bios_putchar(int ch)
 여기에 `initregs`는 `biosregs` 구조체를 받아 `biosregs`를 `memset`을 이용해서 0 으로 채우고 거기에 레지스터가 갖고 있는 값들로 채워준다.
 
 ```C
-    memset(reg, 0, sizeof \*reg);
+    memset(reg, 0, sizeof *reg);
     reg->eflags |= X86_EFLAGS_CF;
     reg->ds = ds();
     reg->es = ds();

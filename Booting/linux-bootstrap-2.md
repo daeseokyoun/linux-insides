@@ -184,7 +184,7 @@ Every segment register has a visible and hidden part.
 
 1. `hdr` 을 [header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L281) 에서 `boot_params` 구조체의 `setup_header` 항목으로 복사한다.
 
-2. 만약 커널이 이미 지난 스타일의 커맨드 라인 프로토콜에 의해 로드되었다면 커널 커맨드 라인을 업데이트 한다.
+2. 만약 커널이 이미 지난 스타일의 명령 라인 프로토콜에 의해 로드되었다면 커널 명령 라인을 업데이트 한다.
 
 `hdr` 은 [copy.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/copy.S) 에 구현된 `memcpy`를 이용하여 복사된다. 그 내부를 살펴보자:
 
@@ -226,7 +226,7 @@ memcpy(&boot_params.hdr, &hdr, sizeof hdr);
 
 `hdr`이 `boot_params.hdr`로 복사 되면, 다음 단계로는 [arch/x86/boot/early_serial_console.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/early_serial_console.c)에 정의된 `console_init` 함수를 호출하여 콘솔을 초기화한다.
 
-그것은 커맨드 라인에 `earlyprintk` 옵션이 있는지 찾고, 만약 검색이 성공적이었다면, 그것은 포트 주소와 시리얼 포트의 baud rate 를 파싱하고 시리얼 포트를 초기화한다. `earlyprintk` 와 연관된 커맨드 라인 옵션의 값을 아래와 같은 형식으로 찾을 수 있다.:
+그것은 명령 라인에 `earlyprintk` 옵션이 있는지 찾고, 만약 검색이 성공적이었다면, 그것은 포트 주소와 시리얼 포트의 baud rate 를 파싱하고 시리얼 포트를 초기화한다. `earlyprintk` 와 연관된 명령 라인 옵션의 값을 아래와 같은 형식으로 찾을 수 있다.:
 
 * serial,0x3f8,115200
 * serial,ttyS0,115200
@@ -313,12 +313,12 @@ ENDPROC(memset)
 
 `biosregs` 구조체가 `memset`으로 채워지고 나면, `bios_putchar` 가 [0x10](http://www.ctyme.com/intr/rb-0106.htm) 인터럽트와 함께 호출되어 문자 하나를 출력한다. 그런 다음에 이 함수는 시리억 포트가 초기화 되어 있는지 확인 하여 설정되어 있다면 문자 하나를 [serial_putchar](https://github.com/torvalds/linux/blob/master/arch/x86/boot/tty.c#L30)와 `inb/outb` 명령어를 통해 쓴다.
 
-Heap initialization
+힙 초기화
 --------------------------------------------------------------------------------
 
-After the stack and bss section were prepared in [header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S) (see previous [part](linux-bootstrap-1.md)), the kernel needs to initialize the [heap](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) with the [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) function.
+[header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S) 에서 스택과 bss 영역이 준비된 이후에(이전 [파트](linux-bootstrap-1.md) 참조), 커널은 [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) 함수를 통해 [힙](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116)을 초기화 해야 한다.
 
-First of all `init_heap` checks the [`CAN_USE_HEAP`](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L21) flag from the [`loadflags`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L321) in the kernel setup header and calculates the end of the stack if this flag was set:
+`init_heap` 에서 우선 커널 설정 헤더에 [`loadflags`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L321) 로 부터 [`CAN_USE_HEAP`](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L21) 플래그를 확인하고 만약 이 플래그가 설정되어 있다면 스택의 마지막 위치를 계산한다:
 
 ```C
     char *stack_end;
@@ -328,22 +328,24 @@ First of all `init_heap` checks the [`CAN_USE_HEAP`](https://github.com/torvalds
             : "=r" (stack_end) : "i" (-STACK_SIZE));
 ```
 
-or in other words `stack_end = esp - STACK_SIZE`.
+위의 코드를 표현하면 `stack_end = esp - STACK_SIZE` 가 된다.
 
-Then there is the `heap_end` calculation:
+다음 `heap_end`를 계산한다.:
+
 ```c
     heap_end = (char *)((size_t)boot_params.hdr.heap_end_ptr + 0x200);
 ```
-which means `heap_end_ptr` or `_end` + `512`(`0x200h`). The last check is whether `heap_end` is greater than `stack_end`. If it is then `stack_end` is assigned to `heap_end` to make them equal.
 
-Now the heap is initialized and we can use it using the `GET_HEAP` method. We will see how it is used, how to use it and how the it is implemented in the next posts.
+`heap_end` 는 (`heap_end_ptr` 또는 `_end`) + `512`(`0x200h`) 이다. 마지막으로는 `heap_end` 가 `stack_end` 보다 큰지 확인한다. 만약 `stack_end` 보다 크다면 `heap_end` 를 `stack_end` 와 같게 해준다.
 
-CPU validation
+이제 힙이 초기화 되었고 우리는 `GET_HEAP` 메서드를 사용하여 힙을 이용할 수 있다. 우리는 어떻게 사용되는지, 어떻게 사용하는지 그리고 어떻게 구현이 되었는지 살펴 볼 것이다.
+
+CPU 유효성 검사(validation)
 --------------------------------------------------------------------------------
 
-The next step as we can see is cpu validation by `validate_cpu` from [arch/x86/boot/cpu.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cpu.c).
+다음 단계는 [arch/x86/boot/cpu.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cpu.c) 에서 `validate_cpu` 로 CPU 유효성 검사를 진행한다.
 
-It calls the [`check_cpu`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cpucheck.c#L102) function and passes cpu level and required cpu level to it and checks that the kernel launches on the right cpu level.
+그것은 [`check_cpu`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cpucheck.c#L102)  함수를 현재 CPU 레벨과 요구되는 CPU 레벨을 인자로 넘겨 알맞은 CPU 레벨로 커널이 구동될 수 있도록 확인한다.
 ```c
 check_cpu(&cpu_level, &req_level, &err_flags);
 if (cpu_level < req_level) {
@@ -351,14 +353,15 @@ if (cpu_level < req_level) {
     return -1;
 }
 ```
-`check_cpu` checks the cpu's flags, presence of [long mode](http://en.wikipedia.org/wiki/Long_mode) in case of x86_64(64-bit) CPU, checks the processor's vendor and makes preparation for certain vendors like turning off SSE+SSE2 for AMD if they are missing, etc.
 
-Memory detection
+`check_cpu` 는 CPU 의 플래그를 확인하는데, x86_64(64 비트) CPU 의 경우 [long mode](http://en.wikipedia.org/wiki/Long_mode) 가 있는지도 확인해야 한다. 프로세서의 벤더를 확인하고 AMD 칩을 위해 SSE+SSE2 의 옵션을 끄는 것과 같이 특정 벤더를 위한 작업도 마무리한다.
+
+메모리 검출(Memory detection)
 --------------------------------------------------------------------------------
 
-The next step is memory detection by the `detect_memory` function. `detect_memory` basically provides a map of available RAM to the cpu. It uses different programming interfaces for memory detection like `0xe820`, `0xe801` and `0x88`. We will see only the implementation of **0xE820** here.
+다음 단계는 `detect_memory` 함수로 메모리 검출을 진행한다. `detect_memory` 는 기본적으로 가용한 RAM 의 맵을 CPU 에게 제공한다. 그것은 `0xe820`, `0xe801` 그리고 `0x88` 과 같은 메모리 검출을 위한 다른 프로그래밍 인터페이스를 사용한다. 우리는 여기서 **0xE820** 의 구현만 살펴 볼 것이다.
 
-Let's look into the `detect_memory_e820` implementation from the [arch/x86/boot/memory.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/memory.c) source file. First of all, the `detect_memory_e820` function initializes the `biosregs` structure as we saw above and fills registers with special values for the `0xe820` call:
+`detect_memory_e820` 의 구현을 [arch/x86/boot/memory.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/memory.c) 에서 볼 수 있다. 제일 먼저, `detect_memory_e820` 함수는 `biosregs` 구조체를 앞서 봤듯이 초기화 하고 `0xe820` 호출을 위한 특별한 값들을 레지스터에 채운다.:
 
 ```assembly
     initregs(&ireg);
@@ -368,26 +371,26 @@ Let's look into the `detect_memory_e820` implementation from the [arch/x86/boot/
     ireg.di  = (size_t)&buf;
 ```
 
-* `ax` contains the number of the function (0xe820 in our case)
-* `cx` register contains size of the buffer which will contain data about memory
-* `edx` must contain the `SMAP` magic number
-* `es:di` must contain the address of the buffer which will contain memory data
-* `ebx` has to be zero.
+* `ax` 함수의 숫자를 포함한다.(우리 경우 0xe820)
+* `cx` 레지스터는 메모리 테이터를 갖고 있는 버퍼의 크기를 가진다.
+* `edx` 는 반드시 `SMAP`(534D4150h) 매직 넘버를 가져야 한다.
+* `es:di` 메모리 데이터가 있는 버퍼의 주소를 가진다.
+* `ebx` 는 0 여야 한다.
 
-Next is a loop where data about the memory will be collected. It starts from the call of the `0x15` BIOS interrupt, which writes one line from the address allocation table. For getting the next line we need to call this interrupt again (which we do in the loop). Before the next call `ebx` must contain the value returned previously:
+다음에는 루프를 통해 메모리를 맵 정보를 모은다. 주소 할당 테이블로 부터 한 라인을 쓰는 `0x15` BIOS 인터럽트 호출로 부터 시작한다. 다음 라인의 정보를 얻기 위해 우리는 인터럽트를 다시 호출 할 필요가 있다.(우리는 루프 내에 있다.) 다음 `ebx` 호출 전에 `ebx`는 이전에 반환된 값을 갖고 있어야 한다.:
 
 ```C
     intcall(0x15, &ireg, &oreg);
     ireg.ebx = oreg.ebx;
 ```
 
-Ultimately, it does iterations in the loop to collect data from the address allocation table and writes this data into the `e820entry` array:
+궁극적으로, 그것은 주소 할당 테이블로 부터 데이터를 루프를 돌면서 모으고 `e820entry` 배열에 데이터를 써준다.:
 
-* start of memory segment
-* size  of memory segment
-* type of memory segment (which can be reserved, usable and etc...).
+* 메모리 세그먼트의 시작
+* 메로리 세그먼트의 크기
+* 메모리 세그먼트의 타입 (예약된, 가용한(usable) 등.)
 
-You can see the result of this in the `dmesg` output, something like:
+우리는 이 결과를 `dmesg` 출력을 통해 e820 맵을 확인할 수 있다:
 
 ```
 [    0.000000] e820: BIOS-provided physical RAM map:
@@ -399,28 +402,28 @@ You can see the result of this in the `dmesg` output, something like:
 [    0.000000] BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
 ```
 
-Keyboard initialization
+키보드 초기화
 --------------------------------------------------------------------------------
 
-The next step is the initialization of the keyboard with the call of the [`keyboard_init()`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L65) function. At first `keyboard_init` initializes registers using the `initregs` function and calling the [0x16](http://www.ctyme.com/intr/rb-1756.htm) interrupt for getting the keyboard status.
+다음 단계는 [`keyboard_init()`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L65) 함수의 호출로 키보드를 초기화한다. `keyboard_init` 는 `initregs` 함수를 사용해서 레지스터를 초기화하고 키보드 상태를 얻기 위해 [0x16](http://www.ctyme.com/intr/rb-1756.htm) 인터럽트를 호출한다.
 ```c
     initregs(&ireg);
     ireg.ah = 0x02;     /* Get keyboard status */
     intcall(0x16, &ireg, &oreg);
     boot_params.kbd_status = oreg.al;
 ```
-After this it calls [0x16](http://www.ctyme.com/intr/rb-1757.htm) again to set repeat rate and delay.
+이 다음 키보드 반복 속도(keyboard repeat rate) 와 delay 를 설정하기 위해 [0x16](http://www.ctyme.com/intr/rb-1757.htm) 를 다시 호출한다.
 ```c
     ireg.ax = 0x0305;   /* Set keyboard repeat rate */
     intcall(0x16, &ireg, NULL);
 ```
 
-Querying
+Querying(질의)
 --------------------------------------------------------------------------------
 
-The next couple of steps are queries for different parameters. We will not dive into details about these queries, but will get back to it in later parts. Let's take a short look at these functions:
+다음 몇 단계는 다른 인자들을 위해 질의 하는 것이다. 우리는 질의(query)에 대해 자세히 다루지 않을 것이지만, 이후 나오는 파트에서 다시 살펴 보자. 이 함수에 대해 간단히 살펴보자:
 
-The [query_mca](https://github.com/torvalds/linux/blob/master/arch/x86/boot/mca.c#L18) routine calls the [0x15](http://www.ctyme.com/intr/rb-1594.htm) BIOS interrupt to get the machine model number, sub-model number, BIOS revision level, and other hardware-specific attributes:
+[query_mca](https://github.com/torvalds/linux/blob/master/arch/x86/boot/mca.c#L18) 루틴은 메신 모델 번호, 서브 모델 번호, BIOS 리비전 레벨 그리고 하드웨어 특성 값을 얻기 위해 [0x15](http://www.ctyme.com/intr/rb-1594.htm) BIOS 인터럽트를 호출한다.:
 
 ```c
 int query_mca(void)
@@ -446,7 +449,7 @@ int query_mca(void)
 }
 ```
 
-It fills  the `ah` register with `0xc0` and calls the `0x15` BIOS interruption. After the interrupt execution it checks  the [carry flag](http://en.wikipedia.org/wiki/Carry_flag) and if it is set to 1, the BIOS doesn't support [**MCA**](https://en.wikipedia.org/wiki/Micro_Channel_architecture). If carry flag is set to 0, `ES:BX` will contain a pointer to the system information table, which looks like this:
+`ah` 레지스터를 `0xc0` 으로 채우고, `0x15` BIOS 인터럽트 호출을 한다. 인터럽트 실행은 [carry flag](http://en.wikipedia.org/wiki/Carry_flag) 를 확인하고 만약 그것이 1 이면, BIOS 는 [**MCA**](https://en.wikipedia.org/wiki/Micro_Channel_architecture) 을 지원하지 않는다는 것을 알수 있다. 만약 carry 플래그가 0 이면, `ES:BX` 는 아래와 같이 시스템 정보 테이블를 가리키는 주소를 가질 것이다.:
 
 ```
 Offset  Size    Description
@@ -475,7 +478,7 @@ Offset  Size    Description
  13h  3 BYTEs   "JPN"
  ```
 
-Next we call the `set_fs` routine and pass the value of the `es` register to it. The implementation of `set_fs` is pretty simple:
+다음 우리는 `set_fs` 루틴을 호출하고 `es` 레지스터의 값을 전달한다. `set_fs`의 구현은 꽤나 간단하다.:
 
 ```c
 static inline void set_fs(u16 seg)
@@ -484,17 +487,17 @@ static inline void set_fs(u16 seg)
 }
 ```
 
-This function contains inline assembly which gets the value of the `seg` parameter and puts it into the `fs` register. There are many functions in [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h) like `set_fs`, for example `set_gs`, `fs`, `gs` for reading a value in it etc...
+이 함수는 `seg` 인자의 값을 얻기 위한 인라인 어셈블리를 가지고 그 값을 `fs` 레지스터로 넣어준다. `set_fs` 와 같은 많은 함수들이 [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h) 파일에 있다. 예를 들어 레지스터 값을 읽기 위해 `set_fs`, `fs`, `gs` 가 있다.
 
-At the end of `query_mca` it just copies the table pointed to by `es:bx` to the `boot_params.sys_desc_table`.
+`query_mcs` 의 마지막에는 `es:bx` 에 의해 알고 있는 테이블을 `boot_params.sys_desc_table`로 복사한다.
 
-The next step is getting [Intel SpeedStep](http://en.wikipedia.org/wiki/SpeedStep) information by calling the `query_ist` function. First of all it checks the CPU level and if it is correct, calls `0x15` for getting info and saves the result to `boot_params`.
+다음 단계는 `query_ist` 함수를 통해 [Intel SpeedStep](http://en.wikipedia.org/wiki/SpeedStep) 정보를 얻는 것이다. 그것은 CPU 레벨을 확인하고 만약 맞다면, 정보를 얻기 위해 `0x15` 를 호출하고 그 결과를 `boot_params` 에 저장한다.
 
-The following [query_apm_bios](https://github.com/torvalds/linux/blob/master/arch/x86/boot/apm.c#L21) function gets [Advanced Power Management](http://en.wikipedia.org/wiki/Advanced_Power_Management) information from the BIOS. `query_apm_bios` calls the `0x15` BIOS interruption too, but with `ah` = `0x53` to check `APM` installation. After the `0x15` execution, `query_apm_bios` functions check the `PM` signature (it must be `0x504d`), carry flag (it must be 0 if `APM` supported) and value of the `cx` register (if it's 0x02, protected mode interface is supported).
+다음 오는 [query_apm_bios](https://github.com/torvalds/linux/blob/master/arch/x86/boot/apm.c#L21) 함수는 [Advanced Power Management](http://en.wikipedia.org/wiki/Advanced_Power_Management) 정보을 BIOS 로 부터 얻는다. `query_apm_bios` 는 `0x15` BIOS 인터럽트 호출을 `APM` 설치 확인 하기 위해 `ah` = `0x53` 과 함께 호출한다. `0x15` 실행 이후에, `query_apm_bios` 함수는 `PM` 시그너처(`0x504d`)를 확인하고, carry 플래그(이것은 `AMP` 가 지원된다면, 0 이어야 한다) 그리고 `cx` 레지스터의 값(만약 0x2라면 보호 모드 인터페이스가 지원된다.)을 확인한다.
 
-Next it calls `0x15` again, but with `ax = 0x5304` for disconnecting the `APM` interface and connecting the 32-bit protected mode interface. In the end it fills `boot_params.apm_bios_info` with values obtained from the BIOS.
+다음은 `AMP` 인터페이스와 연결을 끊고 32 비트 보호 모드 인터페이스를 연결하기 위해 `ax = 0x5304` 함께 `0x15` 호출을 다시 한다. 마지막에는 BIOS 로 부터 얻어진 값들을 `boot_params.apm_bios_info` 채운다.
 
-Note that `query_apm_bios` will be executed only if `CONFIG_APM` or `CONFIG_APM_MODULE` was set in the configuration file:
+만약 커널 설정에 `CONFIG_APM` 또는 `CONFIG_APM_MODULE` 이 설정되어 있다면, `query_apm_bios` 가 실행될 것이다.:
 
 ```C
 #if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
@@ -502,11 +505,11 @@ Note that `query_apm_bios` will be executed only if `CONFIG_APM` or `CONFIG_APM_
 #endif
 ```
 
-The last is the [`query_edd`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/edd.c#L122) function, which queries `Enhanced Disk Drive` information from the BIOS. Let's look into the `query_edd` implementation.
+마지막은 BIOS 로 부터 `Enhanced Disk Drive` 정보를 얻어오기 위한 [`query_edd`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/edd.c#L122) 함수 이다. `query_edd` 함수 구현을 살펴보자.
 
-First of all it reads the [edd](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt#L1023) option from the kernel's command line and if it was set to `off` then `query_edd` just returns.
+무엇보다더 커널 명령 라인으로 부터 [edd](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt#L1023) 옵션을 읽어서 만약 `off` 로 설정되어 있다면 `query_edd` 는 아무것도 하지 않고 종료할 것이다.
 
-If EDD is enabled, `query_edd` goes over BIOS-supported hard disks and queries EDD information in the following loop:
+만약 EDD 가 활성화 되어 있다면, `query_edd` 는 BIOS 지원하드 디스크를 순회하며 EDD 정보를 아래와 같이 가져온다.:
 
 ```C
 for (devno = 0x80; devno < 0x80+EDD_MBR_SIG_MAX; devno++) {
@@ -521,18 +524,18 @@ for (devno = 0x80; devno < 0x80+EDD_MBR_SIG_MAX; devno++) {
     }
 ```
 
-where `0x80` is the first hard drive and the value of `EDD_MBR_SIG_MAX` macro is 16. It collects data into the array of [edd_info](https://github.com/torvalds/linux/blob/master/include/uapi/linux/edd.h#L172) structures. `get_edd_info` checks that EDD is present by invoking the `0x13` interrupt with `ah` as `0x41` and if EDD is present, `get_edd_info` again calls the `0x13` interrupt, but with `ah` as `0x48` and `si` containing the address of the buffer where EDD information will be stored.
+`0x80` 은 처음 하드 드라이브이고 `EDD_MBR_SIG_MAX` 매크로의 값은 16이다. 그것은 데이터를 [edd_info](https://github.com/torvalds/linux/blob/master/include/uapi/linux/edd.h#L172) 구조체의 배열을 이용해서 모은다. `get_edd_info` 는 `ah` = `0x41` 과 함께 `0x13` 인터럽트 실행을 통해 EDD 가 있는지 확인하고, EDD 가 있다면, `get_edd_info` 는 `ah` = `0x48` 과 `si` 와 함께 `0x13` 인터럽트를 다시 호출하면, 설정된 버퍼 주소에 EDD 정보가 저장될 것이다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the second part about Linux kernel insides. In the next part we will see video mode setting and the rest of preparations before transition to protected mode and directly transitioning into it.
+이문서는 리눅스 커널 인사이드에 관련된 두 번째 파트의 끝이다. 다음 파트는 비디오 모드 설정과 보호 모드 전에 남은 준비를 무리리하면 보호 모드로 전환된다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+당신이 어떤 질문이나 제안이 있다면 [twitter](https://twitter.com/0xAX) - 원저자 에게 알려주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me a PR to [linux-insides](https://github.com/0xAX/linux-internals).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [Protected mode](http://en.wikipedia.org/wiki/Protected_mode)

@@ -1,23 +1,24 @@
-Kernel booting process. Part 3.
+커널 부팅 과정. part 3.
 ================================================================================
 
-Video mode initialization and transition to protected mode
+비디오 모드 초기화와 보호 모드 전환
 --------------------------------------------------------------------------------
 
-This is the third part of the `Kernel booting process` series. In the previous [part](linux-bootstrap-2.md#kernel-booting-process-part-2), we stopped right before the call of the `set_video` routine from [main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L181). In this part, we will see:
-- video mode initialization in the kernel setup code,
-- preparation before switching into protected mode,
-- transition to protected mode
+`커널 부팅 과정` 시리즈의 3번 째 파트이다. 이전 [part](linux-bootstrap-2.md#kernel-booting-process-part-2)는 [main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L181) 에서 `set_video` 부르기 전에서 마무리 되었다. 이번 파트에서 우리가 살펴볼 것은:
 
-**NOTE** If you don't know anything about protected mode, you can find some information about it in the previous [part](linux-bootstrap-2.md#protected-mode). Also there are a couple of [links](linux-bootstrap-2.md#links) which can help you.
+- 커널 설정 코드 에서 비디오 모드 초기화,
+- 보호 모드 진입전 준비사항,
+- 보호 모드 전환
 
-As I wrote above, we will start from the `set_video` function which is defined in the [arch/x86/boot/video.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/video.c#L315) source code file. We can see that it starts by first getting the video mode from the `boot_params.hdr` structure:
+**NOTE** 만약 당신이 보호 모드에 대해 아무것도 모르다면, 당신은 이전 [파트](linux-bootstrap-2.md#protected-mode)에서 보호 모드에 관해 정보를 찾아 봐야 할 것이다. 또한 [링크](linux-bootstrap-2.md#links) 에서 당신에게 도움이 될 만한 것들이 있다.
+
+[arch/x86/boot/video.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/video.c#L315) 소스 코드에 구현된 `set_video` 함수에서 시작 할 수 있다. 우리는 `boot_params.hdr` 구조체에서 첫 비디오 모드를 시작할 수 있다는 것을 알 수 있다.:
 
 ```C
 u16 mode = boot_params.hdr.vid_mode;
 ```
 
-which we filled in the `copy_boot_params` function (you can read about it in the previous post). `vid_mode` is an obligatory field which is filled by the bootloader. You can find information about it in the kernel boot protocol:
+`copy_boot_params` 함수에서 이 구조체는 채워졌다. (이전 파트에서 확인해 보시길) `vid_mode` 는 부트로더에서 의무적으로 채워줘야 하는 항목이다. 당신은 커널 부트 프로토콜에서 이와 관련된 정보를 찾을 수 있을 것이다.:
 
 ```
 Offset	Proto	Name		Meaning
@@ -25,7 +26,7 @@ Offset	Proto	Name		Meaning
 01FA/2	ALL	    vid_mode	Video mode control
 ```
 
-As we can read from the linux kernel boot protocol:
+우리는 리눅스 부트 프로토콜로 부터 아래의 내용을 읽을 수 있다.:
 
 ```
 vga=<mode>
@@ -35,33 +36,38 @@ vga=<mode>
 	(meaning 0xFFFD).  This value should be entered into the
 	vid_mode field, as it is used by the kernel before the command
 	line is parsed.
+vga=<모드>
+  <모드> 는 정수형(C 표기법에서, 10진수, 8진수 또는 16진수) 이거나 문자열
+	"normal" (0xFFFF 을 의미), "ext" (0xFFFE 를 의미) 또는 "ask"(0xFFFD 를 의미)
+	이다. 이 값은 vid_mode 항목에 들어가야 하며, 명령 라인이 해석되기 전에
+	커널에 의해 사용된다.
 ```
 
-So we can add `vga` option to the grub or another bootloader configuration file and it will pass this option to the kernel command line. This option can have different values as mentioned in the description. For example, it can be an integer number `0xFFFD` or `ask`. If you pass `ask` to `vga`, you will see a menu like this:
+그래서 우리는 `vga` 옵션을 grup 이나 다른 부트로터 설정 파일에 넣고 커널 명령 라인에 이 옵션을 넘겨 줄 것이다. 이 옵션은 설명에 나와 있는 대로 다름 값을 가질 수 있다. 예를 들면, 그것은 정수형 `0xFFFD` 나 `ask` 가 될 수 있다. 만약 `ask`를 `vga` 에 넘겨주면, 당신은 아래와 같은 메뉴를 볼 수 있을 것이다.:
 
 ![video mode setup menu](http://oi59.tinypic.com/ejcz81.jpg)
 
-which will ask to select a video mode. We will look at its implementation, but before diving into the implementation we have to look at some other things.
+비디오 모드 선택을 위해 물어볼 것이다. 우리는 이것의 구현을 살펴보기 전에 다른 몇가지를 먼저 살펴봐야 한다.
 
-Kernel data types
+Kernel data types (커널 자료 타입)
 --------------------------------------------------------------------------------
 
-Earlier we saw definitions of different data types like `u16` etc. in the kernel setup code. Let's look at a couple of data types provided by the kernel:
+우리는 커널 설정 코드에서 `u16` 와 같은 자료 타입의 정의를 보았다. 커널에서 제공되는 몇 가지의 자료 타입을 알아보자.:
 
 
 | Type | char | short | int | long | u8 | u16 | u32 | u64 |
 |------|------|-------|-----|------|----|-----|-----|-----|
 | Size |  1   |   2   |  4  |   8  |  1 |  2  |  4  |  8  |
 
-If you read the source code of the kernel, you'll see these very often and so it will be good to remember them.
+만얀 당신이 커널 코드를 읽는다면, 당신은 이 자료 타입을 매우 자주 볼 것이다. 그래서 이것들을 기억해두면 좋을 것이다.
 
-Heap API
+Heap API (힙 API)
 --------------------------------------------------------------------------------
 
-After we get `vid_mode` from `boot_params.hdr` in the `set_video` function, we can see the call to the `RESET_HEAP` function. `RESET_HEAP` is a macro which is defined in [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h#L199). It is defined as:
+`set_video` 함수에서 `boot_params.hdr` 로 부터 `vid_mode` 를 얻은 다음에, 우리는 `RESET_HEAP` 함수를 호출 할 것이다. `RESET_HEAP` 는 [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h#L199) 에 정의된 매크로 인데 아래처럼 되어 있다:
 
 ```C
-#define RESET_HEAP() ((void *)( HEAP = _end ))
+#define RESET_HEAP() ((void \*)( HEAP = \_end ))
 ```
 
 If you have read the second part, you will remember that we initialized the heap with the [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) function. We have a couple of utility functions for heap which are defined in `boot.h`. They are:
@@ -129,7 +135,7 @@ If we look at the `store_mode_params` function, we can see that it starts with t
 
 First of all `store_cursor_position` initializes two variables which have type `biosregs` with `AH = 0x3`, and calls `0x10` BIOS interruption. After the interruption is successfully executed, it returns row and column in the `DL` and `DH` registers. Row and column will be stored in the `orig_x` and `orig_y` fields from the `boot_params.screen_info` structure.
 
-After `store_cursor_position` is executed, the `store_video_mode` function will be called. It just gets the current video mode and stores it in `boot_params.screen_info.orig_video_mode`. 
+After `store_cursor_position` is executed, the `store_video_mode` function will be called. It just gets the current video mode and stores it in `boot_params.screen_info.orig_video_mode`.
 
 After this, it checks the current video mode and sets the `video_segment`. After the BIOS transfers control to the boot sector, the following addresses are for video memory:
 
@@ -225,9 +231,9 @@ is in the `.videocards` segment. Let's look in the [arch/x86/boot/setup.ld](http
 
 It means that `video_cards` is just a memory address and all `card_info` structures are placed in this  segment. It means that all `card_info` structures are placed between `video_cards` and `video_cards_end`, so we can use it in a loop to go over all of it.  After `probe_cards` executes we have all structures like `static __videocard video_vga` with filled `nmodes` (number of video modes).
 
-After `probe_cards` execution is finished, we move to the main loop in the `set_video` function. There is an infinite loop which tries to set up video mode with the `set_mode` function or prints a menu if we passed `vid_mode=ask` to the kernel command line or video mode is undefined. 
+After `probe_cards` execution is finished, we move to the main loop in the `set_video` function. There is an infinite loop which tries to set up video mode with the `set_mode` function or prints a menu if we passed `vid_mode=ask` to the kernel command line or video mode is undefined.
 
-The `set_mode` function is defined in [video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L147) and gets only one parameter, `mode`, which is the number of video modes (we got it from the menu or in the start of `setup_video`, from the kernel setup header). 
+The `set_mode` function is defined in [video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L147) and gets only one parameter, `mode`, which is the number of video modes (we got it from the menu or in the start of `setup_video`, from the kernel setup header).
 
 The `set_mode` function checks the `mode` and calls the `raw_set_mode` function. The `raw_set_mode` calls the `set_mode` function for the selected card i.e. `card->set_mode(struct mode_info*)`. We can get access to this function from the `card_info` structure. Every video mode defines this structure with values filled depending upon the video mode (for example for `vga` it is the `video_vga.set_mode` function. See above example of `card_info` structure for `vga`). `video_vga.set_mode` is `vga_set_mode`, which checks the vga mode and calls the respective function:
 
@@ -584,4 +590,3 @@ Links
 * [GCC designated inits](https://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Designated-Inits.html)
 * [GCC type attributes](https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html)
 * [Previous part](linux-bootstrap-2.md)
-

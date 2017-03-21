@@ -67,31 +67,32 @@ Heap API (힙 API)
 `set_video` 함수에서 `boot_params.hdr` 로 부터 `vid_mode` 를 얻은 다음에, 우리는 `RESET_HEAP` 함수를 호출 할 것이다. `RESET_HEAP` 는 [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h#L199) 에 정의된 매크로 인데 아래처럼 되어 있다:
 
 ```C
-#define RESET_HEAP() ((void \*)( HEAP = \_end ))
+#define RESET_HEAP() ((void *)( HEAP = _end )) //* TODO: this line should be removed!!!
 ```
 
-If you have read the second part, you will remember that we initialized the heap with the [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) function. We have a couple of utility functions for heap which are defined in `boot.h`. They are:
+만약 당신이 두 번째 파트를 읽었다면, [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) 함수를 통해 힙이 초기화 되었다는 것을 기억할 수 있을 것이다. 우리는 `boot.h` 에 정의된 힙 을 위한 유틸리티 함수들을 갖고 있다.:
 
 ```C
 #define RESET_HEAP()
 ```
 
-As we saw just above, it resets the heap by setting the `HEAP` variable equal to `_end`, where `_end` is just `extern char _end[];`
+위에서 확인했듯이, 그것은 `HEAP` 변수를 `extern char _end[];` 로 선언된 `_end` 로 같게 해서 heap 을 리셋시켜준다.
 
-Next is the `GET_HEAP` macro:
+다음은 `GET_HEAP` 매크로이다.:
 
 ```C
 #define GET_HEAP(type, n) \
-	((type *)__get_heap(sizeof(type),__alignof__(type),(n)))
+	((type *)__get_heap(sizeof(type),__alignof__(type),(n))) //* TODO: this line should be removed!!!
 ```
 
-for heap allocation. It calls the internal function `__get_heap` with 3 parameters:
+힙 할당을 위해, `GET_HEAP` 을 쓴다. 이것은 내부 함수인 `__get_heap` 을 인자 3개와 호출한다.:
 
-* size of a type in bytes, which need be allocated
-* `__alignof__(type)` shows how variables of this type are aligned
-* `n` tells how many items to allocate
+* 할당하고자 하는 타입의 크기
+* `__alignof__(type)` 로 주어진 타입의 정렬에 필요한 바이트수를 파악
+* `n` 할당 받을 타입의 개수
+* [__get_heap 상세](http://www.iamroot.org/ldocs/linux.html#sec-22-1)
 
-Implementation of `__get_heap` is:
+`__get_heap` 의 구현은:
 
 ```C
 static inline char *__get_heap(size_t s, size_t a, size_t n)
@@ -103,17 +104,18 @@ static inline char *__get_heap(size_t s, size_t a, size_t n)
 	HEAP += s*n;
 	return tmp;
 }
+//* TODO: this line should be removed!!!
 ```
 
-and further we will see its usage, something like:
+그리고 아래와 같이 사용하면 된다:
 
 ```C
 saved.data = GET_HEAP(u16, saved.x * saved.y);
 ```
 
-Let's try to understand how `__get_heap` works. We can see here that `HEAP` (which is equal to `_end` after `RESET_HEAP()`) is the address of aligned memory according to the `a` parameter. After this we save the memory address from `HEAP` to the `tmp` variable, move `HEAP` to the end of the allocated block and return `tmp` which is the start address of allocated memory.
+어떻게 `__get_heap` 이 동작하는지 알아보자. 우리는 `HEAP`(`RESET_HEAP()` 을 통해 `_end`와 같다는 것을 알고 있다.) 은 `a` 인자에 따라 정렬된 메모리의 주소가 될 것이다. 이 다음에 우리는 `HEAP`을 `tmp` 로 임시 저장을 해놓고, `HEAP` 의 주소를 할당된 블락의 주소 만큼 이동 시킨 후, 할당된 메모리의 시작 주소가 되는 `tmp` 를 반환하도록 했다.
 
-And the last function is:
+그리고 마지막 함수는:
 
 ```C
 static inline bool heap_free(size_t n)
@@ -122,29 +124,29 @@ static inline bool heap_free(size_t n)
 }
 ```
 
-which subtracts value of the `HEAP` from the `heap_end` (we calculated it in the previous [part](linux-bootstrap-2.md)) and returns 1 if there is enough memory for `n`.
+`heap_end`([이전 파트](linux-bootstrap-2.md) 에서 이 값이 계산되었다) 에서 `HEAP` 의 주소 값을 빼준 값이 `n` 보다 크다면 "참"을 반환한다. 이 함수는 힙 영역에 `n` 크기의 공간이 있는지 확인을 해주기 위한 것이다.
 
-That's all. Now we have a simple API for heap and can setup video mode.
+끝이다. 우리는 힙을 위한 간단한 API 를 알아보았고, 이제 비디오 모드 설정을 알아보자.
 
-Set up video mode
+비디오 모드 설정
 --------------------------------------------------------------------------------
 
-Now we can move directly to video mode initialization. We stopped at the `RESET_HEAP()` call in the `set_video` function. Next is the call to  `store_mode_params` which stores video mode parameters in the `boot_params.screen_info` structure which is defined in [include/uapi/linux/screen_info.h](https://github.com/0xAX/linux/blob/master/include/uapi/linux/screen_info.h).
+이제 비디오 모드 초기화로 바로 넘어가보자. 우리는 `set_video` 함수에서 `RESET_HEAP()` 호출 까지 알아보았다. 이 다음은, [include/uapi/linux/screen_info.h](https://github.com/0xAX/linux/blob/master/include/uapi/linux/screen_info.h) 에 정의된 `boot_params.screen_info` 구조체내에 비디오 모드 인자를 저장하기 위한 `store_mode_params`을 호출 한다.
 
-If we look at the `store_mode_params` function, we can see that it starts with the call to the `store_cursor_position` function. As you can understand from the function name, it gets information about cursor and stores it.
+만약 우리가 `store_mode_params` 함수를 본다면, 우리는 `store_cursor_position` 함수에서 시작한다는 것을 알 수 있을 것이다. 함수 이름에서 부터 이해 가능하겠지만, 그것은 커서의 정보를 얻고 그것을 저장하는 함수 이다.
 
-First of all `store_cursor_position` initializes two variables which have type `biosregs` with `AH = 0x3`, and calls `0x10` BIOS interruption. After the interruption is successfully executed, it returns row and column in the `DL` and `DH` registers. Row and column will be stored in the `orig_x` and `orig_y` fields from the `boot_params.screen_info` structure.
+`store_cursor_position` 에서 처음 하는 것은 `AH = 0x3` 과 `0x10` BIOS 인터럽트를 통해 커서의 위치를 얻어와 biosregs 구조체에 저장한다. 인터럽트가 성공적으로 실행되고 나면, 그것은 열과 행의 정보를 각각 `DL`과 `DH` 레지스터에 저장한다. 행과 열은 각각 `boot_params.screen_info` 구조체의 `orig_x` 와 `orig_y` 항목에 저장될 것이다.
 
-After `store_cursor_position` is executed, the `store_video_mode` function will be called. It just gets the current video mode and stores it in `boot_params.screen_info.orig_video_mode`.
+`store_cursor_position` 함수가 실행되고 나서, `store_video_mode` 함수가 호출된다. 그것은 단지 현재 비디오 모드를 얻어와 그 값을 `boot_params.screen_info.orig_video_mode` 에 저장한다.
 
-After this, it checks the current video mode and sets the `video_segment`. After the BIOS transfers control to the boot sector, the following addresses are for video memory:
+이 다음에는, 그것은 현재 비디오 모드를 확인하고 `video_segment` 를 설정한다. BIOS 에서 boot sector 로 제어권이 넘어간 뒤로 비디오를 위해 사용되는 주소는 다음과 같다.:
 
 ```
-0xB000:0x0000 	32 Kb 	Monochrome Text Video Memory
-0xB800:0x0000 	32 Kb 	Color Text Video Memory
+0xB000:0x0000 	32 Kb 	Monochrome Text Video Memory 단색 텍스트 비디오 메모리
+0xB800:0x0000 	32 Kb 	Color Text Video Memory 컬러 텍스트 비디오 메모리
 ```
 
-So we set the `video_segment` variable to `0xB000` if the current video mode is MDA, HGC, or VGA in monochrome mode and to `0xB800` if the current video mode is in color mode. After setting up the address of the video segment, font size needs to be stored in `boot_params.screen_info.orig_video_points` with:
+그래서 만약에 현재 비디오 모드가 단색 모드에서 MDA, HGC 또는 VGA 라면 `video_segment` 변수를 `0xB800` 설정하고, 만약 현재 비티오 모드가 컬러 모드이면 `0xB000` 로 설정한다. 비디오 세그먼트 주소 설정이 된 후에, `boot_params.screen_info.orig_video_points` 에 폰트 크기가 아래와 같은 방법으로 저장이 되어야 한다.:
 
 ```C
 set_fs(0);
@@ -152,16 +154,16 @@ font_size = rdfs16(0x485);
 boot_params.screen_info.orig_video_points = font_size;
 ```
 
-First of all we put 0 in the `FS` register with the `set_fs` function. We already saw functions like `set_fs` in the previous part. They are all defined in [boot.h](https://github.com/0xAX/linux/blob/master/arch/x86/boot/boot.h). Next we read the value which is located at address `0x485` (this memory location is used to get the font size) and save the font size in `boot_params.screen_info.orig_video_points`.
+첫째로 우리는 `set_fs` 함수 안에서 `FS` 레지스터에 0을 넣는다. 우리는 `set_fs` 와 같은 함수들을 이전 파트에서 이미 다루었다. 그 모든 정의는 [boot.h](https://github.com/0xAX/linux/blob/master/arch/x86/boot/boot.h)에 되어 있다. 다음으로 우리는 `0x485` 주소(이 주소는 폰트 크기를 얻기위한 메모리 위치이다.)에 위치하고 있는 값을 읽고, `boot_params.screen_info.orig_video_points` 로 폰트 크기를 저장한다.
 
 ```
  x = rdfs16(0x44a);
  y = (adapter == ADAPTER_CGA) ? 25 : rdfs8(0x484)+1;
 ```
 
-Next we get the amount of columns by address `0x44a` and rows by address `0x484` and store them in `boot_params.screen_info.orig_video_cols` and `boot_params.screen_info.orig_video_lines`. After this, execution of `store_mode_params` is finished.
+그 다음으로는 `0x44a` 주소에서 행의 크기와 `0x484` 주소로 부터 열의 크기를 얻어와 각각 `boot_params.screen_info.orig_video_cols` 와 `boot_params.screen_info.orig_video_lines` 에 저장을 한다. 그러면 `store_mode_params` 의 실행은 완료된다.
 
-Next we can see the `save_screen` function which just saves screen content to the heap. This function collects all data which we got in the previous functions like rows and columns amount etc. and stores it in the `saved_screen` structure, which is defined as:
+다음으로 살펴 볼 함수는 `save_screen` 인데, 스크린의 내용(contents)을 힙로 저장하는 함수이다. 이 함수는 행/열의 크기 등과 같은 이전 함수로 얻은 모든 데이터를 모으고 `saved_screen` 구조체에 그것들을 저장한다. 구조체는 아래와 같이 정의되어 있다:
 
 ```C
 static struct saved_screen {
@@ -169,27 +171,28 @@ static struct saved_screen {
 	int curx, cury;
 	u16 *data;
 } saved;
+//* TODO: this line should be removed!!!
 ```
 
-It then checks whether the heap has free space for it with:
+이 스크린 내용을 저장하기 위해 힙이 충분한 공간을 가지고 있는지 확인한다.:
 
 ```C
 if (!heap_free(saved.x*saved.y*sizeof(u16)+512))
 		return;
 ```
 
-and allocates space in the heap if it is enough and stores `saved_screen` in it.
+그리고 힙에 충분한 공간이 있다면, 공간을 할당하고 `saved_screen` 을 힙에 저장한다.
 
-The next call is `probe_cards(0)` from [arch/x86/boot/video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L33). It goes over all video_cards and collects the number of modes provided by the cards. Here is the interesting moment, we can see the loop:
+다음 호출은 [arch/x86/boot/video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L33) 에 있는 `probe_cards(0)` 함수이다. 이것은 모든 video_cards 를 순회하고 각 카드마다 지원되는 모드의 수의 정보를 모은다. 여기에 재미난 부분이 있는데, 아래의 루프를 보자.:
 
 ```C
 for (card = video_cards; card < video_cards_end; card++) {
   /* collecting number of modes here */
 }
 ```
+//* TODO: this line should be removed!!!
 
-but `video_cards` is not declared anywhere. Answer is simple: Every video mode presented in the x86 kernel setup code has definition like this:
-
+하지만 `video_cards` 는 어디에도 선언된 변수가 아니다. 답은 간단하다: x86 커널 설정 코드에서 존재하는 모든 비디오 모드는 아래와 같은 형태로 정의되어 있다.:
 ```C
 static __videocard video_vga = {
 	.card_name	= "VGA",
@@ -198,13 +201,13 @@ static __videocard video_vga = {
 };
 ```
 
-where `__videocard` is a macro:
+`__videocard` 매크로는 어디에 있는가 하면:
 
 ```C
 #define __videocard struct card_info __attribute__((used,section(".videocards")))
 ```
 
-which means that `card_info` structure:
+`card_info` 구조체는:
 
 ```C
 struct card_info {
@@ -218,8 +221,9 @@ struct card_info {
 	u16 xmode_n;
 };
 ```
+//* TODO: this line should be removed!!!
 
-is in the `.videocards` segment. Let's look in the [arch/x86/boot/setup.ld](https://github.com/0xAX/linux/blob/master/arch/x86/boot/setup.ld) linker script, where we can find:
+`.videocards` 세그먼트내에 이 정보가 있다. [arch/x86/boot/setup.ld](https://github.com/0xAX/linux/blob/master/arch/x86/boot/setup.ld) 링커 스크립트를 살펴보자, 우리는 아래와 같이 videocards 를 찾을 수 있다:
 
 ```
 	.videocards	: {
@@ -229,13 +233,13 @@ is in the `.videocards` segment. Let's look in the [arch/x86/boot/setup.ld](http
 	}
 ```
 
-It means that `video_cards` is just a memory address and all `card_info` structures are placed in this  segment. It means that all `card_info` structures are placed between `video_cards` and `video_cards_end`, so we can use it in a loop to go over all of it.  After `probe_cards` executes we have all structures like `static __videocard video_vga` with filled `nmodes` (number of video modes).
+위의 내용은 `video_cards` 는 단지 주소이고 모든 `card_info` 구조체는 `.videocards` 세그먼트 내에 위치한다는 것을 의미한다. 또한 `card_info` 구조체들은 `video_cards` 와 `video_cards_end` 사이에 있다는 것도 알 수 있다. 그래서 우리는 그것들을 루프 내에서 접근하여 사용할 수 있다. 다음으로 `probe_cards`는 `static __videocard video_vga` 내에 있는 `nmodes` (비디오 모드 번호) 를 채워 넣는다.
 
-After `probe_cards` execution is finished, we move to the main loop in the `set_video` function. There is an infinite loop which tries to set up video mode with the `set_mode` function or prints a menu if we passed `vid_mode=ask` to the kernel command line or video mode is undefined.
+`probe_cards` 실행이 끝나면, 우리는 `set_video` 함수 내에 있는 메인 루프로 진입한다. 무한 루프 내에서 `set_mode` 함수로 현재 비디오 모드를 설정하거나 `vid_mode=ask` 커널 명령 라인이나 비디오 모드가 정해지지 않은 경우에 메뉴를 출력하는 등의 작업을 한다.
 
-The `set_mode` function is defined in [video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L147) and gets only one parameter, `mode`, which is the number of video modes (we got it from the menu or in the start of `setup_video`, from the kernel setup header).
+[video-mode.c](https://github.com/0xAX/linux/blob/master/arch/x86/boot/video-mode.c#L147) 에 구현되어 있는 `set_mode` 함수는 단 하나의 인자만 받는데, 그것은 비디오 모드 번호를 갖는 `mode` 이다.(우리는 그것을 커널 설정 헤더로 부터 `setup_video` 의 시작부나 메뉴에서 얻었다.)
 
-The `set_mode` function checks the `mode` and calls the `raw_set_mode` function. The `raw_set_mode` calls the `set_mode` function for the selected card i.e. `card->set_mode(struct mode_info*)`. We can get access to this function from the `card_info` structure. Every video mode defines this structure with values filled depending upon the video mode (for example for `vga` it is the `video_vga.set_mode` function. See above example of `card_info` structure for `vga`). `video_vga.set_mode` is `vga_set_mode`, which checks the vga mode and calls the respective function:
+`set_mode` 함수는 `mode` 를 확인하고 `raw_set_mode` 함수를 호출한다. `raw_set_mode` 는 선택된 card 를 위해 `set_mode` 를 호출한다.(예, `card->set_mode(struct mode_info*)`). 우리는 `card_info` 구조체를 통해 이 함수에 접근할 수 있다. 모든 비디오 모드는 비디오 모드에 맞게 채워진 `card_info` 구조체를 통해 정의된다.(예를 들어, `vga` 는 `video_vga.set_mode` 를 갖고 있다. 위에서 보면, `vga`를 위한 `card_info` 구조체가 있을 것이다.) `video_vga.set_mode` 는 vga mode 를 확인하는 `vga_set_mode` 함수가 될 것이다.:
 
 ```C
 static int vga_set_mode(struct mode_info *mode)
@@ -270,6 +274,7 @@ static int vga_set_mode(struct mode_info *mode)
 	return 0;
 }
 ```
+//* TODO: this line should be removed!!!
 
 Every function which sets up video mode just calls the `0x10` BIOS interrupt with a certain value in the `AH` register.
 
@@ -278,6 +283,7 @@ After we have set video mode, we pass it to `boot_params.hdr.vid_mode`.
 Next `vesa_store_edid` is called. This function simply stores the [EDID](https://en.wikipedia.org/wiki/Extended_Display_Identification_Data) (**E**xtended **D**isplay **I**dentification **D**ata) information for kernel use. After this `store_mode_params` is called again. Lastly, if `do_restore` is set, the screen is restored to an earlier state.
 
 After this we have set video mode and now we can switch to the protected mode.
+**** //<-- TODO: this line should be removed!!!
 
 Last preparation before transition into protected mode
 --------------------------------------------------------------------------------

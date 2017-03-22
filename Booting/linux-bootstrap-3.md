@@ -276,19 +276,19 @@ static int vga_set_mode(struct mode_info *mode)
 ```
 //* TODO: this line should be removed!!!
 
-Every function which sets up video mode just calls the `0x10` BIOS interrupt with a certain value in the `AH` register.
+비디오 모드 설정을 위한 모든 함수는 `AH` 레지스터에 설정값을 넣고 `0x10` BIOS 인터럽	트 호출을 한다.
 
-After we have set video mode, we pass it to `boot_params.hdr.vid_mode`.
+비디오 모드를 설정하고 나면, 그 값을 `boot_params.hdr.vid_mode` 로 넘긴다.
 
-Next `vesa_store_edid` is called. This function simply stores the [EDID](https://en.wikipedia.org/wiki/Extended_Display_Identification_Data) (**E**xtended **D**isplay **I**dentification **D**ata) information for kernel use. After this `store_mode_params` is called again. Lastly, if `do_restore` is set, the screen is restored to an earlier state.
+다음은 `vesa_store_edid` 호출이다. 이 함수는 단순히 커널에서 사용하기 위해 [EDID](https://en.wikipedia.org/wiki/Extended_Display_Identification_Data)(**E**xtended **D**isplay **I**dentification **D**ata) 정보를 저장한다. 이후에 `store_mode_params`를 다시 한번 호출한다. 마지막으로, 만약 `do_restore` 이 셋되어 있다면, 스크린은 최초의 상태로 복귀될 것이다.
 
-After this we have set video mode and now we can switch to the protected mode.
+우리는 비디오 모드 설정을 했고 이제 보호 모드로 전환을 할 수 있다.
 **** //<-- TODO: this line should be removed!!!
 
-Last preparation before transition into protected mode
+보호 모드로 전환전에 마지막 준비 작업
 --------------------------------------------------------------------------------
 
-We can see the last function call - `go_to_protected_mode` - in [main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L184). As the comment says: `Do the last things and invoke protected mode`, so let's see these last things and switch into protected mode.
+우리는 [main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L181) 에 있는 `go_to_protected_mode` 함수가 마지막이라는 것을 볼 수 있다. 이 함수 주석의 내용을 보면, 마지막 작업을 하고 보호 모드로 전환한다라는 내용이 있다. 여기서 마지막 작업은 무엇인지 살펴보고 보호 모드로 전환하자.
 
 `go_to_protected_mode` is defined in [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c#L104). It contains some functions which make the last preparations before we can jump into protected mode, so let's look at it and try to understand what they do and how it works.
 

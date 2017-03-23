@@ -283,18 +283,19 @@ static int vga_set_mode(struct mode_info *mode)
 다음은 `vesa_store_edid` 호출이다. 이 함수는 단순히 커널에서 사용하기 위해 [EDID](https://en.wikipedia.org/wiki/Extended_Display_Identification_Data)(**E**xtended **D**isplay **I**dentification **D**ata) 정보를 저장한다. 이후에 `store_mode_params`를 다시 한번 호출한다. 마지막으로, 만약 `do_restore` 이 셋되어 있다면, 스크린은 최초의 상태로 복귀될 것이다.
 
 우리는 비디오 모드 설정을 했고 이제 보호 모드로 전환을 할 수 있다.
-**** //<-- TODO: this line should be removed!!!
+*** //<-- TODO: this line should be removed!!!
 
 보호 모드로 전환전에 마지막 준비 작업
 --------------------------------------------------------------------------------
 
 우리는 [main.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L181) 에 있는 `go_to_protected_mode` 함수가 마지막이라는 것을 볼 수 있다. 이 함수 주석의 내용을 보면, 마지막 작업을 하고 보호 모드로 전환한다라는 내용이 있다. 여기서 마지막 작업은 무엇인지 살펴보고 보호 모드로 전환하자.
 
-`go_to_protected_mode` is defined in [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c#L104). It contains some functions which make the last preparations before we can jump into protected mode, so let's look at it and try to understand what they do and how it works.
+[arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c#L104) 에 `go_to_protected_mode` 함수가 정의되어 있다. 그것은 보호 모드로 진입하기 전에 마지막으로 완료해야 할 몇몇 함수들을 가지다. 그것을 살펴봄으로써 무엇을 하고 어떻게 동작하는지 살펴보자.
 
-First is the call to the `realmode_switch_hook` function in `go_to_protected_mode`. This function invokes the real mode switch hook if it is present and disables [NMI](http://en.wikipedia.org/wiki/Non-maskable_interrupt). Hooks are used if the bootloader runs in a hostile environment. You can read more about hooks in the [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) (see **ADVANCED BOOT LOADER HOOKS**).
+`go_to_protected_mode` 함수에서 처음 수행하는 함수는 `realmode_switch_hook` 함수이다. 이 함수에서 기본 hook 은 인터럽트를 비활성화하고 [NMI](http://en.wikipedia.org/wiki/Non-maskable_interrupt) 를 금지 한다.
+만약 real 모드 hook 을 `boot_params.hdr.realmode_swtch` 에 등록했다면 해당 등록된 것을 수행한다. Hook 은 만약 부트로더가 hostile 환경에서 수행된다면 사용된다. 당신은  [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt)에서 **ADVANCED BOOT LOADER HOOKS** 챕터에서 볼 수 있다.
 
-The `realmode_switch` hook presents a pointer to the 16-bit real mode far subroutine which disables non-maskable interrupts. After `realmode_switch` hook (it isn't present for me) is checked, disabling of Non-Maskable Interrupts(NMI) occurs:
+`realmode_switch` hook 은 16비트 real 모드의 NMI 를 비활성화하는 서브 루틴을 가리키는 포인터이다. `realmode_switch` hook 을 확인해보고(현재는 등록된 것이 없으니), 차단 불가능 인터럽트 (NMI) 를 불가능하게 만든다.
 
 ```assembly
 asm volatile("cli");
@@ -302,11 +303,11 @@ outb(0x80, 0x70);	/* Disable NMI */
 io_delay();
 ```
 
-At first there is an inline assembly instruction with a `cli` instruction which clears the interrupt flag (`IF`). After this, external interrupts are disabled. The next line disables NMI (non-maskable interrupt).
+위의 어셈블리 코드에서 첫 명령어는 인터럽트 플래그(`IF`)를 모두 클리어 하는 `cli` 이다. 이 수행 다음에 모든 외부의 인터럽트가 비활성화 된다. 다음 라인에서 NMI (non-maskable interrupt)를 비활성화 한다.
 
-An interrupt is a signal to the CPU which is emitted by hardware or software. After getting the signal, the CPU suspends the current instruction sequence, saves its state and transfers control to the interrupt handler. After the interrupt handler has finished it's work, it transfers control to the interrupted instruction. Non-maskable interrupts (NMI) are interrupts which are always processed, independently of permission. It cannot be ignored and is typically used to signal for non-recoverable hardware errors. We will not dive into details of interrupts now, but will discuss it in the next posts.
+인터럽트는 하드웨어나 소프트웨에가 CPU 로 전달하는 신호(signal) 이다. 이 신호를 받으면, CPU 는 현재 명령을 중지하고, 현재 상태를 저장 한뒤에 인터럽트 핸들러로 그 제어권을 넘긴다. 인터럽트 핸들러는 자신의 작업을 마친뒤에, 인터럽트로 중지된 명령어에서 시작 할 수 있도록 컨트롤을 돌려준다. 차단 불가능 인터럽트(NMI) 는 가장 우선순위가 높은 인터럽트이며, 항상 수행을 해야 한다. NMI 는 무시 될 수 없으며, 일반적으로 복구 불가능한 기계적 오류에 대한 신호를 처리하기 위해 사용된다. 우리는 지금은 인터럽트에 대해 자세히 다루지 않을 것이지만, 향후 다른 챕터에서 살펴 보도록 한다.
 
-Let's get back to the code. We can see that second line is writing `0x80` (disabled bit) byte to `0x70` (CMOS Address register). After that, a call to the `io_delay` function occurs. `io_delay` causes a small delay and looks like:
+코드로 다시 돌아오자. 우리는 두 번째 라인에서 `0x70` (CMOS RAM/RTC 포트) 에 `0x80` 값을 쓰는데, 이것은 NMI 기능을 무력화한다. 이후에 `io_delay` 함수를 호출한다. `io_delay` 는 아래에서 보듯이 약간의 지연을 위한 코드다.:
 
 ```C
 static inline void io_delay(void)
@@ -316,9 +317,9 @@ static inline void io_delay(void)
 }
 ```
 
-To output any byte to the port `0x80` should delay exactly 1 microsecond. So we can write any value (value from `AL` register in our case) to the `0x80` port. After this delay `realmode_switch_hook` function has finished execution and we can move to the next function.
+`0x80` 포트에 어떤 바이트 값을 넣으면 정확이 1 밀리세컨드만큼 지연시킨다. 그래서 우리는 어떤 값(`AL` 레지스터에 있는 값)을 `0x80` 에 쓴다. 이 `realmode_switch_hook` 함수는 이 지연 이후에 실행을 마무리하고 다음 함수로 넘어간다:
 
-The next function is `enable_a20`, which enables [A20 line](http://en.wikipedia.org/wiki/A20_line). This function is defined in [arch/x86/boot/a20.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/a20.c) and it tries to enable the A20 gate with different methods. The first is the `a20_test_short` function which checks if A20 is already enabled or not with the `a20_test` function:
+다음 함수는 [A20 라인](http://en.wikipedia.org/wiki/A20_line) 을 활성화 하는 `enable_a20` 이다. 이 함수는 [arch/x86/boot/a20.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/a20.c) 에 정의되어 있으며 그것은 다른 방법으로 A20 게이트를 활성화 시키려고 한다. 첫 번째 수행은 A20 라인이 이미 활성화 되어 있는지 확인 하는 `a20_test_short` 함수를 호출한다.:
 
 ```C
 static int a20_test(int loops)
@@ -343,12 +344,13 @@ static int a20_test(int loops)
 	return ok;
 }
 ```
+**//<-- TODO: remove this line
 
-First of all we put `0x0000` in the `FS` register and `0xffff` in the `GS` register. Next we read the value in address `A20_TEST_ADDR` (it is `0x200`) and put this value into the `saved` variable and `ctr`.
+처음으로 `FS` 레지스터에 `0x0000`을 `GS` 레스터에는 `0xffff`을 넣는다. 다음에 코드는 `A20_TEST_ADDR` (`0x200` 이다.) 에 값을 읽고, `saved` 와 `ctr`의 변수에 저장을 해둔다.
 
-Next we write an updated `ctr` value into `fs:gs` with the `wrfs32` function, then delay for 1ms, and then read the value from the `GS` register by address `A20_TEST_ADDR+0x10`, if it's not zero we already have enabled the A20 line. If A20 is disabled, we try to enable it with a different method which you can find in the `a20.c`. For example with call of `0x15` BIOS interrupt with `AH=0x2041` etc.
+다음에는 `ctr` 값을 `fs:gs` 에 `wrfs32` 함수로 업데이트하고, `io_delay`로 1 ms 동안 지연한다. 그런 다음 `A20_TEST_ADDR+0x10` 주소로 `Gs` 레지스터의 값을 읽고 이것이 만약 0 가 아니라면, 이미 A20라인은 활성화 되어 있는 것이다. 만약, A20 이 비활성화 상태라면, 우리는 그것을 `a20.c` 에서 찾을 수 있는 다른 방법으로 활성화 할 것이다. 예를 들어 `AH=0x2041`값 등과 `0x15` BIOS 인터럽트의 호출이 될 것이다.
 
-If the `enabled_a20` function finished with fail, print an error message and call function `die`. You can remember it from the first source code file where we started - [arch/x86/boot/header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S):
+만약 `enabled_a20` 함수가 실패한다면, 에러 메세지를 출력하고 `die` 함수를 호출한다. die 함수는 [arch/x86/boot/header.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S) 에서 확인 할 수 있다.:
 
 ```assembly
 die:
@@ -357,26 +359,28 @@ die:
 	.size	die, .-die
 ```
 
-After the A20 gate is successfully enabled, the `reset_coprocessor` function is called:
+A20 게이트가 성공적으로 활성화된 후에, `reset_coprocessor` 함수가 불린다:
  ```C
 outb(0, 0xf0);
 outb(0, 0xf1);
 ```
-This function clears the Math Coprocessor by writing `0` to `0xf0` and then resets it by writing `0` to `0xf1`.
 
-After this, the `mask_all_interrupts` function is called:
+이 함수는 `0xf0` 에 `0` 을 써서 수학 코 프로세서(Coprocessor) 를 클리어 하고 `0xf1`에 `0`을 써서 리셋한다.
+
+이 다음에, `mask_all_interrupts` 함수가 호출된다.:
 ```C
 outb(0xff, 0xa1);       /* Mask all interrupts on the secondary PIC */
 outb(0xfb, 0x21);       /* Mask all but cascade on the primary PIC */
 ```
-This masks all interrupts on the secondary PIC (Programmable Interrupt Controller) and primary PIC except for IRQ2 on the primary PIC.
+슬레이브 PIC (Programmable Interrupt Controller) 의 모든 인터럽트를 마스크하고 마스터 PIC 에서는 IRQ2(슬레이브 PIC) 를 제외하고 마스크하여 모든 인터럽트를 금지한다.
+[PIC 개념-한글](http://itguava.tistory.com/17)
 
-And after all of these preparations, we can see the actual transition into protected mode.
+이 모든 준비작업이 끝나면, 우리는 실제 보호 모드로 전환 할 수 있다.
 
-Set up Interrupt Descriptor Table
+인터럽트 디스크립터 테이블 설정
 --------------------------------------------------------------------------------
 
-Now we set up the Interrupt Descriptor table (IDT). `setup_idt`:
+이제 우리는 인터럽트 디크크립터 테이블(IDT - Interrupt Descriptor Table) 을 `setup_idt` 함수로 설정한다.:
 
 ```C
 static void setup_idt(void)
@@ -386,7 +390,8 @@ static void setup_idt(void)
 }
 ```
 
-which sets up the Interrupt Descriptor Table (describes interrupt handlers and etc.). For now the IDT is not installed (we will see it later), but now we just the load IDT with the `lidtl` instruction. `null_idt` contains address and size of IDT, but now they are just zero. `null_idt` is a `gdt_ptr` structure, it as defined as:
+위의 코드는 인터럽트 디크크립터 테이블(인터럽트 핸들러를 기술)를 설정한다. 아직은 IDT 가 설치되지 않은 상태이지만, 우리는 `lidtl` 명령어로 IDT 를 로드해둬야 한다. `null_idt` 는 주소와 IDT 의 크기르 갖고 있지만, 그 내용은 0 으로 채워져 있다. `null_idt` 는 `gdt_ptr` 구조체이며, 아래 처럼 정의되어 있다:
+
 ```C
 struct gdt_ptr {
 	u16 len;
@@ -394,12 +399,12 @@ struct gdt_ptr {
 } __attribute__((packed));
 ```
 
-where we can see the 16-bit length(`len`) of the IDT and the 32-bit pointer to it (More details about the IDT and interruptions will be seen in the next posts). ` __attribute__((packed))` means that the size of `gdt_ptr` is the minimum required size. So the size of the `gdt_ptr` will be 6 bytes here or 48 bits. (Next we will load the pointer to the `gdt_ptr` to the `GDTR` register and you might remember from the previous post that it is 48-bits in size).
+우리는 IDT 의 16 비트 길이(`len`)와 그것을 가리킬 수 있는 32 비트 포인터를 볼 수 있다. (자세한 IDT 와 인터럽트에 관한 내용은 다음에 살펴보자) ` __attribute__((packed))` 은 `gdt_ptr` 의 크기를 최소 요구한 크기로 하겠다는 의미이다. 그래서 `gdt_ptr` 의 크기는 현재 6 바이트 또는 48 비트가 될 것이다. (다음에 우리는 `gdt_ptr`가 `GDTR` 레지스터를 가리키고 이전 글에서 살펴봤듯이 그것의 크기는 48 비트이다.)
 
-Set up Global Descriptor Table
+글로벌 디스크립터 테이블(GDT) 설정
 --------------------------------------------------------------------------------
 
-Next is the setup of the Global Descriptor Table (GDT). We can see the `setup_gdt` function which sets up GDT (you can read about it in the [Kernel booting process. Part 2.](linux-bootstrap-2.md#protected-mode)). There is a definition of the `boot_gdt` array in this function, which contains the definition of the three segments:
+여기서는 GDT(Global Descriptor Table) 설정을 본다. 우리는 GDT ([커널 부팅 과정. part2](linux-bootstrap-2.md#protected-mode) 에서 확인 할 수 있다.) 를 설정하는 `setup_gdt` 함수를 볼 수 있을 것이다. 이 함수에서  3개의 세그먼트를 정의하는 것을 포함한 `boot_gdt` 배열의 선언이 있다.:
 
 ```C
 	static const u64 boot_gdt[] __attribute__((aligned(16))) = {
@@ -409,7 +414,8 @@ Next is the setup of the Global Descriptor Table (GDT). We can see the `setup_gd
 	};
 ```
 
-For code, data and TSS (Task State Segment). We will not use the task state segment for now, it was added there to make Intel VT happy as we can see in the comment line (if you're interested you can find commit which describes it - [here](https://github.com/torvalds/linux/commit/88089519f302f1296b4739be45699f06f728ec31)). Let's look at `boot_gdt`. First of all note that it has the `__attribute__((aligned(16)))` attribute. It means that this structure will be aligned by 16 bytes. Let's look at a simple example:
+코드, 데이터 와 TSS (Task State 세그먼트)를 위함 이다. 우리는 TSS 는 인텔 VT 를 행복(?) 하게 하기 위해 이 시점에 설정한 것이며, 지금은 TSS 를 사용하지 않을 것이다.(만약 당신이 여기에 관심이 있다면, 이 [커밋](https://github.com/torvalds/linux/commit/88089519f302f1296b4739be45699f06f728ec31)을 확인해보시길 바란다 ) `boot_gdt`를 보자. 처음 `__attribute__((aligned(16)))` 속성을 갖고 있다. 이 구조체는 16 바이트 정렬이 되어야 한다는 것이다. 아래의 간단 예제를 보자:
+
 ```C
 #include <stdio.h>
 
@@ -433,7 +439,7 @@ int main(void)
 }
 ```
 
-Technically a structure which contains one `int` field must be 4 bytes, but here `aligned` structure will be 16 bytes:
+기술적으로 하나의 `int` 항목을 가지는 구조체는 4바이트가 되어야 하지만, `aligned` 구조체는 16바이트가 될 것이다.:
 
 ```
 $ gcc test.c -o test && test
@@ -441,83 +447,83 @@ Not aligned - 4
 Aligned - 16
 ```
 
-`GDT_ENTRY_BOOT_CS` has index - 2 here, `GDT_ENTRY_BOOT_DS` is `GDT_ENTRY_BOOT_CS + 1` and etc. It starts from 2, because first is a mandatory null descriptor (index - 0) and the second is not used (index - 1).
+`GDT_ENTRY_BOOT_CS` 는 인덱스를 가진다 - 여기서는 2, `GDT_ENTRY_BOOT_DS` 는 `GDT_ENTRY_BOOT_CS + 1` 이다. 그것은 2부터 시작한다. 인덱스 0 은 필수적으로 null(널) 디스크립터이고 인덱스 1은 사용하지 않는다.
 
-`GDT_ENTRY` is a macro which takes flags, base and limit and builds GDT entry. For example let's look at the code segment entry. `GDT_ENTRY` takes following values:
+`GDT_ENTRY` 는 플래그, 베이스 그리고 제한(limit) 를 가져와서 GDT 엔트리를 만드는 매크로 이다. 예를 들어 코드 세그먼트 엔트리를 보자. `GDT_ENTRY` 는 다음 값을 가진다.:
 
-* base  - 0
-* limit - 0xfffff
-* flags - 0xc09b
+* base(베이스)  - 0
+* limit(제한) - 0xfffff
+* flags(플래그) - 0xc09b
 
-What does this mean? The segment's base address is 0, and the limit (size of segment) is - `0xffff` (1 MB). Let's look at the flags. It is `0xc09b` and it will be:
+이것이 어떤 의미일까? 그 세그먼트의 베이스 주소는 0, 그리고 제한은(세그먼트 크기) 는 `0xffff` (1MB). 플래그를 살펴보자. 그것은 `0xc09b` 고 2진수로는:
 
 ```
 1100 0000 1001 1011
 ```
 
-in binary. Let's try to understand what every bit means. We will go through all bits from left to right:
+모든 비트의 의미를 이해해보자. 우리는 모든 비트를 왼쪽에서 오른쪽으로 살펴볼 것이다.:
 
-* 1    - (G) granularity bit
-* 1    - (D) if 0 16-bit segment; 1 = 32-bit segment
-* 0    - (L) executed in 64 bit mode if 1
-* 0    - (AVL) available for use by system software
-* 0000 - 4 bit length 19:16 bits in the descriptor
-* 1    - (P) segment presence in memory
-* 00   - (DPL) - privilege level, 0 is the highest privilege
-* 1    - (S) code or data segment, not a system segment
-* 101  - segment type execute/read/
-* 1    - accessed bit
+* 1    - (G) granularity 비트; 바이트 단위 세그먼트 사이즈, 0 이면 4 바이트 단위 세그먼트 사이즈
+* 1    - (D) 0 이면 16-bit 세그먼트; 1 = 32 비트 세그먼트
+* 0    - (L) 만약 1이면 64 비트 모드로 수행
+* 0    - (AVL) available for use by system software 시스템 소프트웨어에 사용 가능한 비트
+* 0000 - 디스크립터 내에 4 비트 길이(19:16)
+* 1    - (P) 메모리에 세그먼트의 존재 여부
+* 00   - (DPL) - 특권 레벨, 0 이 가장 큰 특권 레벨
+* 1    - (S) 코드 또는 데이터 세그먼트, 그렇지 않으면 시스템 세그먼트
+* 101  - (EWA) 세그먼트 타입 실행/읽기/쓰기
+* 1    - 접근 허용 비트
 
-You can read more about every bit in the previous [post](linux-bootstrap-2.md) or in the [Intel® 64 and IA-32 Architectures Software Developer's Manuals 3A](http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html).
+이전 [파트](linux-bootstrap-2.md)에서 보면 모든 비트에 대한 설명이 있다. 또는 [Intel® 64 and IA-32 Architectures Software Developer's Manuals 3A](http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html) 보시길 바란다.
 
-After this we get the length of the GDT with:
+아래와 같이 GDT 의 길이를 얻을 수 있다:
 
 ```C
 gdt.len = sizeof(boot_gdt)-1;
 ```
 
-We get the size of `boot_gdt` and subtract 1 (the last valid address in the GDT).
+우리는 `boot_gdt` 의 크기를 얻고 1 을 빼준다.
 
-Next we get a pointer to the GDT with:
+다음은 우리는 GDT 를 위한 포인터를 얻는다:
 
 ```C
 gdt.ptr = (u32)&boot_gdt + (ds() << 4);
 ```
 
-Here we just get the address of `boot_gdt` and add it to the address of the data segment left-shifted by 4 bits (remember we're in the real mode now).
+여기서 우리는 단지 `boot_gdt` 주소를 얻고, 데이터 세그먼트 주소에 좌측 쉬프트 4비트 한 값을 더한다. (아직 우리는 real 모드인것을 기억하자.)
 
-Lastly we execute the `lgdtl` instruction to load the GDT into the GDTR register:
+마지막으로 우리는 `lgdtl` 명령어를 실행하여 GDT 를 GDTR 레지스터에 로드한다.
 
 ```C
 asm volatile("lgdtl %0" : : "m" (gdt));
 ```
 
-Actual transition into protected mode
+드디어 보호 모드로의 진입
 --------------------------------------------------------------------------------
 
-This is the end of the `go_to_protected_mode` function. We loaded IDT, GDT, disable interruptions and now can switch the CPU into protected mode. The last step is calling the `protected_mode_jump` function with two parameters:
+여기는 `go_to_protected_mode` 함수의 마지막이다. 우리는 IDT, GDT, 인터럽트 비활성화 했으니 이제는 CPU 를 보호 모드로 전환할 수 있다. 마지막 단계는 2개의 인자와 `protected_mode_jump` 함수 호출로 이루어 진다.:
 
 ```C
 protected_mode_jump(boot_params.hdr.code32_start, (u32)&boot_params + (ds() << 4));
 ```
 
-which is defined in [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S#L26). It takes two parameters:
+[arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S#L26) 에 정의되어 있다. 두 인자를 보자:
 
-* address of protected mode entry point
-* address of `boot_params`
+* 보호 모드 엔트리 포인트 주소
+* `boot_params` 의 주소
 
-Let's look inside `protected_mode_jump`. As I wrote above, you can find it in `arch/x86/boot/pmjump.S`. The first parameter will be in the `eax` register and second is in `edx`.
+`protected_mode_jump` 를 들여다 보자. 내가 위에서 썻듯이, 당신은 `arch/x86/boot/pmjump.S`에서 이것을 찾아 볼 수 있다. 첫 번째 인자는 `eax` 레지스터에 두 번째 인자는 `edx`에 있을 것이다.
 
-First of all we put the address of `boot_params` in the `esi` register and the address of code segment register `cs` (0x1000) in `bx`. After this we shift `bx` by 4 bits and add the address of label `2` to it (we will have the physical address of label `2` in the `bx` after this) and jump to label `1`. Next we put data segment and task state segment in the `cs` and `di` registers with:
+무엇보다더 먼저 우리는 `boot_params` 의 주소를 `esi` 레지스터에 넣는다. 그리고 코드 세그먼트 레지스터인 `cs` (0x1000) 의 주소를 `bx` 에 넣는다. `bx` 를 4비트 만큼 왼쪽 쉬프트하고 `2` 라벨 주소를 더한다. (우리는 이것 다음에 `bx` 에서 라벨 `2`의 물리주소를 가질 수 있을 것이다.) 그리고 라벨 `1`로 점프한다. 다음에 우리는 데이터 세그먼트와 타스크 상태 세그먼트(TSS)를 각각 `cs`와 `di` 레지스터에 넣어준다.:
 
 ```assembly
 movw	$__BOOT_DS, %cx
 movw	$__BOOT_TSS, %di
 ```
 
-As you can read above `GDT_ENTRY_BOOT_CS` has index 2 and every GDT entry is 8 byte, so `CS` will be `2 * 8 = 16`, `__BOOT_DS` is 24 etc.
+`GDT_ENTRY_BOOT_CS` 는 인덱스 2이고 모든 GDT 엔트리는 8 바이트 이다. 그래서 `CS` 는 `2 * 8 = 16`이 될 것이고, `__BOOT_DS` 는 24가 될 것이다.
 
-Next we set the `PE` (Protection Enable) bit in the `CR0` control register:
+그다음 우리는 `CR0` 레지스터에 있는 `PE` (Protection Enable) 비트를 설정한다:
 
 ```assembly
 movl	%cr0, %edx
@@ -525,7 +531,7 @@ orb	$X86_CR0_PE, %dl
 movl	%edx, %cr0
 ```
 
-and make a long jump to protected mode:
+그리고 보호 모드를 위해 긴 점프(long jump)를 만든다.:
 
 ```assembly
 	.byte	0x66, 0xea
@@ -534,19 +540,21 @@ and make a long jump to protected mode:
 ```
 
 where
-* `0x66` is the operand-size prefix which allows us to mix 16-bit and 32-bit code,
-* `0xea` - is the jump opcode,
-* `in_pm32` is the segment offset
-* `__BOOT_CS` is the code segment.
+* `0x66` 는 ljmpl 코드를 위한 피연산자(operand) 크기 설정,
+* `0xea` - jump 코드,
+* `in_pm32` 세그먼트 오프셋
+* `__BOOT_CS` 코드 세그먼트.
 
-After this we are finally in the protected mode:
+여기서 `0x66 0xea` 의 의미를 조금 더 짚어보면, `0xea` 로 ljmpl 의 코드를 사용하는데 16 비트의 코드이기 때문에 jump 코드(`0xea`)는 주소 16:16 레지스터를 사용한다. 여기서 `0x66`(operand size override prefix) 를 사용해야 피연산자 크기가 32비트로 확장되어 주소 16:32가 된다.
+
+마침내 보호 모드로 진입이 완료:
 
 ```assembly
 .code32
 .section ".text32","ax"
 ```
 
-Let's look at the first steps in protected mode. First of all we set up the data segment with:
+보호 모드에서 첫번째 수행을 살펴 보자. 제일 먼저 데이터 세그먼트를 설정한다:
 
 ```assembly
 movl	%ecx, %ds
@@ -556,7 +564,7 @@ movl	%ecx, %gs
 movl	%ecx, %ss
 ```
 
-If you paid attention, you can remember that we saved `$__BOOT_DS` in the `cx` register. Now we fill it with all segment registers besides `cs` (`cs` is already `__BOOT_CS`). Next we zero out all general purpose registers besides `eax` with:
+집중을 했다면, 당신은 우리가 `cx` 레지스터에 `$__BOOT_DS` 값을 저장했다는 것을 기억할 것이다. 이제 우리는 모든 세그먼트 레지스터를 `cx` 값으로 채울 것이다.(`cs`는 이미 `__BOOT_CS` 이다). 다음으로 우리는 `eax`를 제왼한 모든 범용 레지스터를 0으로 채울 것이다.:
 
 ```assembly
 xorl	%ecx, %ecx
@@ -566,26 +574,26 @@ xorl	%ebp, %ebp
 xorl	%edi, %edi
 ```
 
-And jump to the 32-bit entry point in the end:
+그리고 32비트 엔트리 포인트로 점프:
 
 ```
 jmpl	*%eax
 ```
 
-Remember that `eax` contains the address of the 32-bit entry (we passed it as first parameter into `protected_mode_jump`).
+`eax` 는 32 비트 엔트리의 주소를 갖고 있었다는 것을 기억하자.(우리는 그것은 `protected_mode_jump` 함수의 첫 번째 인자로 넘겼다)
 
-That's all. We're in the protected mode and stop at it's entry point. We will see what happens next in the next part.
+이번 파트는 여기까지다. 우리는 보호 모드를 알아봤고 그 엔트리 포인터로 진입까지 진행했다. 다음 파트에서 이어가도록 하자.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the third part about linux kernel insides. In next part, we will see first steps in the protected mode and transition into the [long mode](http://en.wikipedia.org/wiki/Long_mode).
+리눅스 커널 인사이드의 3번째 파트의 끝이다. 다음 파트는 보호 모드에서 [롱 모드](http://en.wikipedia.org/wiki/Long_mode) 에 진입하는 과정을 살펴본다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+당신이 어떤 질문이나 제안이 있다면 [twitter](https://twitter.com/0xAX) - 원저자 에게 알려주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes, please send me a PR with corrections at [linux-insides](https://github.com/0xAX/linux-internals).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [VGA](http://en.wikipedia.org/wiki/Video_Graphics_Array)
@@ -596,3 +604,5 @@ Links
 * [GCC designated inits](https://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Designated-Inits.html)
 * [GCC type attributes](https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html)
 * [Previous part](linux-bootstrap-2.md)
+* [PIC 개념-한글](http://itguava.tistory.com/17)
+* [GDT 의 필드 살펴보기-한글](http://kcats.tistory.com/156)

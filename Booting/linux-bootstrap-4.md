@@ -1,26 +1,27 @@
-Kernel booting process. Part 4.
+커널 부팅 과정. part 4.
 ================================================================================
 
-Transition to 64-bit mode
+64 비트 모드로 전환
 --------------------------------------------------------------------------------
 
-This is the fourth part of the `Kernel booting process` where we will see first steps in [protected mode](http://en.wikipedia.org/wiki/Protected_mode), like checking that cpu supports [long mode](http://en.wikipedia.org/wiki/Long_mode) and [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions), [paging](http://en.wikipedia.org/wiki/Paging), initializes the page tables and at the end we will discuss the transition to [long mode](https://en.wikipedia.org/wiki/Long_mode).
+`커널 부팅 과정` 의 4 번째 파트이고 우리는 [protected mode](http://en.wikipedia.org/wiki/Protected_mode) 모드에서 첫 단계에 진입을 했고, [long mode](http://en.wikipedia.org/wiki/Long_mode), [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions), [paging](http://en.wikipedia.org/wiki/Paging) 를 CPU 에서 지원하는지 확인하고, 페이지 테이블을 초기화 한다. 그 다음에 마지막으로 [long mode](https://en.wikipedia.org/wiki/Long_mode) 전환을 살펴 보자.
 
-**NOTE: there will be much assembly code in this part, so if you are not familiar with that, you might want to consult a book about it**
+**NOTE: 이 파트에서 어셈블리 코드가 더 많이 보일 것이고 만약 당신이 어셈블리에 익숙치 않다면 관련된 책을 추천 받아 보는 것을 권장한다.**
 
-In the previous [part](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-3.md) we stopped at the jump to the 32-bit entry point in [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S):
+이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-3.md) 에서 우리는 [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S)에 32 비트 엔트리 포인트로 점프하는 것까지 진행했다.:
 
 ```assembly
 jmpl	*%eax
 ```
 
-You will recall that `eax` register contains the address of the 32-bit entry point. We can read about this in the [linux kernel x86 boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt):
+당신은 32 비트 엔트리 포인트의 주소를 갖고 있는 `eax` 레지스터를 다시 보게 될 것이다. 우리는 이것에 관해 [linux kernel x86 boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt)에서 확인 할 수 있다.:
 
 ```
 When using bzImage, the protected-mode kernel was relocated to 0x100000
+bzImage 를 사용할 때, 보호 모드 커널은 0x100000 로 재배치 된다.
 ```
 
-Let's make sure that it is true by looking at the register values at the 32-bit entry point:
+32 비트 엔트리 포인트에 있는 레지스터 값을 확인함으로써 이 얘기가 진짜인지 확인해보자.:
 
 ```
 eax            0x100000	1048576
@@ -41,12 +42,12 @@ fs             0x18	24
 gs             0x18	24
 ```
 
-We can see here that `cs` register contains - `0x10` (as you will remember from the previous part, this is the second index in the Global Descriptor Table), `eip` register is `0x100000` and base address of all segments including the code segment are zero. So we can get the physical address, it will be `0:0x100000` or just `0x100000`, as specified by the boot protocol. Now let's start with the 32-bit entry point.
+우리는 여기서 `cs` 레지스터가 `0x10` (이전 파트에서 기억을 한다면, GDT(Global Descriptor Table) 에서 두 번째 인덱스이다.) 갖고 있고, `eip` 레지스터는 `0x100000` 그리고 코드 세그먼트를 포함한 모든 세그먼트의 베이스 주소는 0 이다. 이상태로 물리주소를 얻을 수 있는데, 그것은 부트 프로토콜에 따르면 `0:0x100000` 이거나 그냥 `0x100000` 가 될 것이다. 이제는 32 비트 엔트리 포인트에서 시작할 수 있다.
 
-32-bit entry point
+32 비트 엔트리 포인트(32-bit entry point)
 --------------------------------------------------------------------------------
 
-We can find the definition of the 32-bit entry point in the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly source code file:
+우리는 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 소스 코드 파일에서 32 비트 엔트리 포인트의 정의를 찾을 수 있다:
 
 ```assembly
 	__HEAD
@@ -58,14 +59,14 @@ ENTRY(startup_32)
 ENDPROC(startup_32)
 ```
 
-First of all why `compressed` directory? Actually `bzimage` is a gzipped `vmlinux + header + kernel setup code`. We saw the kernel setup code in all of the previous parts. So, the main goal of the `head_64.S` is to prepare for entering long mode, enter into it and then decompress the kernel. We will see all of the steps up to kernel decompression in this part.
+왜 `compressed` 디렉토리 하위일까? 실제 bzImage 는 gzip 으로 `vmlinux + 헤더 + 커널 설정 코드` 압축된 파일이다. 우리는 이전 파트에서 커널 설정코드에 대한 것을 보았다. 그래서, `head_64.S` 의 주요 목표는 long 모드로 진입하기 위한 준비를 하고, long 모드로 진입한다. 그리고 커널 압축을 해제한다. 우리는 이 파트에서 커널의 압축해제 단계를 살펴 볼 것이다.
 
-There were two files in the `arch/x86/boot/compressed` directory:
+`arch/x86/boot/compressed` 디렉토리에 2개의 파일이 있다:
 
 * [head_32.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_32.S)
 * [head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S)
 
-but we will see only `head_64.S` because, as you may remember, this book is only `x86_64` related; `head_32.S` is not used in our case. Let's look at [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile). There we can see the following target:
+그러나 우리는 `head_64.S` 만 볼 것이다, 이유는, 기억할지 모르겠지만, 이 책은 `x86_64` 아키텍처를 위한 것이다.; `head_32.S` 는 살펴보지 않을 것이다. [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile)을 보자. 거기에는 타겟 지정을 볼 수 있다.:
 
 ```Makefile
 vmlinux-objs-y := $(obj)/vmlinux.lds $(obj)/head_$(BITS).o $(obj)/misc.o \
@@ -73,7 +74,7 @@ vmlinux-objs-y := $(obj)/vmlinux.lds $(obj)/head_$(BITS).o $(obj)/misc.o \
 	$(obj)/piggy.o $(obj)/cpuflags.o
 ```
 
-Note `$(obj)/head_$(BITS).o`. This means that we will select which file to link based on what `$(BITS)` is set to, either head_32.o or head_64.o.   `$(BITS)` is defined elsewhere in [arch/x86/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/Makefile) based on the .config file:
+`$(obj)/head_$(BITS).o` 를 보면, `$(BITS)` 의 설정의 무엇이냐에 따라 파일을 선택 빌드 하게되어 있다. (head_32.o 또는 head_64.o). `$(BITS)` [arch/x86/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/Makefile) 에서 .config 파일에 설정된 내용 기준으로 값을 설정한다.:
 
 ```Makefile
 ifeq ($(CONFIG_X86_32),y)
@@ -87,12 +88,12 @@ else
 endif
 ```
 
-Now we know where to start, so let's do it.
+이제 우리가 어디서 시작해야 하는지 알았다, 그럼 확인 해보자.
 
-Reload the segments if needed
+필요하다면, 세그먼트 리로드
 --------------------------------------------------------------------------------
 
-As indicated above, we start in the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly source code file. First we see the definition of the special section attribute before the `startup_32` definition:
+위에서 얘기한 것처럼, [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 코드 파일에서 시작할 것이다. 첫 째로 우리는 `startup_32` 정의 전에 있는 특별한 섹션 속성을 알아 봐야 한다.:
 
 ```assembly
     __HEAD
@@ -100,13 +101,13 @@ As indicated above, we start in the [arch/x86/boot/compressed/head_64.S](https:/
 ENTRY(startup_32)
 ```
 
-The `__HEAD` is macro which is defined in [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h) header file and expands to the definition of the following section:
+`__HEAD` 는 [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h) 헤더 파일에 정의되어 있는 매크로 이며 다음 섹션의 정의를 확장한다.:
 
 ```C
 #define __HEAD		.section	".head.text","ax"
 ```
 
-with `.head.text` name and `ax` flags. In our case, these flags show us that this section is [executable](https://en.wikipedia.org/wiki/Executable) or in other words contains code. We can find definition of this section in the [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S) linker script:
+`.head.text` 이름과 `ax` 플래크와 함께 정의되어 있다. 우리의 경우, 이 플래그들은 [executable](https://en.wikipedia.org/wiki/Executable) 이거나 다른 말로 코드를 포함한다는 의미이다. 우리는 이 섹션의 정의를 [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S) 링커 스크립트에서 찾아볼 수 있다.:
 
 ```
 SECTIONS
@@ -119,17 +120,18 @@ SECTIONS
 	}
 ```
 
-If you are not familiar with syntax of `GNU LD` linker scripting language, you can find more information in the [documentation](https://sourceware.org/binutils/docs/ld/Scripts.html#Scripts). In short, the `.` symbol is a special variable of linker - location counter. The value assigned to it is an offset relative to the offset of the segment. In our case we assign zero to location counter. This means that that our code is linked to run from the `0` offset in memory. Moreover, we can find this information in comments:
+만약 `GNU LD` 링커 스크립트 언어의 문법에 익숙하지 않다면, 당신은 [documentation](https://sourceware.org/binutils/docs/ld/Scripts.html#Scripts) 를 읽어보면 좋을 것이다. 짧게 설명하면, `.` 심볼은 링커의 특별한 변수이다(위치 카운터-location counter). 여기에 값을 할당하는 것은 위치 카운터(location counter)가 이동하도록 할 것이다. 여기서는 위치 카운터에 0을 할당할 것이다. 이것은 우리의 코드는 메모리 오프셋 `0` 에서 수행되기 위해 링크된다는 의미이다. 게다가, 우리는 주석에 이와 같은 정보도 확인할 수 있다.:
 
 ```
 Be careful parts of head_64.S assume startup_32 is at address 0.
+head_64.S 에서 주의해서 볼 부분은 startup_32 가 주소 0에 있다고 가정한 것이다.
 ```
 
-Ok, now we know where we are, and now is the best time to look inside the `startup_32` function.
+좋다, 이제 우리는 어디에 있는지 그리고 `startup_32` 함수를 들여다 보기에 적절한 시점에 왔다.
 
-In the beginning of the `startup_32` function, we can see the `cld` instruction which clears the `DF` bit in the [flags](https://en.wikipedia.org/wiki/FLAGS_register) register. When direction flag is clear, all string operations like [stos](http://x86.renejeschke.de/html/file_module_x86_id_306.html), [scas](http://x86.renejeschke.de/html/file_module_x86_id_287.html) and others will increment the index registers `esi` or `edi`. We need to clear direction flag because later we will use strings operations for clearing space for page tables, etc.
+`startup_32` 함수의 초기에, 우리는 [flags](https://en.wikipedia.org/wiki/FLAGS_register) 레지스터에서 `DF` 비트를 클리어 하는 `cld` 명령어를 볼 수 있다. `DF`(direction flag)가 클리어 되면, 모든 문자열/배열 관련된 명령들이, 예를 들면 [stos](http://x86.renejeschke.de/html/file_module_x86_id_306.html), [scas](http://x86.renejeschke.de/html/file_module_x86_id_287.html) 나 다른 명령어들이 `esi` 나 `edi` 를 증가시켜 준다. 우리는 방향 플래그(DF) 를 클리어 해줄 필요가 있다. 이유는 나중에 페이지 테이블을 위해 공간을 클리어 하기 위한 문자열 명령수행을 사용할 것이기 때문이다.
 
-After we have cleared the `DF` bit, next step is the check of the `KEEP_SEGMENTS` flag from `loadflags` kernel setup header field. If you remember we already saw `loadflags` in the very first [part](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-1.html) of this book. There we checked `CAN_USE_HEAP` flag to get ability to use heap. Now we need to check the `KEEP_SEGMENTS` flag. This flags is described in the linux [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) documentation:
+우리가 `DF` 비트를 클리어 하고 나면, 다음 단계는 커널 설정 헤더 항목에서 `loadflags` 로 부터 `KEEP_SEGMENTS` 플래그를 확인하는 것이다. 당신은 이 책의 첫 번째 [파트](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-1.html)에서 `loadflags` 가 기억날 것이다. 우리는 힙의 사용 가능 여부를 위해 `CAN_USE_HEAP` 플래그를 확인했다. 이제 우리는 `KEEP_SEGMENTS` 플래그를 확인할 필요가 있다. 이 플래그는 리눅스 [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) 문서에 아래와 같이 설명한다:
 
 ```
 Bit 6 (write): KEEP_SEGMENTS
@@ -138,9 +140,15 @@ Bit 6 (write): KEEP_SEGMENTS
   - If 1, do not reload the segment registers in the 32bit entry point.
     Assume that %cs %ds %ss %es are all set to flat segments with
 	a base of 0 (or the equivalent for their environment).
+
+비트 6 (쓰기): KEEP_SEGMENTS
+  프로토콜: 2.07+
+	- 만약 0 이면, 32 비트 엔트리 포인트에 세그먼트 레지스터를 리로드.
+	- 만약 1 이면, 32 비트 엔트리 포인트에 세그먼트 레지스터를 로드 하지 않음.
+	  %cs %ds %ss %es 모두 0 의 베이스와 함께 flat 세그먼트로 설정되어 있다는 가정
 ```
 
-So, if the `KEEP_SEGMENTS` bit is not set in the `loadflags`, we need to reset `ds`, `ss` and `es` segment registers to a flat segment with base `0`. That we do:
+그래서, 만약 `loadflags`에서 `KEEP_SEGMENTS` 비트가 설정되어 있지않다면, 우리는 `ds`, `ss` 그리고 `es` 세그먼트 레지스터를 베이스 `0` 과 함께 flat 세그먼트로 리셋을 할 필요가 있다. 다음과 같이 하면 된다.:
 
 ```C
 	testb $(1 << 6), BP_loadflags(%esi)
@@ -571,3 +579,5 @@ Links
 * [Paging on osdev.org](http://wiki.osdev.org/Paging)
 * [Paging Systems](https://www.cs.rutgers.edu/~pxk/416/notes/09a-paging.html)
 * [x86 Paging Tutorial](http://www.cirosantilli.com/x86-paging/)
+* [링커 스크립트-한글](http://korea.gnu.org/manual/release/ld/ld-sjp/ld-ko_3.html)
+* [CLD/SLD](http://blog.naver.com/PostView.nhn?blogId=krquddnr37&logNo=20193347417)

@@ -131,7 +131,7 @@ head_64.S 에서 주의해서 볼 부분은 startup_32 가 주소 0에 있다고
 
 `startup_32` 함수의 초기에, 우리는 [flags](https://en.wikipedia.org/wiki/FLAGS_register) 레지스터에서 `DF` 비트를 클리어 하는 `cld` 명령어를 볼 수 있다. `DF`(direction flag)가 클리어 되면, 모든 문자열/배열 관련된 명령들이, 예를 들면 [stos](http://x86.renejeschke.de/html/file_module_x86_id_306.html), [scas](http://x86.renejeschke.de/html/file_module_x86_id_287.html) 나 다른 명령어들이 `esi` 나 `edi` 를 증가시켜 준다. 우리는 방향 플래그(DF) 를 클리어 해줄 필요가 있다. 이유는 나중에 페이지 테이블을 위해 공간을 클리어 하기 위한 문자열 명령수행을 사용할 것이기 때문이다.
 
-우리가 `DF` 비트를 클리어 하고 나면, 다음 단계는 커널 설정 헤더 항목에서 `loadflags` 로 부터 `KEEP_SEGMENTS` 플래그를 확인하는 것이다. 당신은 이 책의 첫 번째 [파트](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-1.html)에서 `loadflags` 가 기억날 것이다. 우리는 힙의 사용 가능 여부를 위해 `CAN_USE_HEAP` 플래그를 확인했다. 이제 우리는 `KEEP_SEGMENTS` 플래그를 확인할 필요가 있다. 이 플래그는 리눅스 [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) 문서에 아래와 같이 설명한다:
+우리가 `DF` 비트를 클리어 하고 나면, 다음 단계는 커널 설정 헤더 항목에서 `loadflags` 로 부터 `KEEP_SEGMENTS` 플래그를 확인하는 것이다. 당신은 이 책의 첫 번째 [파트](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-1.html)에서 `loadflags` 가 기억날 것이다. 우리는 힙의 사용 가능 여부를 위해 `CAN_USE_HEAP` 플래그를 확인했다. 이제 `KEEP_SEGMENTS` 플래그를 확인할 필요가 있다. 이 플래그는 리눅스 [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) 문서에 아래와 같이 설명한다:
 
 ```
 Bit 6 (write): KEEP_SEGMENTS
@@ -161,9 +161,9 @@ Bit 6 (write): KEEP_SEGMENTS
 	movl	%eax, %ss
 ```
 
-Remember that the `__BOOT_DS` is `0x18` (index of data segment in the [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table)). If `KEEP_SEGMENTS` is set, we jump to the nearest `1f` label or update segment registers with `__BOOT_DS` if it is not set. It is pretty easy, but here is one interesting moment. If you've read the previous [part](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-3.md), you may remember that we already updated these segment registers right after we switched to [protected mode](https://en.wikipedia.org/wiki/Protected_mode) in [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S). So why do we need to care about values of segment registers again? The answer is easy. The Linux kernel also has a 32-bit boot protocol and if a bootloader uses it to load the Linux kernel all code before the `startup_32` will be missed. In this case, the `startup_32` will be first entry point of the Linux kernel right after bootloader and there are no guarantees that segment registers will be in known state.
+여기서 `__BOOT_DS` 는 `0x18` 이라는 것을 기억하자.([Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table) 에서 데이터 세그먼트의 인덱스). 만약 `KEEP_SEGMENTS` 이 셋되어 있다면, 우리는 가장 가까이에 있는 `1f` 라벨로 점프하거나, 셋되어 있지 않다면 `__BOOT_DS` 와 함께 세그먼트 레지스터를 업데이트 한다. 그것은 꽤 쉬운 작업이지만 여기에 흥미로운 한가지가 있다. 만약 당신이 이전 [파트](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-3.md)를 읽었다면, 당신은 우리가 이미 [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S) 파일 내에서 [보호 모드](https://en.wikipedia.org/wiki/Protected_mode)로 전환하자 마자 이 레지스터들을 업데이트 했다는 것을 기억할 수 있을 것이다. 그런데 왜 다시 이 세그먼트 레지스터들을 신경써줘야 하는가? 그 대답은 간단하다. 리눅스 커널 또한 32 비트 부트 프로토콜을 갖고 준수하고 만약 부트로더도 리눅스 커널을 로드하기 위해 부트 프로토콜을 이용하고 모든 코드는 `startup_32` 이전에 모두 사라질 것이다. `startup_32` 는 부트로더 수행이 끝나고 리눅스 커널의 첫 엔트리 포인트이며, 세그먼트 레지스터의 어떤 내용도 우리가 알고 있는 상태로 있다는 것을 보장 할 수 없기 때문이다.
 
-After we have checked the `KEEP_SEGMENTS` flag and put the correct value to the segment registers, the next step is to calculate difference between where we loaded and compiled to run. Remember that `setup.ld.S` contains following definition: `. = 0` at the start of the `.head.text` section. This means that the code in this section is compiled to run from `0` address. We can see this in `objdump` output:
+`KEEP_SEGMENTS` 플래그를 확인하고 세그먼트 레지스터에 알맞은 값을 넣은 다음에는 실행중인 주소 값과 컴파일된 주소의 차이를 계산하여 커널이 로드된 곳을 알아낸다. `setup.ld.S` 는 `.head.text` 의 시작주소를 `. = 0` 로 설정했다는 것을 기억하자. 이것은 이 섹션의 코드는 `0` 주소로 부터 시작된다는 것을 의미한다. 우리는 `objdump` 명령어의 결과로 이것을 볼 수 있다.:
 
 ```
 arch/x86/boot/compressed/vmlinux:     file format elf64-x86-64
@@ -176,14 +176,14 @@ Disassembly of section .head.text:
    1:   f6 86 11 02 00 00 40    testb  $0x40,0x211(%rsi)
 ```
 
-The `objdump` util tells us that the address of the `startup_32` is `0`. But actually it is not so. Our current goal is to know where actually we are. It is pretty simple to do in [long mode](https://en.wikipedia.org/wiki/Long_mode), because it support `rip` relative addressing, but currently we are in [protected mode](https://en.wikipedia.org/wiki/Protected_mode). We will use common pattern to know the address of the `startup_32`. We need to define a label and make a call to this label and pop the top of the stack to a register:
+`objdump` 유틸은 `startup_32` 의 주소가 `0` 이라는 것을 알려준다. 그러나 실제로는 그렇지 않다. 우리의 현재 목표는 실제로 어디에 위치하는지 알아보는 것이다. 그것은 꽤나 [long 모드](https://en.wikipedia.org/wiki/Long_mode) 내에서 `rip` 상대 주소를 지원하기 때문에 단순하게 동작한다. 그러나 현재는 [보호 모드](https://en.wikipedia.org/wiki/Protected_mode) 동작 중이라는 것이다. 여기서 `startup_32` 의 주소를 알아내기 위해 일반적인 패턴을 사용할 것이다. 우리는 라벨을 정의하고 이 라벨을 호출하며 스택의 맨 위의 내용을 레지스터에 넣어줘야 한다:
 
 ```assembly
 call label
 label: pop %reg
 ```
 
-After this a register will contain the address of a label. Let's look to the similar code which search address of the `startup_32` in the Linux kernel:
+이 레지스터는 라벨의 주소를 가질 것이다. 리눅스 커널에서 `startup_32` 의 주소를 검색해서 비슷한 코드를 찾아보자.:
 
 ```assembly
 	leal	(BP_scratch+4)(%esi), %esp
@@ -192,7 +192,7 @@ After this a register will contain the address of a label. Let's look to the sim
 	subl	$1b, %ebp
 ```
 
-As you remember from the previous part, the `esi` register contains the address of the [boot_params](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L113) structure which was filled before we moved to the protected mode. The `boot_params` structure contains a special field `scratch` with offset `0x1e4`. These four bytes field will be temporary stack for `call` instruction. We are getting the address of the `scratch` field + 4 bytes and putting it in the `esp` register. We add `4` bytes to the base of the `BP_scratch` field because, as just described, it will be a temporary stack and the stack grows from top to down in `x86_64` architecture. So our stack pointer will point to the top of the stack. Next we can see the pattern that I've described above. We make a call to the `1f` label and put the address of this label to the `ebp` register, because we have return address on the top of stack after the `call` instruction will be executed. So, for now we have an address of the `1f` label and now it is easy to get address of the `startup_32`. We just need to subtract address of label from the address which we got from the stack:
+이전 파트에서 기억한다면, `esi` 레지스터는 보호 모드로 전환되기 전에 채워진 [boot_params](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L113) 구조체의 주소를 갖고 있다는 것을 알것이다. `boot_params` 구조체는 `0x1e4` 오프셋위치에 `scratch` 라는 특별한 항목을 가진다. 4 바이트의 이 필드는 `call` 명령어를 위한 임시 스택이 될 것이다. 우리는 `scratch` 필드 + 4 바이트의 주소를 얻고 그것을 `esp` 레지스터에 넣어둔다. 우리는 `BP_scratch` 의 베이스에 `4` 바이트를 더하는 이유는, 앞서 설명했듯이, 그것은 임시 스택으로 사용될 것이며, `x86_64` 아키텍처에서는 위에서 아래로 주소가 움직이게 되어 있다. 다음은 내가 위해 말한 패턴을 알아볼 것이다. 우리는 `1f` 라벨을 만들고 이 라벨의 주소를 `esp` 레지스터에 넣어두었다. 왜냐하면 우리는 `call` 명령어 이후에 스택의 맨 위의 주소를 반환할 것이기 때문이다. 그래서 지금은 `1f` 라벨의 주소를 만들어서 `startup_32` 주소를 쉽게 얻을 수 있게 했다. 우리는 단지 라벨의 주소를 스택에서 얻은 주소에서 빼주면 된다.:
 
 ```
 startup_32 (0x0)     +-----------------------+
@@ -210,7 +210,7 @@ startup_32 (0x0)     +-----------------------+
                      +-----------------------+
 ```
 
-`startup_32` is linked to run at address `0x0` and this means that `1f` has the address `0x0 + offset to 1f`, approximately `0x21` bytes. The `ebp` register contains the real physical address of the `1f` label. So, if we subtract `1f` from the `ebp` we will get the real physical address of the `startup_32`. The Linux kernel [boot protocol](https://www.kernel.org/doc/Documentation/x86/boot.txt) describes that the base of the protected mode kernel is `0x100000`. We can verify this with [gdb](https://en.wikipedia.org/wiki/GNU_Debugger). Let's start the debugger and put breakpoint to the `1f` address, which is `0x100021`. If this is correct we will see `0x100021` in the `ebp` register:
+`startup_32` 는 `0x0` 주소에서 수행되도록 링킹되었고 이것의 의미는 `1f` 는 `0x0 + 1f 라벨의 오프셋`의 주소를 가진다는 의미이다. 대략적으로 `0x21` 바이트가 된다. `ebp` 레지스터는 `1f` 라벨의 실제 물리 주소를 갖고 있다. 그래서 만약 `ebp`에서 `1f`를 뺀다면 우리는 `startup_32` 의 실제 물리 주소를 얻을 수 있을 것이다. 리눅스 커널 [부트 프로토콜](https://www.kernel.org/doc/Documentation/x86/boot.txt) 은 보호 모드 커널의 베이스 주소는 `0x100000` 라고 기술한다. 우리는 [gdb](https://en.wikipedia.org/wiki/GNU_Debugger) 를 갖고 검증할 수 있다. 디버거를 실행하고 `1f` 주소(`0x100021`)에 브레이크 포인트를 만들자. 만약 이 주소가 맞다면 `ebp` 레지스터에 `0x100021` 이 있는 것을 볼 수 있을 것이다.:
 
 ```
 $ gdb
@@ -242,8 +242,7 @@ fs             0x18	0x18
 gs             0x18	0x18
 ```
 
-If we execute the next instruction, `subl $1b, %ebp`, we will see:
-
+만약 우리가 다음 명령어를 `subl $1b, %ebp` 한다면, 다음을 볼 수 있다:
 ```
 nexti
 ...
@@ -251,7 +250,7 @@ ebp            0x100000	0x100000
 ...
 ```
 
-Ok, that's true. The address of the `startup_32` is `0x100000`. After we know the address of the `startup_32` label, we can prepare for the transition to [long mode](https://en.wikipedia.org/wiki/Long_mode). Our next goal is to setup the stack and verify that the CPU supports long mode and [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions).
+그렇다. `startup_32` 주소는 `0x100000` 가 맞다. 우리는 `startup_32` 라벨의 주소를 알았고, [long mode](https://en.wikipedia.org/wiki/Long_mode) 로 전환할 준비를 할 수 있다. 다음 목표는 스택을 설정하고 CPU 가 long 모드와 [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions)를 확인해 보자.
 
 Stack setup and CPU verification
 --------------------------------------------------------------------------------

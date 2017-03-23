@@ -67,7 +67,7 @@ Heap API (힙 API)
 `set_video` 함수에서 `boot_params.hdr` 로 부터 `vid_mode` 를 얻은 다음에, 우리는 `RESET_HEAP` 함수를 호출 할 것이다. `RESET_HEAP` 는 [boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/boot/boot.h#L199) 에 정의된 매크로 인데 아래처럼 되어 있다:
 
 ```C
-#define RESET_HEAP() ((void *)( HEAP = _end )) //* TODO: this line should be removed!!!
+#define RESET_HEAP() ((void *)( HEAP = _end ))
 ```
 
 만약 당신이 두 번째 파트를 읽었다면, [`init_heap`](https://github.com/torvalds/linux/blob/master/arch/x86/boot/main.c#L116) 함수를 통해 힙이 초기화 되었다는 것을 기억할 수 있을 것이다. 우리는 `boot.h` 에 정의된 힙 을 위한 유틸리티 함수들을 갖고 있다.:
@@ -82,7 +82,7 @@ Heap API (힙 API)
 
 ```C
 #define GET_HEAP(type, n) \
-	((type *)__get_heap(sizeof(type),__alignof__(type),(n))) //* TODO: this line should be removed!!!
+	((type *)__get_heap(sizeof(type),__alignof__(type),(n)))
 ```
 
 힙 할당을 위해, `GET_HEAP` 을 쓴다. 이것은 내부 함수인 `__get_heap` 을 인자 3개와 호출한다.:
@@ -104,7 +104,6 @@ static inline char *__get_heap(size_t s, size_t a, size_t n)
 	HEAP += s*n;
 	return tmp;
 }
-//* TODO: this line should be removed!!!
 ```
 
 그리고 아래와 같이 사용하면 된다:
@@ -171,7 +170,6 @@ static struct saved_screen {
 	int curx, cury;
 	u16 *data;
 } saved;
-//* TODO: this line should be removed!!!
 ```
 
 이 스크린 내용을 저장하기 위해 힙이 충분한 공간을 가지고 있는지 확인한다.:
@@ -190,7 +188,6 @@ for (card = video_cards; card < video_cards_end; card++) {
   /* collecting number of modes here */
 }
 ```
-//* TODO: this line should be removed!!!
 
 하지만 `video_cards` 는 어디에도 선언된 변수가 아니다. 답은 간단하다: x86 커널 설정 코드에서 존재하는 모든 비디오 모드는 아래와 같은 형태로 정의되어 있다.:
 ```C
@@ -221,7 +218,6 @@ struct card_info {
 	u16 xmode_n;
 };
 ```
-//* TODO: this line should be removed!!!
 
 `.videocards` 세그먼트내에 이 정보가 있다. [arch/x86/boot/setup.ld](https://github.com/0xAX/linux/blob/master/arch/x86/boot/setup.ld) 링커 스크립트를 살펴보자, 우리는 아래와 같이 videocards 를 찾을 수 있다:
 
@@ -274,7 +270,6 @@ static int vga_set_mode(struct mode_info *mode)
 	return 0;
 }
 ```
-//* TODO: this line should be removed!!!
 
 비디오 모드 설정을 위한 모든 함수는 `AH` 레지스터에 설정값을 넣고 `0x10` BIOS 인터럽	트 호출을 한다.
 
@@ -283,7 +278,6 @@ static int vga_set_mode(struct mode_info *mode)
 다음은 `vesa_store_edid` 호출이다. 이 함수는 단순히 커널에서 사용하기 위해 [EDID](https://en.wikipedia.org/wiki/Extended_Display_Identification_Data)(**E**xtended **D**isplay **I**dentification **D**ata) 정보를 저장한다. 이후에 `store_mode_params`를 다시 한번 호출한다. 마지막으로, 만약 `do_restore` 이 셋되어 있다면, 스크린은 최초의 상태로 복귀될 것이다.
 
 우리는 비디오 모드 설정을 했고 이제 보호 모드로 전환을 할 수 있다.
-*** //<-- TODO: this line should be removed!!!
 
 보호 모드로 전환전에 마지막 준비 작업
 --------------------------------------------------------------------------------
@@ -344,7 +338,6 @@ static int a20_test(int loops)
 	return ok;
 }
 ```
-**//<-- TODO: remove this line
 
 처음으로 `FS` 레지스터에 `0x0000`을 `GS` 레스터에는 `0xffff`을 넣는다. 다음에 코드는 `A20_TEST_ADDR` (`0x200` 이다.) 에 값을 읽고, `saved` 와 `ctr`의 변수에 저장을 해둔다.
 

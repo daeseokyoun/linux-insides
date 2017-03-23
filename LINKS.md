@@ -55,3 +55,4 @@ GCC 와 GAS
 
 * [Linux x86 프로그램 시작](http://dbp-consulting.com/tutorials/debugging/linuxProgramStartup.html)
 * [프로그램 실행 시 메모리 구조 (32 비트)](http://fgiasson.com/articles/memorylayout.txt)
+* [리눅스 커널 설정-iamroot](http://www.iamroot.org/ldocs/linux.html)

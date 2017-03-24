@@ -250,12 +250,12 @@ ebp            0x100000	0x100000
 ...
 ```
 
-그렇다. `startup_32` 주소는 `0x100000` 가 맞다. 우리는 `startup_32` 라벨의 주소를 알았고, [long mode](https://en.wikipedia.org/wiki/Long_mode) 로 전환할 준비를 할 수 있다. 다음 목표는 스택을 설정하고 CPU 가 long 모드와 [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions)를 확인해 보자.
+그렇다. `startup_32` 주소는 `0x100000` 가 맞다. 우리는 `startup_32` 라벨의 주소를 알았고, [long mode](https://en.wikipedia.org/wiki/Long_mode) 로 전환할 준비를 할 수 있다. 다음 목표는 스택을 설정하고 CPU 가 long 모드와 [SSE](http://en.wikipedia.org/wiki/Streaming_SIMD_Extensions)를 지원하는지 확인하는 과정을 보자.
 
-Stack setup and CPU verification
+스택 설정 및 CPU 검증
 --------------------------------------------------------------------------------
 
-We could not setup the stack while we did not know the address of the `startup_32` label. We can imagine the stack as an array and the stack pointer register `esp` must point to the end of this array. Of course we can define an array in our code, but we need to know its actual address to configure the stack pointer in a correct way. Let's look at the code:
+우리는 `startup_32` 라벨 주소를 알수 없었던 동안 스택을 설정할 수 없었다. 스택을 배열로 생각하고 스택 포인터 레지스터인 `esp` 는 이 배열의 맨끝을 가리켜야 한다. 물론, 코드 내에서 배열을 정의 할 수 있지만, 우리는 스택 포인터를 설정하기 위해 그것의 실제 주소를 정상적인 방법으로 알아야 할 필요가 있다. 아래의 코드를 보자:
 
 ```assembly
 	movl	$boot_stack_end, %eax
@@ -263,7 +263,7 @@ We could not setup the stack while we did not know the address of the `startup_3
 	movl	%eax, %esp
 ```
 
-The `boot_stack_end` label, defined in the same [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly source code file and located in the [.bss](https://en.wikipedia.org/wiki/.bss) section:
+`boot_stack_end` 라벨은 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 코드 파일에 정의되어 있고, [.bss](https://en.wikipedia.org/wiki/.bss) 에 위치한다.:
 
 ```assembly
 	.bss
@@ -275,9 +275,9 @@ boot_stack:
 boot_stack_end:
 ```
 
-First of all, we put the address of `boot_stack_end` into the `eax` register, so the `eax` register contains the address of `boot_stack_end` where it was linked, which is `0x0 + boot_stack_end`. To get the real address of `boot_stack_end`, we need to add the real address of the `startup_32`. As you remember, we have found this address above and put it to the `ebp` register. In the end, the register `eax` will contain real address of the `boot_stack_end` and we just need to put to the stack pointer.
+첫 번째로, 우리는 `boot_stack_end` 주소를 `eax` 레지스터에 넣는다. 그러면 `eax` 레지스터는 `0x0 + boot_stack_end` 라는 주소 값을 가진다. `boot_stack_end` 의 실제 주소를 알기 위해서는 `startup_32` 의 실제 주소에 더하면 될 것이다. 기억해보면, 우리는 `startup_32` 주소를 `ebp` 레지스터에 넣었다는 것을 알 수 있다. 결론적으로, `eax` 는 `boot_stack_end` 의 실제 주소를 가질 것이고 우리는 이 주소를 스택 포인터 레지스터에 넣어 둘 필요가 있다.
 
-After we have set up the stack, next step is CPU verification. As we are going to execute transition to the `long mode`, we need to check that the CPU supports `long mode` and `SSE`. We will do it by the call of the `verify_cpu` function:
+스택을 설정한 이후 단계는 CPU 검증이다. 우리는 `long 모드` 로 전환중에 있으며, 우리는 CPU 가 `long 모드` 와 `SSE` 의 지원여부를 확인해야 한다. 우리는 `verify_cpu` 함수를 호출하여 이 확인을 할 것이다:
 
 ```assembly
 	call	verify_cpu
@@ -285,9 +285,9 @@ After we have set up the stack, next step is CPU verification. As we are going t
 	jnz	no_longmode
 ```
 
-This function defined in the [arch/x86/kernel/verify_cpu.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/verify_cpu.S) assembly file and just contains a couple of calls to the [cpuid](https://en.wikipedia.org/wiki/CPUID) instruction. This instruction is used for getting information about the processor. In our case it checks `long mode` and `SSE` support and returns `0` on success or `1` on fail in the `eax` register.
+[arch/x86/kernel/verify_cpu.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/verify_cpu.S) 어셈블리 파일에 `verify_cpu`는 정의되어 있고, 몇 번의 [cpuid](https://en.wikipedia.org/wiki/CPUID) 명령어 관련된 호출을 시도한다. 이 명령어는 프로세서의 정보를 얻기 위해 사용된다. 이 경우에는 `long mode` 와 `SSE` 지원 여부를 확인하는데 `eax`레지스터에 결과를 `0` 이면 성공을, `1` 이면 실패로 저장한다.
 
-If the value of the `eax` is not zero, we jump to the `no_longmode` label which just stops the CPU by the call of the `hlt` instruction while no hardware interrupt will not happen:
+만약 `eax` 가 0이 아니면, 우리는 `hlt` 명령어로 호출로 CPU 를 멈추게 하고 무한루프를 수행하는 `no_longmode` 라벨로 점프한다.:
 
 ```assembly
 no_longmode:
@@ -296,7 +296,7 @@ no_longmode:
 	jmp     1b
 ```
 
-If the value of the `eax` register is zero, everything is ok and we are able to continue.
+만약 `eax` 레지스터 값이 0이면, 모든 것이 확인 완료되었고 계속해도 좋다는 얘기이다.
 
 Calculate relocation address
 --------------------------------------------------------------------------------

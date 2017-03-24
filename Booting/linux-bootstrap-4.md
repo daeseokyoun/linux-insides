@@ -298,27 +298,31 @@ no_longmode:
 
 만약 `eax` 레지스터 값이 0이면, 모든 것이 확인 완료되었고 계속해도 좋다는 얘기이다.
 
-Calculate relocation address
+재배치 주소 계산
 --------------------------------------------------------------------------------
 
 The next step is calculating relocation address for decompression if needed. First we need to know what it means for a kernel to be `relocatable`. We already know that the base address of the 32-bit entry point of the Linux kernel is `0x100000`, but that is a 32-bit entry point. The default base address of the Linux kernel is determined by the value of the `CONFIG_PHYSICAL_START` kernel configuration option. Its default value is `0x1000000` or `16 MB`. The main problem here is that if the Linux kernel crashes, a kernel developer must have a `rescue kernel` for [kdump](https://www.kernel.org/doc/Documentation/kdump/kdump.txt) which is configured to load from a different address. The Linux kernel provides special configuration option to solve this problem: `CONFIG_RELOCATABLE`. As we can read in the documentation of the Linux kernel:
+다음 단계는 필요하다면 압축해제한 커널의 재배치 주소를 계산하는 것이다. 먼저, 우리는 커널을 위해 `재배치 가능(relocatable)` 라는 의미를 알아봐야 한다. 우리는 이미 리눅스 커널의 32 비트 베이스 주소를 `0x100000` 으로 알고 있지만 그것은 32비트 엔트리 포인드이다. 리눅스 커널의 기본 베이스 주소는 커널 설정 옵션에서 `CONFIG_PHYSICAL_START` 의 값에 의해 결정된다. 그것의 기본 값은 `0x1000000` 또는 `16MB` 이다. 여기서 문제는 만약 커널이 문제가 발생해서 죽으면(panic), 다른 주소에 로드되도록 설정되어 있는 신뢰성 있는 [kdump](https://www.kernel.org/doc/Documentation/kdump/kdump.txt) 라는 `rescue kernel/dump-capture kernel` 을 통해 부팅 할 수 있도록 한다. 리눅스 커널은 이 문제를 해결하기 위해 특별한 구성 옵션을 제공한다: `CONFIG_RELOCATABLE`. 우리는 리눅스 커널 문서를 통해 이 내용을 알 수 있다.
 
 ```
 This builds a kernel image that retains relocation information
 so it can be loaded someplace besides the default 1MB.
+재배치 정보를 가지고 커널 이미지가 빌드되고 그것은 기본 1MB 주소 이외에 어떤 곳에 로드 될 수 있다.
 
 Note: If CONFIG_RELOCATABLE=y, then the kernel runs from the address
 it has been loaded at and the compile time physical address
 (CONFIG_PHYSICAL_START) is used as the minimum location.
+Note: 만약 CONFIG_RELOCATABLE=y 라면, 커널은 그 주소로 로드되고 수행된다. 그리고 컴파일 시에 적용된
+물리주소는(CONFIG_PHYSICAL_START) 최소 위치로써 사용된다.
 ```
 
-In simple terms this means that the Linux kernel with the same configuration can be booted from different addresses. Technically, this is done by compiling the decompressor as [position independent code](https://en.wikipedia.org/wiki/Position-independent_code). If we look at [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile), we will see that the decompressor is indeed compiled with the `-fPIC` flag:
+같은 구성 옵션의 리눅스 커널은 서로 다른 주소에서 로드 될 수 있다는 의미이다. 기술적으로 이것은 [위치 독립 코드(position independent code)](https://en.wikipedia.org/wiki/Position-independent_code)로써 압축해제기(decompressor)를 커파일 함으로써 가능해진다. 만약 우리가 [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile) 파일을 살펴 본다면, 우리는 이 압축해제기(decompressor)는 `-fPIC` 플래그와 함께 컴파일 되었다는 것을 알수 있다:
 
 ```Makefile
 KBUILD_CFLAGS += -fno-strict-aliasing -fPIC
 ```
 
-When we are using position-independent code an address is obtained by adding the address field of the command and the value of the program counter. We can load code which uses such addressing from any address. That's why we had to get the real physical address of `startup_32`. Now let's get back to the Linux kernel code. Our current goal is to calculate an address where we can relocate the kernel for decompression. Calculation of this address depends on `CONFIG_RELOCATABLE` kernel configuration option. Let's look at the code:
+우리가 위치-독립 코드(position independent code) 를 사용 할때, 주소는 프로그램 카운터(Program counter-PC) 의 값과 명령 주소의 필드에 더 해져서 얻을 수 있다. 우리는 어떤 주소에도 사용할 수 있는 코드를 로드 할 것이다. 이것이야 말로 우리가 `startup_32` 의 실제 물리 주소를 얻어야 하는 이유이다. 이제 리눅스 커널 코드로 돌아가보자. 우리의 현재 목표는 압축해제된 커널을 어디로 재배치 할 수 있는지에 대한 주소 계산이다. 이 주소의 계산은 커널 구성 옵션에서 `CONFIG_RELOCATABLE` 의 값에 의존적이다. 아래의 코드를 보자:
 
 ```assembly
 #ifdef CONFIG_RELOCATABLE
@@ -336,7 +340,7 @@ When we are using position-independent code an address is obtained by adding the
 	addl	$z_extract_offset, %ebx
 ```
 
-Remember that the value of the `ebp` register is the physical address of the `startup_32` label. If the `CONFIG_RELOCATABLE` kernel configuration option is enabled during kernel configuration, we put this address in the `ebx` register, align it to a multiple of `2MB` and compare it with the `LOAD_PHYSICAL_ADDR` value. The `LOAD_PHYSICAL_ADDR` macro is defined in the [arch/x86/include/asm/boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/boot.h) header file and it looks like this:
+여기서 `ebp` 레지스터는 `startup_32` 라벨의 물리 주소를 갖고 있다는 것을 기억하자. 만약 `CONFIG_RELOCATABLE` 옵션이 활성화 되어 있다면, 우리는 이 주소를 `ebx`레지스터에 넣을 것이고, 그것을 `2MB` 의 배수로 정렬하고 `LOAD_PHYSICAL_ADDR` 의 값과 비교할 것이다. `LOAD_PHYSICAL_ADDR` 매크로는 [arch/x86/include/asm/boot.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/boot.h)에 정의되어 있고 아래 처럼 구현되어 있다.:
 
 ```C
 #define LOAD_PHYSICAL_ADDR ((CONFIG_PHYSICAL_START \
@@ -344,14 +348,14 @@ Remember that the value of the `ebp` register is the physical address of the `st
 				& ~(CONFIG_PHYSICAL_ALIGN - 1))
 ```
 
-As we can see it just expands to the aligned `CONFIG_PHYSICAL_ALIGN` value which represents the physical address of where to load the kernel. After comparison of the `LOAD_PHYSICAL_ADDR` and value of the `ebx` register, we add the offset from the `startup_32` where to decompress the compressed kernel image. If the `CONFIG_RELOCATABLE` option is not enabled during kernel configuration, we just put the default address where to load kernel and add `z_extract_offset` to it.
+커널이 어디에 로드되는지에 대한 물리 주소의 값을 가지는 정렬된 `CONFIG_PHYSICAL_ALIGN` 값에 확장을 하는 것을 볼 수 잇다. `LOAD_PHYSICAL_ADDR`와 `ebx` 레지스터의 값과 비교후에, 우리는 압축된 커널 이미지를 압축해제하는 곳을 `startup_32`에 오프셋을 더해서 계산할 수 있다. 만약 `CONFIG_RELOCATABLE` 옵션이 활성화 되지 않았다면, 우리는 커널이 로드되어야 하는 고정 주소가 있고 그것과 `z_extract_offset` 을 더해서 사용한다.
 
-After all of these calculations we will have `ebp` which contains the address where we loaded it and `ebx` set to the address of where kernel will be moved after decompression.
+이 모든 계산이 끝나면, 우리는 `ebp` 에는 커널이 어디에 로드외어 있는지 주소를 갖고 있고 `ebx` 에는 압축 해제 후에 커널이 어디로 이동을 하는지에 대한 주소를 담고 있다.
 
-Preparation before entering long mode
+long 모드로 진입 전 준비
 --------------------------------------------------------------------------------
 
-When we have the base address where we will relocate the compressed kernel image, we need to do one last step before we can transition to 64-bit mode. First we need to update the [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table):
+우리는 압축된 커널이미지를 재배치 할 수 있는 베이스 주소를 가졌다면, 우리는 64 비트 모드로 전환전에 마지막 한가지를 더 처리 해야 한다. 그중 제일 처음은 [Global Descriptor Table-GDT](https://en.wikipedia.org/wiki/Global_Descriptor_Table) 의 업데이트 이다:
 
 ```assembly
 	leal	gdt(%ebp), %eax
@@ -359,7 +363,7 @@ When we have the base address where we will relocate the compressed kernel image
 	lgdt	gdt(%ebp)
 ```
 
-Here we put the base address from `ebp` register with `gdt` offset into the `eax` register. Next we put this address into `ebp` register with offset `gdt+2` and load the `Global Descriptor Table` with the `lgdt` instruction. To understand the magic with `gdt` offsets we need to look at the definition of the `Global Descriptor Table`. We can find its definition in the same source code [file](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S):
+`ebp` 레지스터의 기본 주소를 `gdt` 의 오프셋과 함께 `eax` 레지스터에 넣어주는 것이다. 다음은 이 주소를  `ebp` 레지스터 주소에서 `gdt+2` 오프셋에 넣고 `lgdt` 명령어로  `Global Descriptor Table` 를 로드한다. `gdt` 오프셋이라는 것을 이해하기 위해 우리는 `Global Descriptor Table` 의 정의를 살펴봐야 할 것이다. 우리는 [head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 소스 코드에서 GDT 의 정의를 볼 수 있다:
 
 ```assembly
 	.data
@@ -374,15 +378,14 @@ gdt:
 	.quad   0x0000000000000000	/* TS continued */
 gdt_end:
 ```
+GDT 는 `.data` 섹션에 위치하고 5개의 디스크립터를 갖고 있다: `null` 디스크립터, 커널 코드 세그먼트, 커널 데이다 세그먼트와 마지막으로 두개의 타스크 디스크립터이다(TS). 이미 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-3.md) 에서 `Global Descriptor Table`을 로드 했다. 그리고 이제 우리는 거의 같은 것을 하지만, 64 비트 모드에서 실행을 위한 GDT 에서 `CS.L = 1` 과 `CS.D = 0` 를 설정하는 것은 다르다. `gdt` 의 정의는 2 바이트로 부터 시작한다: `gdt` 테이블 또는 테이블 제한 내에 마지막 바이트를 표현하는 `gdt_end - gdt` 이다. 다음 4바이트는 `gdt` 의 베이스 주소를 포함한다. `Global Descriptor Table` 은 두 부분으로 이루어진 `48 비트 GDTR` 에 저장된다는 것을 기억하자:
 
-We can see that it is located in the `.data` section and contains five descriptors: `null` descriptor, kernel code segment, kernel data segment and two task descriptors. We already loaded the `Global Descriptor Table` in the previous [part](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-3.md), and now we're doing almost the same here, but descriptors with `CS.L = 1` and `CS.D = 0` for execution in `64` bit mode. As we can see, the definition of the `gdt` starts from two bytes: `gdt_end - gdt` which represents last byte in the `gdt` table or table limit. The next four bytes contains base address of the `gdt`. Remember that the `Global Descriptor Table` is stored in the `48-bits GDTR` which consists of two parts:
+* global descriptor table 의 크기(16비트);
+* global descriptor table 의 주소(32비트)
 
-* size(16-bit) of global descriptor table;
-* address(32-bit) of the global descriptor table.
+그래서 우리는 `gdt` 의 주소를 `eax` 레지스터에 넣었고 그다음에 그것을 어셈블리 코드로 `.long gdt` 또는 `gdt+2`로 넣었다. 이제 부터는 `GDTR` 레지스터를 위한 정형화된 구조체를 가졌고 `lgdt` 명령어로 `Global Descriptor Table` 을 로드할 수 있다.
 
-So, we put address of the `gdt` to the `eax` register and then we put it to the `.long	gdt` or `gdt+2` in our assembly code. From now we have formed structure for the `GDTR` register and can load the `Global Descriptor Table` with the `lgtd` instruction.
-
-After we have loaded the `Global Descriptor Table`, we must enable [PAE](http://en.wikipedia.org/wiki/Physical_Address_Extension) mode by putting the value of the `cr4` register into `eax`, setting 5 bit in it and loading it again into `cr4`:
+우리가 `Global Descriptor Table` 로드 한 후에, `cr4`  레지스터의 값을 써주줌으로 해서 [PAE](http://en.wikipedia.org/wiki/Physical_Address_Extension) 모드를 활성화 해야 한다:
 
 ```assembly
 	movl	%cr4, %eax
@@ -390,9 +393,9 @@ After we have loaded the `Global Descriptor Table`, we must enable [PAE](http://
 	movl	%eax, %cr4
 ```
 
-Now we are almost finished with all preparations before we can move into 64-bit mode. The last step is to build page tables, but before that, here is some information about long mode.
+이제 우리는 64 비트 모드로 진입하기 위한 모든 준비를 거의 다 마쳤다. 마지막 단계로 페이제 테이블을 만들고, 그러나 그전에, long 모드에 대한 정보를 보자.
 
-Long mode
+Long mode(롱 모드)
 --------------------------------------------------------------------------------
 
 [Long mode](https://en.wikipedia.org/wiki/Long_mode) is the native mode for [x86_64](https://en.wikipedia.org/wiki/X86-64) processors. First let's look at some differences between `x86_64` and the `x86`.
@@ -580,3 +583,4 @@ Links
 * [x86 Paging Tutorial](http://www.cirosantilli.com/x86-paging/)
 * [링커 스크립트-한글](http://korea.gnu.org/manual/release/ld/ld-sjp/ld-ko_3.html)
 * [CLD/SLD](http://blog.naver.com/PostView.nhn?blogId=krquddnr37&logNo=20193347417)
+* [kdump-한글](https://ko.wikipedia.org/wiki/Kdump)

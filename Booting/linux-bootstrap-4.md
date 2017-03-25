@@ -301,8 +301,7 @@ no_longmode:
 재배치 주소 계산
 --------------------------------------------------------------------------------
 
-The next step is calculating relocation address for decompression if needed. First we need to know what it means for a kernel to be `relocatable`. We already know that the base address of the 32-bit entry point of the Linux kernel is `0x100000`, but that is a 32-bit entry point. The default base address of the Linux kernel is determined by the value of the `CONFIG_PHYSICAL_START` kernel configuration option. Its default value is `0x1000000` or `16 MB`. The main problem here is that if the Linux kernel crashes, a kernel developer must have a `rescue kernel` for [kdump](https://www.kernel.org/doc/Documentation/kdump/kdump.txt) which is configured to load from a different address. The Linux kernel provides special configuration option to solve this problem: `CONFIG_RELOCATABLE`. As we can read in the documentation of the Linux kernel:
-다음 단계는 필요하다면 압축해제한 커널의 재배치 주소를 계산하는 것이다. 먼저, 우리는 커널을 위해 `재배치 가능(relocatable)` 라는 의미를 알아봐야 한다. 우리는 이미 리눅스 커널의 32 비트 베이스 주소를 `0x100000` 으로 알고 있지만 그것은 32비트 엔트리 포인드이다. 리눅스 커널의 기본 베이스 주소는 커널 설정 옵션에서 `CONFIG_PHYSICAL_START` 의 값에 의해 결정된다. 그것의 기본 값은 `0x1000000` 또는 `16MB` 이다. 여기서 문제는 만약 커널이 문제가 발생해서 죽으면(panic), 다른 주소에 로드되도록 설정되어 있는 신뢰성 있는 [kdump](https://www.kernel.org/doc/Documentation/kdump/kdump.txt) 라는 `rescue kernel/dump-capture kernel` 을 통해 부팅 할 수 있도록 한다. 리눅스 커널은 이 문제를 해결하기 위해 특별한 구성 옵션을 제공한다: `CONFIG_RELOCATABLE`. 우리는 리눅스 커널 문서를 통해 이 내용을 알 수 있다.
+다음 단계는 필요하다면 압축해제한 커널의 재배치 주소를 계산하는 것이다. 먼저, 우리는 커널을 위해 `재배치 가능(relocatable)` 라는 의미를 알아봐야 한다. 우리는 이미 리눅스 커널의 32 비트 베이스 주소를 `0x100000` 으로 알고 있지만 그것은 32비트 엔트리 포인드이다. 리눅스 커널의 기본 베이스 주소는 커널 설정 옵션에서 `CONFIG_PHYSICAL_START` 의 값에 의해 결정된다. 그것의 기본 값은 `0x1000000` 또는 `16MB` 이다. 여기서 문제는 만약 커널이 문제가 발생해서 죽으면(panic), 다른 주소에 로드되도록 설정되어 있는 신뢰성 있는 [kdump](https://www.kernel.org/doc/Documentation/kdump/kdump.txt) 라는 `rescue kernel/dump-capture kernel` 을 통해 부팅 할 수 있도록 한다. 리눅스 커널은 이 문제를 해결하기 위해 특별한 구성 옵션을 제공한다 `CONFIG_RELOCATABLE`. 우리는 리눅스 커널 문서를 통해 이 내용을 알 수 있다.:
 
 ```
 This builds a kernel image that retains relocation information
@@ -398,44 +397,44 @@ GDT 는 `.data` 섹션에 위치하고 5개의 디스크립터를 갖고 있다:
 Long mode(롱 모드)
 --------------------------------------------------------------------------------
 
-[Long mode](https://en.wikipedia.org/wiki/Long_mode) is the native mode for [x86_64](https://en.wikipedia.org/wiki/X86-64) processors. First let's look at some differences between `x86_64` and the `x86`.
+[Long 모드](https://en.wikipedia.org/wiki/Long_mode) 는 [x86_64](https://en.wikipedia.org/wiki/X86-64) 을 위한 네이티브 모드이다. 먼저 `x86_64` 와 `x86`에 대해서 알아보자.
 
-The `64-bit` mode provides features such as:
+`64 비트` 모드는 아래와 같은 항목을 제공한다:
 
-* New 8 general purpose registers from `r8` to `r15` + all general purpose registers are 64-bit now;
-* 64-bit instruction pointer - `RIP`;
-* New operating mode - Long mode;
-* 64-Bit Addresses and Operands;
-* RIP Relative Addressing (we will see an example of it in the next parts).
+* `r8` 에서 `r15`까지의 8 개의 새로운 범용 레지스터 + 모든 레지스터들이 64 비트가 된다.;
+* 64 비트 명령어 포인터 레지스터(instruction Pointer) - `RIP`;
+* 새로운 운영 모드 - Long 모드;
+* 64 비트 주소와 피연산자;
+* RIP 상대 어드레싱(다음 파트에서 이것의 예제를 볼 것이다.)
 
-Long mode is an extension of legacy protected mode. It consists of two sub-modes:
+Long 모드는 기존 보호보드에서 확장한 것이다. 이것은 아래 두 모드를 포함한다.:
 
-* 64-bit mode;
-* compatibility mode.
+* 64 비트 모드;
+* 호완 모드.
 
-To switch into `64-bit` mode we need to do following things:
+`64 비트` 모드로 전환하기 위해서는 아래의 일들이 진행되어야 한다.:
 
-* Enable [PAE](https://en.wikipedia.org/wiki/Physical_Address_Extension);
-* Build page tables and load the address of the top level page table into the `cr3` register;
-* Enable `EFER.LME`;
-* Enable paging.
+* [PAE](https://en.wikipedia.org/wiki/Physical_Address_Extension) 허용;
+* 페이지 테이블을 구성하고 `cr3` 레지스터에 최상위 단계 페이지 테이블 주소를 로드한다.;
+* `EFER.LME` 허용;
+* 페이징 허용.
 
-We already enabled `PAE` by setting the `PAE` bit in the `cr4` control register. Our next goal is to build the structure for [paging](https://en.wikipedia.org/wiki/Paging). We will see this in next paragraph.
+`cr4` 컨트롤 레지스터에 `PAE`비트를 셋팅함으로써 `PAE`는 활성화가 이미 되었다. 다음 목표는 [paging](https://en.wikipedia.org/wiki/Paging) 을 위한 구조체를 구성한다. 다음 장을 보자.
 
-Early page table initialization
+초기 페이지 테이블 초기화
 --------------------------------------------------------------------------------
 
-So, we already know that before we can move into `64-bit` mode, we need to build page tables, so, let's look at the building of early `4G` boot page tables.
+그래서, 우리는 `64 비트` 모드로 이동할 수 있고, 페이지 테이블을 구성해야 한다는 것도 알았다. 이제 초기 `4G` 부트 페이지 테이블의 구성방법을 알아보자.
 
-**NOTE: I will not describe the theory of virtual memory here. If you need to know more about it, see links at the end of this part.**
+**NOTE: 나는 가상 메모리의 이론에 대해서는 기술 하지 않을 것이다. 만얀 이것에 대해 더 자세히 알고 싶다면 이 파트 맨아래 링크에서 찾아 보길 바란다.**
 
-The Linux kernel uses `4-level` paging, and we generally build 6 page tables:
+리눅스 커널은 `4-level` 페이징을 사용한다, 그리고 우리는 일반적으로 아래와 같이 페이지 테이블을 구성해야 한다.:
 
-* One `PML4` or `Page Map Level 4` table with one entry;
-* One `PDP` or `Page Directory Pointer` table with four entries;
-* Four Page Directory tables with a total of `2048` entries.
+* 하나의 `PML4` 나 `Page Map Level 4`가 하나의 엔트리를 가짐;
+* 하나의 `PDP` 나 `Page Directory Pointer` 테이블은 4개의 엔트리를 가짐;
+* 4개의 페이지 디렉터리 테이블은 `2048`개의 엔트리를 가진다
 
-Let's look at the implementation of this. First of all we clear the buffer for the page tables in memory. Every table is `4096` bytes, so we need clear `24` kilobyte buffer:
+이것의 구현을 살펴보자. 메모리의 페이지 테이블을 위한 버퍼를 클리어 해야 한다. 모든 테이블은 `4096` 바이트이고, 모든 버퍼를 클리어 하려면 `24` 킬로 바이트를 해야 한다.:
 
 ```assembly
 	leal	pgtable(%ebx), %edi
@@ -444,9 +443,9 @@ Let's look at the implementation of this. First of all we clear the buffer for t
 	rep	stosl
 ```
 
-We put the address of `pgtable` plus `ebx` (remember that `ebx` contains the address to relocate the kernel for decompression) in the `edi` register, clear the `eax` register and set the `ecx` register to `6144`. The `rep stosl` instruction will write the value of the `eax` to `edi`, increase value of the `edi` register by `4` and decrease the value of the `ecx` register by `1`. This operation will be repeated while the value of the `ecx` register is greater than zero. That's why we put `6144` in `ecx`.
+`ebx`(압축 해제된 커널이 재배치 되는 주소가 있다.)에 `pgtable` 의 주소를 더해서 `edi` 레지스터에 넣어준다. `eax` 레지스터를 클리어 하고, `ecx` 레지스터에 `6144` 값을 넣는다. `rep stosl` 명령어는 `eax` 의 값을 `edi` 에 쓰고, `edi` 레지스터의 값을 `4` 만큼 증가시킨다. 그리고 `ecx` 레지스터의 값은 `1` 감소한다. 이 수행은 `ecx` 레지스터의 값이 0 보다 클때까지 계속 반복적으로 한다. `ecx` 에 `6144` 값을 넣은 이유도 이와 같은 것을 하기 위함이다.
 
-`pgtable` is defined at the end of [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly file and is:
+`pgtable` 은 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 마지막 부분에 정의되어있고 아래 처럼 되어 있다:
 
 ```assembly
 	.section ".pgtable","a",@nobits
@@ -455,19 +454,19 @@ pgtable:
 	.fill 6*4096, 1, 0
 ```
 
-As we can see, it is located in the `.pgtable` section and its size is `24` kilobytes.
+우리가 이미 살펴 봤듯이, `.pgtable` 섹션에 위치하고 그 크기는 `24` 킬로 바이트이다.
 
-After we have got buffer for the `pgtable` structure, we can start to build the top level page table - `PML4` - with:
+`pgtable` 구조체를 위한 버퍼를 얻은 후에, 우리는 맨 상위 레벨의 페이지 테이블인 `PML4`를 아래와 같이 구성할 수 있다:
 
 ```assembly
-	leal	pgtable + 0(%ebx), %edi
-	leal	0x1007 (%edi), %eax
-	movl	%eax, 0(%edi)
+	leal	pgtable + 0(%ebx), %edi // %edi = %ebx + 0 + pgtable?
+	leal	0x1007 (%edi), %eax // %eax = (%edi + 0x1007)
+	movl	%eax, 0(%edi) // (%edi + 0) = *(%eax)
 ```
 
-Here again, we put the address of the `pgtable` relative to `ebx` or in other words relative to address of the `startup_32` to the `edi` register. Next we put this address with offset `0x1007` in the `eax` register. The `0x1007` is `4096` bytes which is the size of the `PML4` plus `7`. The `7` here represents flags of the `PML4` entry. In our case, these flags are `PRESENT+RW+USER`. In the end we just write first the address of the first `PDP` entry to the `PML4`.
+우리는 `ebx`에서 상대적으로 `pgtable` 주소 만큼 떨어진 주소를 `edi` 레지스터에 넣어준다.(`startup_32` 의 주소에서 `pgtable` 만큼 떨어진) 다음은 `eax` 레지스터에 `edi` 주소에서 `0x1007` 오프셋 이동한 주소를 넣어준다. `0x1007` 은 `PML4` 더하기 7 의 크기인 `4096 + 7` 바이트 이다. 여기서 `7` 은 `PML4` 엔트리의 플래그를 표시한다. 여기서는 이 플래그는 `PRESENT+RW+USER` 이다. 마지막으로 첫 `PDP` 엔트리의 주소값을 `PML4`에 써준다.
 
-In the next step we will build four `Page Directory` entries in the `Page Directory Pointer` table with the same `PRESENT+RW+USE` flags:
+다음 단계에서 우리는 `Page Directory Pointer` 테이블에서 같은 `PRESENT+RW+USE` 플래그를 가지고 4 개의 `Page Directory` 엔트리를 구성하는 것을 알아볼 것이다.:
 
 ```assembly
 	leal	pgtable + 0x1000(%ebx), %edi
@@ -480,7 +479,7 @@ In the next step we will build four `Page Directory` entries in the `Page Direct
 	jnz	1b
 ```
 
-We put the base address of the page directory pointer which is `4096` or `0x1000` offset from the `pgtable` table in `edi` and the address of the first page directory pointer entry in `eax` register. Put `4` in the `ecx` register, it will be a counter in the following loop and write the address of the first page directory pointer table entry to the `edi` register. After this `edi` will contain the address of the first page directory pointer entry with flags `0x7`. Next we just calculate the address of following page directory pointer entries where each entry is `8` bytes, and write their addresses to `eax`. The last step of building paging structure is the building of the `2048` page table entries with `2-MByte` pages:
+우리는 page directory pointer 베이스 주소에서 `pgtable` 테이블 의 `4096` 또는 `0x1000` 오프셋을 더한 주소를 `edi` 에 넣고 그 첫 page directory pointer 엔트리 주소를 `eax` 레지스터에 넣어준다. `ecx` 레지스터에 `4` 를 넣는데, 그것은 다음에 올 루프에서 카운터로 사용될 것이며, `edi` 레지스터에 첫 page directory pointer 테이블의 주소를 쓴다. 그 다음 `edi`는 `0x7`의 플래그를 갖고 첫 page directory pointer 엔트리의 주소를 갖게 될 것이다. 다음 우리는 각 `8` 바이트의 크기를 가지는 다음 엔트리의 주소 값을 계산하여 `edi` 에 넣어준다. 페지징 구조체를 구성하는 마지막 단계는 `2 MB` 의 페이지들을 관리하는 `2048` 개의 페이지 테이블 엔트리를 구성하는 것이다.:
 
 ```assembly
 	leal	pgtable + 0x2000(%ebx), %edi
@@ -493,26 +492,26 @@ We put the base address of the page directory pointer which is `4096` or `0x1000
 	jnz	1b
 ```
 
-Here we do almost the same as in the previous example, all entries will be with flags - `$0x00000183` - `PRESENT + WRITE + MBZ`. In the end we will have `2048` pages with `2-MByte` page or:
+여기서 우리는 이전 단계와 거의 비슷한 일을 한다. 모든 엔트리는 `$0x00000183` - `PRESENT + WRITE + MBZ` 플래그를 갖게 될 것이다. 마지막으로 우리는 `2 MB` 크리의 페이지를 `2048` 개를 가질 수 있다. 또는:
 
 ```python
 >>> 2048 * 0x00200000
 4294967296
 ```
 
-`4G` page table. We just finished to build our early page table structure which maps `4` gigabytes of memory and now we can put the address of the high-level page table - `PML4` - in `cr3` control register:
+`4G` 페이지 테이블을 갖게 된다. 우리는 `4GB` 의 메모리 맵을 가질 수 있는 초기 페이지 테이블 구조체를 구성했고, 이제는 상위 레벨 페이지 테이블인 `PML4` 의 주소 값을 `cr3` 컨트롤 레지스터에 넣기만 하면 된다.:
 
 ```assembly
 	leal	pgtable(%ebx), %eax
 	movl	%eax, %cr3
 ```
 
-That's all. All preparation are finished and now we can see transition to the long mode.
+이제 끝이다. 모든 준비를 마치고 이제 long 모드로 전환하는 것을 살펴 보자.
 
-Transition to the 64-bit mode
+64 비트 모드로 전환
 --------------------------------------------------------------------------------
 
-First of all we need to set the `EFER.LME` flag in the [MSR](http://en.wikipedia.org/wiki/Model-specific_register) to `0xC0000080`:
+무엇 보다더 먼저, 우리는 [MSR](http://en.wikipedia.org/wiki/Model-specific_register) 의 `EFER.LME` 플래그를 `0xC0000080` 으로 설정할 필요가 있다.:
 
 ```assembly
 	movl	$MSR_EFER, %ecx
@@ -521,31 +520,31 @@ First of all we need to set the `EFER.LME` flag in the [MSR](http://en.wikipedia
 	wrmsr
 ```
 
-Here we put the `MSR_EFER` flag (which is defined in [arch/x86/include/uapi/asm/msr-index.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/msr-index.h#L7)) in the `ecx` register and call `rdmsr` instruction which reads the [MSR](http://en.wikipedia.org/wiki/Model-specific_register) register. After `rdmsr` executes, we will have the resulting data in `edx:eax` which depends on the `ecx` value. We check the `EFER_LME` bit with the `btsl` instruction and write data from `eax` to the `MSR` register with the `wrmsr` instruction.
+여기서 우리는 `MSR_EFER` 플래그를 ([arch/x86/include/uapi/asm/msr-index.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/msr-index.h#L7) 여기에 정의되어 있다.) `ecx` 레지스터에 넣고 [MSR](http://en.wikipedia.org/wiki/Model-specific_register) 레지스터를 읽는 `rdmsr` 명령어를 호출한다. 다음에 `rdmsr` 을 실행하면, 우리는 MSR 번호(`ecx`) 에 해당하는 레지스터의 값을 `edx:eax` 에 읽어온다. `btsl` 명령어로 `EFER_LME` 비트를 확인하고 `wrmsr` 명령어를 호출하여 `edx:eax` 의 데이터를 `MSR` 레지스터로 써준다.
 
-In the next step we push the address of the kernel segment code to the stack (we defined it in the GDT) and put the address of the `startup_64` routine in `eax`.
+다음 단계는 커널 코드 세그먼트 주소를 스택(우리는 그것을 GDT 에 정의해두었다.)에 넣어주고 `eax` 에 `startup_64` 루틴의 주소를 넣어준다.
 
 ```assembly
 	pushl	$__KERNEL_CS
-	leal	startup_64(%ebp), %eax
+	leal	startup_64(%ebp), %eax // eax = (ebp + startup_64);
 ```
 
-After this we push this address to the stack and enable paging by setting `PG` and `PE` bits in the `cr0` register:
+이 주소를 스택에 넣고 나서 `cr0` 레지스터의 `PG`와 `PE` 비트를 셋팅함으로써 페이징을 활성화한다.:
 
 ```assembly
 	movl	$(X86_CR0_PG | X86_CR0_PE), %eax
 	movl	%eax, %cr0
 ```
 
-and execute:
+그리고 `lret` 실행한다:
 
 ```assembly
 lret
 ```
 
-instruction. Remember that we pushed the address of the `startup_64` function to the stack in the previous step, and after the `lret` instruction, the CPU extracts the address of it and jumps there.
+이전 단계에서 `startup_64` 함수의 주소를 스택에 넣었고, `lret` 명령어 이후에, CPU 는 그것의 주소를 꺼내고 거기로 점프(jump) 한다.
 
-After all of these steps we're finally in 64-bit mode:
+마침내 64 비트 모드로 진입할 수 있게 되었다.:
 
 ```assembly
 	.code64
@@ -556,18 +555,18 @@ ENTRY(startup_64)
 ....
 ```
 
-That's all!
+끝!
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the fourth part linux kernel booting process. If you have questions or suggestions, ping me in twitter [0xAX](https://twitter.com/0xAX), drop me [email](anotherworldofworld@gmail.com) or just create an [issue](https://github.com/0xAX/linux-insides/issues/new).
+리눅스 부팅 과정의 4번째 파트의 끝이다. 당신이 어떤 질문이나 제안이 있다면 [twitter](https://twitter.com/0xAX) - 원저자 에게 알려주길 바란다.
 
-In the next part we will see kernel decompression and many more.
+다음 파트에서는 커널 압축해제와 다른 많은 것을 볼 것이다.
 
-**Please note that English is not my first language and I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-internals).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [Protected mode](http://en.wikipedia.org/wiki/Protected_mode)
@@ -584,3 +583,6 @@ Links
 * [링커 스크립트-한글](http://korea.gnu.org/manual/release/ld/ld-sjp/ld-ko_3.html)
 * [CLD/SLD](http://blog.naver.com/PostView.nhn?blogId=krquddnr37&logNo=20193347417)
 * [kdump-한글](https://ko.wikipedia.org/wiki/Kdump)
+* [Virtual Memory in IA-64 리눅스 커널](http://www.informit.com/articles/article.aspx?p=29961&seqNum=3)
+* [리눅스 페이지 테이블](http://www.iamroot.org/xe/index.php?document_srl=26333&mid=Kernel)
+* [IA32e 페이징-iamroot](http://www.iamroot.org/xe/index.php?document_srl=26289&mid=Kernel)

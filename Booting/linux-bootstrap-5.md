@@ -58,9 +58,9 @@ ENTRY(startup_64)
 	leaq	z_extract_offset(%rbp), %rbx
 ```
 
-`rbp` contains the decompressed kernel start address and after this code executes `rbx` register will contain address to relocate the kernel code for decompression. We already saw code like this in the `startup_32` ( you can read about it in the previous part - [Calculate relocation address](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-4.md#calculate-relocation-address)), but we need to do this calculation again because the bootloader can use 64-bit boot protocol and `startup_32` just will not be executed in this case.
+`rbp` 레지스터는 압축 해제된 커널의 시작 주소를 담고 있고 `rbx` 레지스터는 압축 해제를 위한 커널 코드를 재배치 하기 위한 주소를 갖고 있다. 우리는 이미 `startup_32` 에서 이와 비슷한 일을 한 것을 이전 파트의 [재배치 주소 계산](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-4.md#calculate-relocation-address) 에서 확인 할 수 있다. 이 계산이 왜 다시 필요하냐면, 부트로더는 64 비트 부트 프로토콜을 사용할 수 있고 `startup_32` 는 단지 이 경우에서는 실행되지 않았기 때문이다.
 
-In the next step we can see setup of the stack pointer and resetting of the flags register:
+다음 단계에서는 스택 포인터를 설정하고 플래그 레지스터 들을 리셋하는 것을 확인한다:
 
 ```assembly
 	leaq	boot_stack_end(%rbx), %rsp
@@ -69,7 +69,7 @@ In the next step we can see setup of the stack pointer and resetting of the flag
 	popfq
 ```
 
-As you can see above, the `rbx` register contains the start address of the kernel decompressor code and we just put this address with `boot_stack_end` offset to the `rsp` register which represents pointer to the top of the stack. After this step, the stack will be correct. You can find definition of the `boot_stack_end` in the end of [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly source code file:
+이전 코드에서 봤듯이, `rbx` 레지스터는 커널 압축해제 코드의 시작 주소를 담고 있고, 우리는 이 주소를 `boot_stack_end` 오프셋을 적용하여 스택의 맨 상위를 가리키는 `rsp` 레지스터에 넣어준다. 이 단계 이후에 스택은 제대로 동작할 것이다. 또한 `boot_stack_end` 의 정의는 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 파일의 마지막 부분에 찾아 볼 수 있을 것이다.:
 
 ```assembly
 	.bss
@@ -81,9 +81,9 @@ boot_stack:
 boot_stack_end:
 ```
 
-It located in the end of the `.bss` section, right before the `.pgtable`. If you will look into [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S) linker script, you will find  Definition of the `.bss` and `.pgtable` there.
+이것은 `.bss` 섹션의 마지막 부분부터 `.pgtable` 의 바로 전까지 자리를 잡고 있다. 만약 당신이 [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S) 링커 스크립트를 본다면, `.bss` 와 `.pgtable` 이 정의되어 있는 것을 찾을 수 잇을 것이다.
 
-As we set the stack, now we can copy the compressed kernel to the address that we got above, when we calculated the relocation address of the decompressed kernel. Before details, let's look at this assembly code:
+스택을 설정하고, 이제는 압축된 커널을 앞서 압축해제된 커널의 재배치 주소를 계산하여 얻은 주소로 복사할 수 있다. 자세한 사항을 살펴보기전에 아래 어셈블리 코드를 보자:
 
 ```assembly
 	pushq	%rsi
@@ -97,9 +97,9 @@ As we set the stack, now we can copy the compressed kernel to the address that w
 	popq	%rsi
 ```
 
-First of all we push `rsi` to the stack. We need preserve the value of `rsi`, because this register now stores a pointer to the `boot_params` which is real mode structure that contains booting related data (you must remember this structure, we filled it in the start of kernel setup). In the end of this code we'll restore the pointer to the `boot_params` into `rsi` again.
+맨 먼저 `rsi` 를 스택에 넣는다. 우리는 `rsi` 의 값을 보존할 필요가 있는데, 이유는 이 레지스터가 부팅 관련 데이터를 갖고 있는 real 모드 구조체인 `boot_params` 를 가리키는 포인터를 저장하고 있다.(`boot_params` 는 커널 설정 시작 부분에서 채워진다.) 마미막 부분에 이 코드는 스택에 있었던 `rsi`에 `boot_params` 의 포인터를 되돌려 놓을 것이다.
 
-The next two `leaq` instructions calculates effective addresses of the `rip` and `rbx` with `_bss - 8` offset and put it to the `rsi` and `rdi`. Why do we calculate these addresses? Actually the compressed kernel image is located between this copying code (from `startup_32` to the current code) and the decompression code. You can verify this by looking at the linker script - [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S):
+`rsi` 의 값을 스택에 넣고 바로 다음 두 `leaq` 명령어는 `rip` 와 `rbx` 에 `_bss - 8` 의 값을 오프셋으로 유효 주소(effective address)를 계산하여 각각 `rsi` 와 `rdi` 레지스터에 넣는다. 왜 이 주소들을 계산해야 할까? 실제 압축된 커널이미지는 이 복사 코드(`startup_32` 에서 현재 코드로)와 압축해제 코드 사이에 위치한다. 당신은 링커 스크립트 [arch/x86/boot/compressed/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/vmlinux.lds.S)를 확인해 봄으로써 이 사실을 알 수 있다.:
 
 ```
 	. = 0;
@@ -119,7 +119,7 @@ The next two `leaq` instructions calculates effective addresses of the `rip` and
 	}
 ```
 
-Note that `.head.text` section contains `startup_32`. You may remember it from the previous part:
+`.head.text` 섹션은 `startup_32` 를 포함한다. 이전 파트에서 아래에 대해 설명했을 것이다.:
 
 ```assembly
 	__HEAD
@@ -130,7 +130,7 @@ ENTRY(startup_32)
 ...
 ```
 
-The `.text` section contains decompression code:
+`.text` 섹션은 압축 해제 코드를 포함한다:
 
 ```assembly
 	.text
@@ -144,11 +144,11 @@ relocated:
 ...
 ```
 
-And `.rodata..compressed` contains the compressed kernel image. So `rsi` will contain the absolute address of `_bss - 8`, and `rdi` will contain the relocation relative address of `_bss - 8`. As we store these addresses in registers, we put the address of `_bss` in the `rcx` register. As you can see in the `vmlinux.lds.S` linker script, it's located at the end of all sections with the setup/kernel code. Now we can start to copy data from `rsi` to `rdi`, `8` bytes at the time, with the `movsq` instruction.
+그리고 `.rodata..compressed` 는 압축된 커널 이미지를 갖고 있다. 그래서 `rsi` 는 `_bss - 8` 의 절대 주소를 갖게 될 것이다, 그리고 `rdi` 는 `_bss - 8` 의 재배치 상태 주소를 갖게 될 것이다. 레지스터에 이 주소들이 저장됨에 따라 우리는 `rcx` 레지스터에 `_bss` 의 주소를 넣는다. `vmlinux.lds.S` 링커 스크립트를 보면, 설정/커널 코드와 연관된 모든 섹션의 끝에 그것이 놓여진 것을 알 수 있다. 우리는 이제 데이터를 `8` 바이트 단위로 `movsq` 명령어를 사용하여 `rsi` 에서 `rdi` 로 복사를 시작할 것이다.
 
-Note that there is an `std` instruction before data copying: it sets the `DF` flag, which means that `rsi` and `rdi` will be decremented. In other words, we will copy the bytes backwards. At the end, we clear the `DF` flag with the `cld` instruction, and restore `boot_params` structure to `rsi`.
+데이터 복사 전에 `std` 명령어가 있을 것이다: 이것은 `DF` 플래그(방향 지정 플래그)를 설정한다, 이것의 의미는 `rsi` 와 `rdi` 가 감소하며 접근될 것이라는 의미이다. 간단히 말하면, 거꾸로 복사진행 한다는 것이다. 마지막으로 `cld` 명령어로 `DF` 플래그를 클리어 하고, `boot_params` 구조체의 포인터를 `rsi` 로 복구 한다.
 
-Now we have the address of the `.text` section address after relocation, and we can jump to it:
+이제 우리는 재배치 이후에 `.text` 섹션 주소를 갖게 되었고, 그곳으로 점프할 것이다.:
 
 ```assembly
 	leaq	relocated(%rbx), %rax

@@ -7,6 +7,8 @@ linux-insides (한글 버전)
 
 **질문 및 제안**: 질문이나 제안이 있다면 언제든지 트위터로 알려줘.(물론 저자에게는 영어로 해야 한다.) [@0xAX](https://twitter.com/0xAX), [이슈](https://github.com/0xAX/linux-insides/issues/new) 또는 [이메일](mailto:anotherworldofworld@gmail.com).
 
+**중요** 현재 한글화 작업을 korean-trans 브랜치로 진행 중이나, 문서들의 링크는 모드 master 브랜치의 기준으로 진행되었다. 향후 문서 작업이 완료되면 master 브랜치로 변경계획에 있음을 알려드린다.
+
 다른 언어로 지원 중인 github 프로젝트
 -------------------
 

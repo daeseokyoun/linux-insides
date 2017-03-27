@@ -155,7 +155,7 @@ relocated:
 	jmp	*%rax
 ```
 
-Last preparation before kernel decompression
+커널 압축 해제 전 마지막 준비
 --------------------------------------------------------------------------------
 
 In the previous paragraph we saw that the `.text` section starts with the `relocated` label. The first thing it does is clearing the `bss` section with:

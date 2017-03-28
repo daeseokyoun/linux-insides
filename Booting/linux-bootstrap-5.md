@@ -158,7 +158,7 @@ relocated:
 커널 압축 해제 전 마지막 준비
 --------------------------------------------------------------------------------
 
-In the previous paragraph we saw that the `.text` section starts with the `relocated` label. The first thing it does is clearing the `bss` section with:
+이전 절에서 `.text` 섹션은 `relocated` 라벨에서 시작한다는 것을 보았다. 처음으로 하는 일은 `bss` 섹션을 클리어 하는 것이다.:
 
 ```assembly
 	xorl	%eax, %eax
@@ -169,9 +169,9 @@ In the previous paragraph we saw that the `.text` section starts with the `reloc
 	rep	stosq
 ```
 
-We need to initialize the `.bss` section, because we'll soon jump to [C](https://en.wikipedia.org/wiki/C_%28programming_language%29) code. Here we just clear `eax`, put the address of `_bss` in `rdi` and `_ebss` in `rcx`, and fill it with zeros with the `rep stosq` instruction.
+이제 [C](https://en.wikipedia.org/wiki/C_%28programming_language%29) 코드로 점프해야 하기 때문에, `.bss` 섹션을 초기화 할 필요가 있다. `eax` 를 클리어 하고, `_bss` 의 주소를 `rdi` 에, `_ebss` 를 `rcx` 에 넣고, `req stosq` 명령어로 그 영역에 0 을 채워 준다.
 
-At the end, we can see the call to the `decompress_kernel` function:
+마지막으로, `decompress_kernel` 함수를 호출한다.:
 
 ```assembly
 	pushq	%rsi
@@ -188,48 +188,47 @@ At the end, we can see the call to the `decompress_kernel` function:
 	popq	%rsi
 ```
 
-Again we set `rdi` to a pointer to the `boot_params` structure and call `decompress_kernel` from [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) with seven arguments:
+다시 `rdi` 를 `boot_params` 구조체를 가리키도록 설정하고 7 개의 인자와 함께 [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) 에 있는 `extract_kernel` 를 호출 한다.:
 
-* `rmode` - pointer to the [boot_params](https://github.com/torvalds/linux/blob/master//arch/x86/include/uapi/asm/bootparam.h#L114) structure which is filled by bootloader or during early kernel initialization;
-* `heap` - pointer to the `boot_heap` which represents start address of the early boot heap;
-* `input_data` - pointer to the start of the compressed kernel or in other words pointer to the `arch/x86/boot/compressed/vmlinux.bin.bz2`;
-* `input_len` - size of the compressed kernel;
-* `output` - start address of the future decompressed kernel;
-* `output_len` - size of decompressed kernel;
-* `run_size` - amount of space needed to run the kernel including `.bss` and `.brk` sections.
+* `rmode` - 초기 커널 초기화 또는 부트로더에서 채워진 [boot_params](https://github.com/torvalds/linux/blob/master//arch/x86/include/uapi/asm/bootparam.h#L114) 구조체의 포인터
+* `heap` - 초기 부트 힙의 시작 주소를 갖고 있는 `boot_heap` 에 대한 포인터
+* `input_data` - 압축된 커널의 시작 주소 포인터 또는 다른 말로 `arch/x86/boot/compressed/vmlinux.bin.bz2` 에 대한 포인터
+* `input_len` - 압축된 커널의 크기
+* `output` - 미래의 압축 해제된 커널의 시작 주소
+* `output_len` - 압축 해제된 커널의 크기
+* `run_size` - `.bss` 와 `.brk` 를 포함한 커널이 수행될 수 있도록 하는 필요한 공간
 
-All arguments will be passed through the registers according to [System V Application Binary Interface](http://www.x86-64.org/documentation/abi.pdf). We've finished all preparation and can now look at the kernel decompression.
+모든 인자는 [System V Application Binary Interface](http://www.x86-64.org/documentation/abi.pdf) 에 따라 레지스터를 통해 전달된다. 우리는 커널 압축 해제를 위한 모든 준비를 마치고 커널 압축 해제를 보자.
 
-Kernel decompression
+커널 압축 해제
 --------------------------------------------------------------------------------
 
-As we saw in previous paragraph, the `decompress_kernel` function is defined in the [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) source code file and takes seven arguments. This function starts with the video/console initialization that we already saw in the previous parts. We need to do this again because we don't know if we started in [real mode](https://en.wikipedia.org/wiki/Real_mode) or a bootloader was used, or whether the bootloader used the 32 or 64-bit boot protocol.
+[arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) 에 정의되어 있는 `extract_kernel` 함수가 있고, 7 ~ 8 개의 인자를 받는다. 이 함수는 이전 파트에선 본 비디오/콘솔 초기화화 함께 진행된다. 만약, [real mode](https://en.wikipedia.org/wiki/Real_mode) 이나 부트로더에서 사용된지 안되어 있는지, 부트로더가 32 비트나 64 비트 부트 프로토콜인지 알 수 없기 때문에 이 작업을 다시 해야한다.
 
-After the first initialization steps, we store pointers to the start of the free memory and to the end of it:
-
+이 첫 초기화 단계 다음에, 우리는 가용 메모리의 시작 주소와 마지막 주소의 포인터를 저장한다.:
 ```C
 free_mem_ptr     = heap;
 free_mem_end_ptr = heap + BOOT_HEAP_SIZE;
 ```
 
-where the `heap` is the second parameter of the `decompress_kernel` function which we got in the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S):
+`extract_kernel` 함수의 두 번째 인자는 에서 넘어온 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) `heap` 이다.:
 
 ```assembly
 leaq	boot_heap(%rip), %rsi
 ```
 
-As you saw above, the `boot_heap` is defined as:
+위에서 보면, `boot_heap` 은 아래와 같이 되어 있다:
 
 ```assembly
 boot_heap:
 	.fill BOOT_HEAP_SIZE, 1, 0
 ```
 
-where the `BOOT_HEAP_SIZE` is macro which expands to `0x8000` (`0x400000` in a case of `bzip2` kernel) and represents the size of the heap.
+`BOOT_HEAP_SIZE` 매크로는 `0x10000` 로 확장하고(`bzip2` 커널의 경우 `0x400000` 로) `boot_heap` 은 힙의 크기를 갖는다.
 
-After heap pointers initialization, the next step is the call of the `choose_random_location` function from [arch/x86/boot/compressed/kaslr.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c#L425) source code file. As we can guess from the function name, it chooses the memory location where the kernel image will be decompressed. It may look weird that we need to find or even `choose` location where to decompress the compressed kernel image, but the Linux kernel supports [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization) which allows decompression of the kernel into a random address, for security reasons. Let's open the [arch/x86/boot/compressed/kaslr.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c#L425) source code file and look at `choose_random_location`.
+힙 포인터 초기화 이후에, 다음 단계는 [arch/x86/boot/compressed/kaslr.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c#L559) 소스파일에 구현된 `choose_random_location` 함수 호출이다. 함수 이름에서 유추 가능한 사항으로, 커널 이미지가 압축해제된 메모리 위치를 선택한다. 우리가 압축된 이미지를 해제하는 메모리 공간을 찾고 선택을 하는 것이 이상하게 보일 수도 있으나, 리눅스 커널은 커널을 보안의 이유로, 랜덤 주소에 압축 해제 하는 [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization) 을 허용한다. [arch/x86/boot/compressed/kaslr.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c#L559) 소스 코드 파일을 열어 `choose_random_location` 함수를 보자.
 
-First, `choose_random_location` tries to find the `kaslr` option in the Linux kernel command line if `CONFIG_HIBERNATION` is set, and `nokaslr` otherwise:
+첫째로, `choose_random_location` 함수는 `CONFIG_HIBERNATION` 옵션이 설정되어 있다면, 리눅스 커널 명령 라인을 확인하여 `kaslr` 옵션을 찾는다. `CONFIG_HIBERNATION`이 설정되어 있지 않다면 `nokaslr` 을 찾는다.:
 
 ```C
 #ifdef CONFIG_HIBERNATION
@@ -245,16 +244,17 @@ First, `choose_random_location` tries to find the `kaslr` option in the Linux ke
 #endif
 ```
 
-If the `CONFIG_HIBERNATION` kernel configuration option is enabled during kernel configuration and there is no `kaslr` option in the Linux kernel command line, it prints `KASLR disabled by default...` and jumps to the `out` label:
+커널 구성 옵션에서 `CONFIG_HIBERNATION` 이 활성화 되어 있고 커널 명령 라인에서 `kaslr` 옵션이 없다면, 커널은 `KASLR disabled by default...` 출력하고 `out` 라벨로 점프한다:
 
 ```C
 out:
 	return (unsigned char *)choice;
 ```
 
-which just returns the `output` parameter which we passed to the `choose_random_location`, unchanged. If the `CONFIG_HIBERNATION` kernel configuration option is disabled and the `nokaslr` option is in the kernel command line, we jump to `out` again.
+`choose_random_location` 함수로 넘어온 `output` 인자는 변경되지 않고 그냥 리턴된다. 만약 `CONFIG_HIBERNATION` 커널 구성 옵션이 비활성화 상태고 커널 명령 라인의 `nokaslr` 옵션이 있다면 `out` 라벨로 점프한다.
+-현재 `CONFIG_HIBERNATION` 정의에 대한 구분은 없는 상태이며, `nokaslr` 옵션 확인만 남아 있는 상태이다.-
 
-For now, let's assume the kernel was configured with randomization enabled and try to understand what `kASLR` is. We can find information about it in the [documentation](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt):
+현재는, `kASLR` 을 이해하기 위해, 커널은 주소 랜덤 접근이 활성화 되어 옵션이 구성되어 있다고 가정한다. 이것과 관련된 내용을 이 [문서](https://github.com/torvalds/linux/blob/master/Documentation/admin-guide/kernel-parameters.txt#L1723)에서 찾아 볼 수 있다.:
 
 ```
 kaslr/nokaslr [X86]
@@ -264,18 +264,27 @@ Enable/disable kernel and module base offset ASLR
 the kernel. When CONFIG_HIBERNATION is selected,
 kASLR is disabled by default. When kASLR is enabled,
 hibernation will be disabled.
+
+최신 버전에서는 kaslr 이 없어짐.
+nokaslr		[KNL]
+		When CONFIG_RANDOMIZE_BASE is set, this disables
+		kernel and module base offset ASLR (Address Space
+		Layout Randomization).
+
+		CONFIG_RANDOMIZE_BASE 이 설정되어 있다면, 이것은 커널과 모듈의 기본 오프셋을
+		ASLR 하지 않는다.
 ```
 
-It means that we can pass the `kaslr` option to the kernel's command line and get a random address for the decompressed kernel (you can read more about ASLR [here](https://en.wikipedia.org/wiki/Address_space_layout_randomization)). So, our current goal is to find random address where we can `safely` to decompress the Linux kernel. I repeat: `safely`. What does it mean in this context? You may remember that besides the code of decompressor and directly the kernel image, there are some unsafe places in memory. For example, the [initrd](https://en.wikipedia.org/wiki/Initrd) image is in memory too, and we must not overlap it with the decompressed kernel.
+`kaslr` 옵션은 커널 명령 라인에서 넘어오고 압축 해제 커널을 위한 랜던 주소를 얻게 한다.(당신은 ASLR 에 대한 내용을 [여기](https://en.wikipedia.org/wiki/Address_space_layout_randomization)에서 확인 해보자). 그리고, 현재 우리의 목표는 리눅스 커널을 압축 해제 하기 위해 `safely` 한 랜덤 주소를 어떻게 찾는 냐는 것이다. `safely` 란 말을 다시 한번 확인하자. 이것은 문맥상 어떤 의미를 가지는가? 당신은 커널 이미지를 직접적으로 안전하지 않는 메모리의 위치에 압축해제하는 코드를 기억할 것이다. 예를 들면, [initrd](https://en.wikipedia.org/wiki/Initrd) 이미지도 메모리에 있기 때문에 압축 해제된 커널이 그것을 덮어쓰면 안되는 것이다.
 
-The next function will help us to find a safe place where we can decompress kernel. This function is `mem_avoid_init`. It defined in the same source code [file](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c), and takes four arguments that we already saw in the `decompress_kernel` function:
+다음 함수는 압축 해제시에 안전한 위치를 찾을 수 있도록 도와주는 함수를 알아보자. 이 함수는 `mem_avoid_init` 이다. 이 함수는 같은 소스 [파일]((https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/kaslr.c) 에 구현되어 있고, `extract_kernel` 함수에서 본 4 개의 인자를 받는다.:
 
-* `input_data` - pointer to the start of the compressed kernel, or in other words, the pointer to `arch/x86/boot/compressed/vmlinux.bin.bz2`;
-* `input_len` - the size of the compressed kernel;
-* `output` - the start address of the future decompressed kernel;
-* `output_len` - the size of decompressed kernel.
+* `input_data` - 압축된 커널의 시작 포인터, 이 문서의 경우 `arch/x86/boot/compressed/vmlinux.bin.bz2` 의 포인터
+* `input_len` - 압축된 커널의 크기
+* `output` - 미래에 압축 해제될 커널의 시작 주소
+* `output_len` - 압축 해제된 커널의 크기
 
-The main point of this function is to fill array of the `mem_vector` structures:
+이 함수의 주요 사항은 `mem_vector` 구조체의 배열을 채우는 것이다.:
 
 ```C
 #define MEM_AVOID_MAX 5
@@ -283,7 +292,7 @@ The main point of this function is to fill array of the `mem_vector` structures:
 static struct mem_vector mem_avoid[MEM_AVOID_MAX];
 ```
 
-where the `mem_vector` structure contains information about unsafe memory regions:
+`mem_vector`는 안전하지 않은(?) 메모리 영역에 대한 정보를 담고 있다:
 
 ```C
 struct mem_vector {
@@ -292,7 +301,7 @@ struct mem_vector {
 };
 ```
 
-The implementation of the `mem_avoid_init` is pretty simple. Let's look on the part of this function:
+`mem_avoid_init` 의 구현은 꽤나 간단하다. 이 함수의 일부를 살펴 보자.:
 
 ```C
 	...
@@ -309,7 +318,7 @@ The implementation of the `mem_avoid_init` is pretty simple. Let's look on the p
 	...
 ```
 
-Here we can see calculation of the [initrd](http://en.wikipedia.org/wiki/Initrd) start address and size. The `ext_ramdisk_image` is the high `32-bits` of the `ramdisk_image` field from the setup header, and `ext_ramdisk_size` is the high 32-bits of the `ramdisk_size` field from the [boot protocol](https://github.com/torvalds/linux/blob/master/Documentation/x86/boot.txt):
+여기서 [initrd](http://en.wikipedia.org/wiki/Initrd) 의 시작 주소와 크기의 계산을 볼 수 있다. `ext_ramdisk_image` 의 32 비트와 설정 헤더로 부터 `ramdisk_image` 의 값으로 `initrd_start`를 계산한다. `initrd_size` 는 `ext_ramdisk_size` 의 `32 비트` 상위 비트와 [boot protocol](https://github.com/torvalds/linux/blob/master/Documentation/x86/boot.txt)에서 `ramdisk_size` 값의 조합으로 계산된다.:
 
 ```
 Offset	Proto	Name		Meaning
@@ -322,7 +331,7 @@ Offset	Proto	Name		Meaning
 ...
 ```
 
-And `ext_ramdisk_image` and `ext_ramdisk_size` can be found in the [Documentation/x86/zero-page.txt](https://github.com/torvalds/linux/blob/master/Documentation/x86/zero-page.txt):
+`ext_ramdisk_image` 와 `ext_ramdisk_size` 는 [Documentation/x86/zero-page.txt](https://github.com/torvalds/linux/blob/master/Documentation/x86/zero-page.txt) 에서 찾아 볼 수 있다.:
 
 ```
 Offset	Proto	Name		Meaning
@@ -335,15 +344,15 @@ Offset	Proto	Name		Meaning
 ...
 ```
 
-So we're taking `ext_ramdisk_image` and `ext_ramdisk_size`, shifting them left on `32` (now they will contain low 32-bits in the high 32-bit bits) and getting start address of the `initrd` and size of it. After this we store these values in the `mem_avoid` array.
+우리는 `ext_ramdisk_image` 와 `ext_ramdisk_size` 를 `32` 비트 왼쪽 쉬프트 해서 사용했고(이제 상위 32 비트를 하위 32 비트로 사용한다), `initrd`의 시작 주소와 크기를 얻을 수 있다. 이것 이후에 이 값들을 `mem_avoid` 배열에 저장한다.
 
-The next step after we've collected all unsafe memory regions in the `mem_avoid` array will be searching for a random address that does not overlap with the unsafe regions, using the `find_random_addr` function. First of all we can see the alignment of the output address in the `find_random_addr` function:
+`mem_avoid` 배열에 모든 안전하지 않는 메모리 영역을 모은 다음 단계는 안전하지 않는 영역과 겹치지 않도록 랜덤한 주소를 찾는 것이다. 그 작업을 위해 `find_random_phys_addr` 를 호출 하고 제일 처음 하는 것은 결과 주소를 정렬하는 것이다.:
 
 ```C
 minimum = ALIGN(minimum, CONFIG_PHYSICAL_ALIGN);
 ```
 
-You can remember `CONFIG_PHYSICAL_ALIGN` configuration option from the previous part. This option provides the value to which kernel should be aligned and it is `0x200000` by default. Once we have the aligned output address, we go through the memory regions which we got with the help of the BIOS [e820](https://en.wikipedia.org/wiki/E820) service and collect regions suitable for the decompressed kernel image:
+`CONFIG_PHYSICAL_ALIGN` 구성 옵션을 이전 파트에서 봤을 것이다. 이 옵션은 커널이 정렬되어야 하는 값을 제공하고, 그 값은 기본으로 `0x200000` 이다. 일단 정렬된 minimum 주소를 가졌다면, BIOS [e820](https://en.wikipedia.org/wiki/E820) 서비스를 이용해서 메모리 영역을 얻고 압축 해제된 커널 이미지에 적합안 영역을 확인 한다.:
 
 ```C
 for (i = 0; i < real_mode->e820_entries; i++) {
@@ -351,8 +360,7 @@ for (i = 0; i < real_mode->e820_entries; i++) {
 }
 ```
 
-Recall that we collected `e820_entries` in the second part of the [Kernel booting process part 2](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-2.md#memory-detection). The `process_e820_entry` function does some checks that an `e820` memory region is not `non-RAM`, that the start address of the memory region is not bigger than maximum allowed `aslr` offset, and that the memory region is above the minimum load location:
-
+[커널 부팅 과정 파트 2 의 메모리 검출](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-2.md#메모리-검출) 에서 `e820_entries` 의 값을 찾았을 것이다. `process_e820_entry` 함수는 `e820` 메모리 영역이 `non-RAM` 아닌지 확인하고, 메모리 영역의 시작 주소가 허용된 `kaslr` 오프셋의 최대값보다 크지 않는지 확인한다. 그리고 메모리 영역은 `minimum` 위치보다는 커야 한다.:
 ```C
 struct mem_vector region, img;
 
@@ -366,14 +374,14 @@ if (entry->addr + entry->size < minimum)
 	return;
 ```
 
-After this, we store an `e820` memory region start address and the size in the `mem_vector` structure (we saw definition of this structure above):
+이 다음에, 우리는 `e820` 메모리 영역의 시작 주소와 크기를 `mem_vector` 구조체 안에 저장한다.(위에서 이 구조체에 대한 정의를 살펴보았다.):
 
 ```C
 region.start = entry->addr;
 region.size = entry->size;
 ```
 
-As we store these values, we align the `region.start` as we did it in the `find_random_addr` function and check that we didn't get an address that is outside the original memory region:
+이 값들이 저장되면, `find_random_phys_addr` 에서 했던 것과 마찬가지로 `region.start` 를 정렬하고 원래 메모리 영역을 벗어나진 않았는지 검사한다.:
 
 ```C
 region.start = ALIGN(region.start, CONFIG_PHYSICAL_ALIGN);
@@ -383,6 +391,7 @@ if (region.start > entry->addr + entry->size)
 ```
 
 In the next step, we reduce the size of the memory region to not include rejected regions at the start, and ensure that the last address in the memory region is smaller than `CONFIG_RANDOMIZE_BASE_MAX_OFFSET`, so that the end of the kernel image will be less than the maximum `aslr` offset:
+다음 단계, 우리는 시작으로써 배척된 영역을 제외하기 위해 메모리 영역의 크기를 줄이고 `CONFIG_RANDOMIZE_BASE_MAX_OFFSET` 보다 작은 주소의 메모리 영역안에 마지막 주소가 있도록 해야 한다.
 
 ```C
 region.size -= region.start - entry->addr;
@@ -391,8 +400,7 @@ if (region.start + region.size > CONFIG_RANDOMIZE_BASE_MAX_OFFSET)
 		region.size = CONFIG_RANDOMIZE_BASE_MAX_OFFSET - region.start;
 ```
 
-Finally, we go through all unsafe memory regions and check that the region does not overlap unsafe areas, such as kernel command line, initrd, etc...:
-
+마침내, 우리는 모든 안전하지 않는 메모리 영역을 뒤졌고, 우리가 원하는 영역은 안전하지 않는 영역(커널 명령 라인, initrd 등)에 들어가지 않음을 확인했다.:
 ```C
 for (img.start = region.start, img.size = image_size ;
 	     mem_contains(&region, &img) ;
@@ -403,7 +411,7 @@ for (img.start = region.start, img.size = image_size ;
 	}
 ```
 
-If the memory region does not overlap unsafe regions we call the `slots_append` function with the start address of the region. `slots_append` function just collects start addresses of memory regions to the `slots` array:
+만약 메모리 영역이 안전하지 않은 영역과 겹치지 않는다면, 영역의 시작 주소와 함께 `slots_append` 함수를 호출한다. `slots_append` 함수는 `slots` 배열로 메모리 영역의 시작 주소를 모으는 일을 한다:
 
 ```C
 slots[slot_max++] = addr;
@@ -417,8 +425,7 @@ static unsigned long slots[CONFIG_RANDOMIZE_BASE_MAX_OFFSET /
 static unsigned long slot_max;
 ```
 
-After `process_e820_entry` is done, we will have an array of addresses that are safe for the decompressed kernel. Then we call `slots_fetch_random` function to get a random item from this array:
-
+`process_e820_entry` 가 끝나면, 우리는 압축 해제를 위한 안전한 주소의 배열을 갖게 된다. 이 배열 내에서 랜덤한 값을 얻도록 하는 `slots_fetch_random` 함수를 다음으로 호출한다:
 ```C
 if (slot_max == 0)
 	return 0;
@@ -427,16 +434,17 @@ return slots[get_random_long() % slot_max];
 ```
 
 where `get_random_long` function checks different CPU flags as `X86_FEATURE_RDRAND` or `X86_FEATURE_TSC` and chooses a method for getting random number (it can be the RDRAND instruction, the time stamp counter, the programmable interval timer, etc...). After retrieving the random address, execution of the `choose_random_location` is finished.
+`get_random_long` 함수를 호출 하여 CPU 플래그인 `X86_FEATURE_RDRAND` 또는 `X86_FEATURE_TSC` 확인하여, 랜덤 숫자를 얻기 위한 방법을 선택한다.(RDRAND 명령어, 타임 스탬프 카운터, 프로그램어블 인터벌 타이머(PIC) 중 하나가 될 수 있다.) 랜덤 주소를 얻고 나서는 `choose_random_location` 호출을 마무리 한다.
 
-Now let's back to [misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c#L404). After getting the address for the kernel image, there need to be some checks to be sure that the retrieved random address is correctly aligned and address is not wrong.
+다시 [misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c#L380)로 돌아오자.커널 이미지를 위한 주소를 얻고 나서, 얻은 랜덤 주소가 알맞게 정렬되어 있는지 주소가 틀린것은 아닌지 확인을 해야한다.
 
-After all these checks we will see the familiar message:
+모든 것을 마치면, 우리는 아래와 같은 메세지를 볼 것이다:
 
 ```
 Decompressing Linux...
 ```
 
-and call the `__decompress` function which will decompress the kernel. The `__decompress` function depends on what decompression algorithm was chosen during kernel compilation:
+그리고 커널 압축 해제를 위한 `__decompress` 함수를 호출한다. `__decompress` 함수는 어떤 압축 해제 알고리즘을 사용하는냐에 따라 다른 소스 파일들이 선택되어 빌드될 것이다.:
 
 ```C
 #ifdef CONFIG_KERNEL_GZIP
@@ -464,7 +472,7 @@ and call the `__decompress` function which will decompress the kernel. The `__de
 #endif
 ```
 
-After kernel is decompressed, the last two functions are `parse_elf` and `handle_relocations`. The main point of these functions is to move the uncompressed kernel image to the correct memory place. The fact is that the decompression will decompress [in-place](https://en.wikipedia.org/wiki/In-place_algorithm), and we still need to move kernel to the correct address. As we already know, the kernel image is an [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) executable, so the main goal of the `parse_elf` function is to move loadable segments to the correct address. We can see loadable segments in the output of the `readelf` program:
+커널 압축 해제 후에, 이제 마지막으로 두 개의 함수가 있다. 그것은 `parse_elf` 와 `handle_relocations` 함수 이다. 이 함수들의 주요 목적은 압축 해제된 커널 이미지를 제대로 된 메모리 영역에 옮겨 주는 것이다. 압축 해제는 [in-place](https://en.wikipedia.org/wiki/In-place_algorithm) 알고리즘으로 압축 해제 될 것이며, 우리는 커널을 알맞은 주소로 옮겨줘야 할 필요가 있다. 우리가 이미 살펴 봤듯이, 커널 이미지는 [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) 실행 파일 포멧이다. 그래서 `parse_elf` 함수는 로드 가능한 세그먼트들을 알맞은 주소로 옮겨준다. 우리는 `readelf` 프로그램의 출력으로 로드 가능한 세그먼트 들을 볼 수 있다.:
 
 ```
 readelf -l vmlinux
@@ -486,7 +494,7 @@ Program Headers:
                  0x0000000000138000 0x000000000029b000  RWE    200000
 ```
 
-The goal of the `parse_elf` function is to load these segments to the `output` address we got from the `choose_random_location` function. This function starts with checking the [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) signature:
+`parse_elf` 함수의 목표는 이 세그먼트들을 `choose_random_location`에서 얻은 `output` 주소에 로드하는 것이다. 이 함수는 [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) 사인을 먼저 확인한다.:
 
 ```C
 Elf64_Ehdr ehdr;
@@ -503,7 +511,7 @@ if (ehdr.e_ident[EI_MAG0] != ELFMAG0 ||
 }
 ```
 
-and if it's not valid, it prints an error message and halts. If we got a valid `ELF` file, we go through all program headers from the given `ELF` file and copy all loadable segments with correct address to the output buffer:
+만약 이것이 유효하지 않다면, 에러 메시지를 출력하고 시스템을 중지한다. 만약, 유효한 `ELF` 파일이면, 우리는 `ELF` 파일로 부터 모든 프로그램 헤더를 살펴 보고 모든 로드 가능한 세그먼트 들을 알맞은 주소와 함께 `output` 버퍼에 복사한다.:
 
 ```C
 	for (i = 0; i < ehdr.e_phnum; i++) {
@@ -526,28 +534,28 @@ and if it's not valid, it prints an error message and halts. If we got a valid `
 	}
 ```
 
-That's all. From now on, all loadable segments are in the correct place. The last `handle_relocations` function adjusts addresses in the kernel image, and is called only if the `kASLR` was enabled during kernel configuration.
+이제 모두 마무리 되었다. 모든 로드 가능한 세그먼트들은 정확한 위치에 있다. 마지막으로 `handle_relocations` 함수는 커널 이미지 내에 주소들을 조정하고, 만약 `kASLR` 이 활성화 되어 있었다면, 아무것도 하지 않는 함수가 될 것이다.
 
-After the kernel is relocated, we return back from the `decompress_kernel` to [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S). The address of the kernel will be in the `rax` register and we jump to it:
+커널이 재배치 되고 나면, 우리는 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) `decompress_kernel` 로 돌아간다. 커널의 주소는 이제 `rax` 레지스터에 있을 것이고, 거기로 점프 할 것이다.:
 
 ```assembly
 jmp	*%rax
 ```
 
-That's all. Now we are in the kernel!
+이제 커널로 진입했다!
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the fifth and the last part about linux kernel booting process. We will not see posts about kernel booting anymore (maybe updates to this and previous posts), but there will be many posts about other kernel internals.
+커널 부팅 과정의 마지막 파트가 끝이 났다. 우리는 커널 부팅 과정에 대해서는 더 이상 다루지 않을 것이지만, 커널 내부를 살펴볼 다른 많은 글들이 있을 것이다.
 
-Next chapter will be about kernel initialization and we will see the first steps in the Linux kernel initialization code.
+다음 챕터는 커널 초기화에 관련된 것이고, 리눅스 커널 초기화 코드를 살펴 보도록 하자.
 
-If you have any questions or suggestions write me a comment or ping me in [twitter](https://twitter.com/0xAX).
+당신이 어떤 질문이나 제안이 있다면 [twitter](https://twitter.com/0xAX) - 원저자 에게 알려주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-internals).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [address space layout randomization](https://en.wikipedia.org/wiki/Address_space_layout_randomization)
@@ -558,3 +566,4 @@ Links
 * [Time Stamp Counter](http://en.wikipedia.org/wiki/Time_Stamp_Counter)
 * [Programmable Interval Timers](http://en.wikipedia.org/wiki/Intel_8253)
 * [Previous part](https://github.com/0xAX/linux-insides/blob/master/Booting/linux-bootstrap-4.md)
+* [리눅스 메모리 보호](https://bpsecblog.wordpress.com/2016/05/16/memory_protect_linux_1/)

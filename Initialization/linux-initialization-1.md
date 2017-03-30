@@ -88,8 +88,7 @@ rbp = 0x1000000 - (0xffffffff81000000 - 0xffffffff80000000)
 	jnz	bad_address
 ```
 
-Here we just compare low part of the `rbp` register with the complemented value of the `PMD_PAGE_MASK`. The `PMD_PAGE_MASK` indicates the mask for `Page middle directory` (read [paging](http://0xax.gitbooks.io/linux-insides/content/Theory/Paging.html) about it) and defined as:
-여기서 `ebp` 레지스터의 low 부분과 `PMD_PAGE_MASK` 값에 NOT(~) 연산을 하여 비교한다. `PMD_PAGE_MASK` 는 `Page middle directory` 를 위한 masking 값이다.([페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.html) 그리고 아래와 같이 정의되어 있다:
+여기서 `ebp` 레지스터의 low 부분과 `PMD_PAGE_MASK` 값에 NOT(~) 연산을 하여 비교한다. `PMD_PAGE_MASK` 는 `Page middle directory` 를 위한 masking 값이다.([페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.md) 그리고 아래와 같이 정의되어 있다:
 
 ```C
 #define PMD_PAGE_MASK           (~(PMD_PAGE_SIZE-1))
@@ -120,10 +119,10 @@ Here we just compare low part of the `rbp` register with the complemented value 
 
 이제 초기 확인은 했고, 다음으로 넘어가자.
 
-Fix base addresses of page tables
+페이지 테이블의 고정 베이스 주소들
 --------------------------------------------------------------------------------
 
-The first step before we start to setup identity paging is to fixup following addresses:
+페이징을 설정하는 것을 시작하기 전에 다음의 주소들을 수정해야 한다:
 
 ```assembly
 	addq	%rbp, early_level4_pgt + (L4_START_KERNEL*8)(%rip)
@@ -132,10 +131,11 @@ The first step before we start to setup identity paging is to fixup following ad
 	addq	%rbp, level2_fixmap_pgt + (506*8)(%rip)
 ```
 
-All of `early_level4_pgt`, `level3_kernel_pgt` and other address may be wrong if the `startup_64` is not equal to default `0x1000000` address. The `rbp` register contains the delta address so we add to the certain entries of the `early_level4_pgt`, the `level3_kernel_pgt` and the `level2_fixmap_pgt`. Let's try to understand what these labels mean. First of all let's look at their definition:
+만약 `startup_64` 함수가 기본 `0x1000000` 주소가 아니라면, `early_level4_pgt`, `level3_kernel_pgt` 그리고 다른 주소들 모두는 잘못되어 있을 것이다. `rbp` 레지스터는 주소의 차이 값을 갖고 있는데, `early_level4_pgt`, `level3_kernel_pgt` 와 `level2_fixmap_pgt` 의 정확한 엔트리에서 그 값을 더하는데 사용한다. 이 라벨들의 의미를 한번 생각해보자. 일단 이것들의 정의를 먼저 살펴 본다.:
 
 ```assembly
 NEXT_PAGE(early_level4_pgt)
+  /* fill <repeat>, <size>, <value> */
 	.fill	511,8,0
 	.quad	level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE
 
@@ -157,20 +157,20 @@ NEXT_PAGE(level1_fixmap_pgt)
 	.fill	512,8,0
 ```
 
-Looks hard, but it isn't. First of all let's look at the `early_level4_pgt`. It starts with the (4096 - 8) bytes of zeros, it means that we don't use the first `511` entries. And after this we can see one `level3_kernel_pgt` entry. Note that we subtract `__START_KERNEL_map + _PAGE_TABLE` from it. As we know `__START_KERNEL_map` is a base virtual address of the kernel text, so if we subtract `__START_KERNEL_map`, we will get physical address of the `level3_kernel_pgt`. Now let's look at `_PAGE_TABLE`, it is just page entry access rights:
+어려워 보이지만, 정작 그렇지는 않다. 맨 먼저 `early_level4_pgt`를 보자. 이것은 0 으로 채워진 (4096 - 8) 바이트에서 시작한다. 이것은 `511` 엔트리는 사용하지 않겠다는 의미이다. 그리고 이것다음에는 `level3_kernel_pgt` 엔트리가 있다. 여기서 `level3_kernel_pgt` 에 `__START_KERNEL_map + _PAGE_TABLE` 를 빼주는 것을 보자. `__START_KERNEL_map` 는 알고 있듯이, 커널 텍스트 영역의 가상 베이스 주소이다. 그래서 만약 `__START_KERNEL_map` 를 빼준다는 것은 `level3_kernel_pgt` 의 물리 주소를 얻는다는 것이다. 이제 `_PAGE_TABLE`을 살펴보자. 이것은 단지 페이지 엔트리의 접근 권한을 표현한다.:
 
 ```C
 #define _PAGE_TABLE     (_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
-                         _PAGE_ACCESSED | _PAGE_DIRTY)
+                         _PAGE_ACCESSED | _PAGE_DIRTY)_ // TODO 여기 마지막 언더바 지우기
 ```
 
-You can read more about it in the [paging](http://0xax.gitbooks.io/linux-insides/content/Theory/Paging.html) part.
+[페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.md) 파트를 한번 읽어 보길 바란다.
 
-The `level3_kernel_pgt` - stores two entries which map kernel space. At the start of it's definition, we can see that it is filled with zeros `L3_START_KERNEL` or `510` times. Here the `L3_START_KERNEL` is the index in the page upper directory which contains `__START_KERNEL_map` address and it equals `510`. After this, we can see the definition of the two `level3_kernel_pgt` entries: `level2_kernel_pgt` and `level2_fixmap_pgt`. First is simple, it is page table entry which contains pointer to the page middle directory which maps kernel space and it has:
+`level3_kernel_pgt` - 커널 영역을 맵핑하는 두 개의 엔트리들을 저장한다. 이것의 정의의 시작은, `L3_START_KERNEL` 또는 `510` 반복하여 8 바이트씩 0으로 채운다. `L3_START_KERNEL` 은 `__START_KERNEL_map` 주소를 갖고 있는 `page upper directory` 내의 인덱스이고 그것은 `510`과 같다. 이 다음에 우리는 두 `level3_kernel_pgt` 엔트리들의 정의를 볼 수 있다.: `level2_kernel_pgt` 와 `level2_fixmap_pgt` 이다. 처음은 간단하다. 그것은 커널 영역을 맵핑하는 `page middle directory` 의 포인터를 가지는 페이지 테이블 엔트리들이다.:
 
 ```C
 #define _KERNPG_TABLE   (_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | \
-                         _PAGE_DIRTY)
+                         _PAGE_DIRTY)_ // TODO 여기도 마지막 언더바 지우기
 ```
 
 access rights. The second - `level2_fixmap_pgt` is a virtual addresses which can refer to any physical addresses even under kernel space. They represented by the one `level2_fixmap_pgt` entry and `10` megabytes hole for the [vsyscalls](https://lwn.net/Articles/446528/) mapping. The next `level2_kernel_pgt` calls the `PDMS` macro which creates `512` megabytes from the `__START_KERNEL_map` for kernel `.text` (after these `512` megabytes will be modules memory space).

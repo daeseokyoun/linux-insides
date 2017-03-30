@@ -4,21 +4,20 @@
 커널 압축 해제 후 첫 단계
 --------------------------------------------------------------------------------
 
-The previous [post](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-5.html) was a last part of the Linux kernel [booting process](https://0xax.gitbooks.io/linux-insides/content/Booting/index.html) chapter and now we are starting to dive into initialization process of the Linux kernel. After the image of the Linux kernel is decompressed and placed in a correct place in memory, it starts to work. All previous parts describe the work of the Linux kernel setup code which does preparation before the first bytes of the Linux kernel code will be executed. From now we are in the kernel and all parts of this chapter will be devoted to the initialization process of the kernel before it will launch process with [pid](https://en.wikipedia.org/wiki/Process_identifier) `1`. There are many things to do before the kernel will start first `init` process. Hope we will see all of the preparations before kernel will start in this big chapter. We will start from the kernel entry point, which is located in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) and will move further and further. We will see first preparations like early page tables initialization, switch to a new descriptor in kernel space and many many more, before we will see the `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L489) will be called.
+이전 [챕터](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-5.md) 는 리눅스 커널 부팅 과정의 마지막 부분이었고 이제는 리눅스 커널의 초기화 과정에 대해 알아볼 것이다. 리눅스 커널 이미지가 압축 해제되고 메모리의 적절한 곳에 위치 했다면, 커널이 일하기(?) 시작한다. 모든 이전 파트들은 리눅스 커널 코드의 첫 바이트가 실행되기 전의 준비과정의 커널 설정 코드의 작업을 기술 한것이다. 이제 우리는 커널로 진입했고, 이 챕터의 모든 파트는 [pid](https://en.wikipedia.org/wiki/Process_identifier) `1` 프로세스가 실행되기 전에 커널의 초기화 과정에 대해 집중할 것이다. `init` 프로세스가 수행되기 전에 많은 일들이 일어난다. [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S)에 있는 커널 엔트리 포인트에서 부터 시작할 것이고, 계속 앞으로 진행할 것이다. 우리는 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L489) 에 있는 `start_kernel`  함수가 불리기 전의 초기 페이지 테이블 초기화와 같은 첫 준비과정, 커널 공간에서 새로운 디스크립터로 전환등을 살펴 볼 것이다.
 
-
-In the last [part](https://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-5.html) of the previous [chapter](https://0xax.gitbooks.io/linux-insides/content/Booting/index.html) we stopped at the [jmp](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) instruction from the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly source code file:
+[arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 소스 코드에서 [jmp](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S#L429) 명령어를 수행하는 곳까지 [이전 파트](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-5.md) 에서 살펴 보았다.:
 
 ```assembly
 jmp	*%rax
 ```
 
-At this moment the `rax` register contains address of the Linux kernel entry point which that was obtained as a result of the call of the `decompress_kernel` function from the [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) source code file. So, our last instruction in the kernel setup code is a jump on the kernel entry point. We already know where is defined the entry point of the linux kernel, so we are able to start to learn what does the Linux kernel does after the start.
+이 순간 `rax` 레스터에는 [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) 소스 파일에서 `decompress_kernel` 함수 호출에 의해 얻어진 리눅스 커널 엔트리 포인터의 주소를 갖고 있다. 그래서, 리눅스 커널 설정 코드의 마지막 명령어는 커널 엔트리 포인트로 점프하는 것이다. 우리는 이미 리눅스 커널 엔트리 포인트가 어디에 정의되어 있는지 알고 있고, 우리는 시작 이후에 리눅스 커널이 무엇을 하는지 배울 수 있도록 준비가 되어 있다.
 
-First steps in the kernel
+커널에서의 첫 단계
 --------------------------------------------------------------------------------
 
-Okay, we got the address of the decompressed kernel image from the `decompress_kernel` function into `rax` register and just jumped there. As we already know the entry point of the decompressed kernel image starts in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) assembly source code file and at the beginning of it, we can see following definitions:
+`decompress_kernel` 함수에서 압축 해제된 커널 이미지의 주소를 `rax` 레지스터에 저장을 해놓았고 거기로 점프 할 것이다. [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 어셈블리 소스 코드 파일에서 압축 해제된 커널 이미지의 시작 엔트리 포인트를 알고 있고 그것으 시작 부분은 아래와 같다:
 
 ```assembly
     .text
@@ -31,13 +30,13 @@ startup_64:
 	...
 ```
 
-We can see definition of the `startup_64` routine that is defined in the `__HEAD` section, which is just a macro which expands to the definition of executable `.head.text` section:
+`.head.text` 섹션의 정의를 매크로인 `__HEAD` 로 하고 그 섹션 내에 `startup_64` 루틴의 정의를 볼 수 있다.:
 
 ```C
 #define __HEAD		.section	".head.text","ax"
 ```
 
-We can see definition of this section in the [arch/x86/kernel/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S#L93) linker script:
+이 섹션은 [arch/x86/kernel/vmlinux.lds.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S#L93)  링커 스크립트에서 확인 가능하다:
 
 ```
 .text : AT(ADDR(.text) - LOAD_OFFSET) {
@@ -48,41 +47,41 @@ We can see definition of this section in the [arch/x86/kernel/vmlinux.lds.S](htt
 } :text = 0x9090
 ```
 
-Besides the definition of the `.text` section, we can understand default virtual and physical addresses from the linker script. Note that address of the `_text` is location counter which is defined as:
+`.text` 섹션 정의 외에도, 링커 스크립터로 부터 기본 가상/물리 주소들이 어떻게 되어 있는지 이해해야 한다. [x86_64](https://en.wikipedia.org/wiki/X86-64) 을 위해 `_text` 는 위치 카운터(location counter) 에서 아래와 같이 주소 지정을 한다.:
 
 ```
 . = __START_KERNEL;
 ```
 
-for the [x86_64](https://en.wikipedia.org/wiki/X86-64). The definition of the `__START_KERNEL` macro is located in the [arch/x86/include/asm/page_types.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/page_types.h) header file and represented by the sum of the base virtual address of the kernel mapping and physical start:
+`__START_KERNEL` 매크로의 정의는 [arch/x86/include/asm/page_types.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/page_types.h) 헤더 파일에 위치 하고 있고 커널 맵핑 가상 베이스 주소와 물리 주소의 시작을 더하는 것이다:
 
 ```C
-#define __START_KERNEL	(__START_KERNEL_map + __PHYSICAL_START)
+#define __START_KERNEL	(__START_KERNEL_map + __PHYSICAL_START) //__ <-- TODO 지우기
 
 #define __PHYSICAL_START  ALIGN(CONFIG_PHYSICAL_START, CONFIG_PHYSICAL_ALIGN)
 ```
 
-Or in other words:
+주소를 계산해보면:
 
-* Base physical address of the Linux kernel - `0x1000000`;
-* Base virtual address of the Linux kernel - `0xffffffff81000000`.
+* 리눅스 커널의 물리 베이스 주소는 - `0x1000000`;
+* 리눅스 커널의 가상 베이스 주소는 - `0xffffffff81000000`.
 
-Now we know default physical and virtual addresses of the `startup_64` routine, but to know actual addresses we must to calculate it with the following code:
+이제 우리는 `startup_64` 루틴의 기본 물리/가상 주소들을 알았다. 하지만 실제 주소를 알기 위해서는 아래의 코드와 함께 계산이되어야 한다.:
 
 ```assembly
 	leaq	_text(%rip), %rbp
 	subq	$_text - __START_KERNEL_map, %rbp
 ```
 
-Yes, it defined as `0x1000000`, but it may be different, for example if [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization#Linux) is enabled. So our current goal is to calculate delta between `0x1000000` and where we actually loaded. Here we just put the `rip-relative` address to the `rbp` register and then subtract `$_text - __START_KERNEL_map` from it. We know that compiled virtual address of the `_text` is `0xffffffff81000000` and the physical address of it is `0x1000000`. The `__START_KERNEL_map` macro expands to the `0xffffffff80000000` address, so at the second line of the assembly code, we will get following expression:
+맞다, 그것은 `0x1000000` 로 정의되어 있지만, 그것은 만약 [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization#Linux) 이 활성화 되어 있다면(예를 들면) 실제랑 다를 것이다. 그래서 우리의 목표는 `0x1000000` 와 실제 로드된 곳의 차이 값을 계산하는 것이다. 여기에 `rip-relative` 주소를 `rbp` 레지스터에 넣고 그것에서 부터 `$_text - __START_KERNEL_map` 를 빼준다. `_text` 의 컴파일된 가상 주소는 `0xffffffff81000000` 이고, 그것의 물리 주소는 `0x1000000` 이다. `__START_KERNEL_map` 매크로는 `0xffffffff80000000` 주소로 확장하는 것이고, 그래서 어셈블리 코드의 두 번째 라인을 아래와 같이 값을 대입함으로써 한눈에 볼 수 있다.:
 
 ```
 rbp = 0x1000000 - (0xffffffff81000000 - 0xffffffff80000000)
 ```
 
-So, after the calculation,  the `rbp` will contain `0` which represents difference between addresses where we actually loaded and where the code was compiled. In our case `zero` means that the Linux kernel was loaded by default address and the [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization#Linux) was disabled.
+계산이 끝나면, `rbp`는 컴파일된 코드와 실제 로드된 주소의 차이를 표현하게 되면 `0`을 담게 된다. `0` 은 [kASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization#Linux) 비활성화 되어 있는 상태에서 리눅스 커널이 로드된 주소가 되는 것이다.:
 
-After we got the address of the `startup_64`, we need to do a check that this address is correctly aligned. We will do it with the following code:
+`startup_64` 의 주소를 얻은 후에, 이 주소가 알맞게 정렬(aligned) 되어 있는지 확인이 필요하다. 아래의 코드를 보자:
 
 ```assembly
 	testl	$~PMD_PAGE_MASK, %ebp
@@ -90,21 +89,22 @@ After we got the address of the `startup_64`, we need to do a check that this ad
 ```
 
 Here we just compare low part of the `rbp` register with the complemented value of the `PMD_PAGE_MASK`. The `PMD_PAGE_MASK` indicates the mask for `Page middle directory` (read [paging](http://0xax.gitbooks.io/linux-insides/content/Theory/Paging.html) about it) and defined as:
+여기서 `ebp` 레지스터의 low 부분과 `PMD_PAGE_MASK` 값에 NOT(~) 연산을 하여 비교한다. `PMD_PAGE_MASK` 는 `Page middle directory` 를 위한 masking 값이다.([페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.html) 그리고 아래와 같이 정의되어 있다:
 
 ```C
 #define PMD_PAGE_MASK           (~(PMD_PAGE_SIZE-1))
 ```
 
-where `PMD_PAGE_SIZE` macro defined as:
+`PMD_PAGE_SIZE` 매크로는 아래와 같이:
 
 ```
 #define PMD_PAGE_SIZE           (_AC(1, UL) << PMD_SHIFT)
 #define PMD_SHIFT       21
 ```
 
-As we can easily calculate, `PMD_PAGE_SIZE` is `2` megabytes. Here we use standard formula for checking alignment and if `text` address is not aligned for `2` megabytes, we jump to `bad_address` label.
+쉽게 계산을 할 수 있는데, `PMD_PAGE_SIZE` 는 `2` MB 이다. 정렬을 확인하여 만약 `text` 주소가 `2` MB 정렬되지 않았다면, `bad_address` 라벨로 점프한다.
 
-After this we check address that it is not too large by the checking of highest `18` bits:
+이 확인 이후에, 상위 `18` 비트를 확인하여 너무 크지 않는지 또 확인한다:
 
 ```assembly
 	leaq	_text(%rip), %rax
@@ -112,13 +112,13 @@ After this we check address that it is not too large by the checking of highest 
 	jnz	bad_address
 ```
 
-The address must not be greater than `46`-bits:
+주소는 `46` 비트보다 크면 안된다.:
 
 ```C
 #define MAX_PHYSMEM_BITS       46
 ```
 
-Okay, we did some early checks and now we can move on.
+이제 초기 확인은 했고, 다음으로 넘어가자.
 
 Fix base addresses of page tables
 --------------------------------------------------------------------------------

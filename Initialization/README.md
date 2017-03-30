@@ -11,6 +11,6 @@
 * [아키텍쳐 의존적인 초기화 계속](linux-initialization-5.md) - 아키텍처 특유의 초기화.
 * [아키텍처 의존적인 초기화, 다시...](linux-initialization-6.md) - 아키텍처 의존적인 초기화에 대한 내용을 계속 다룸
 * [거의 마지막 단계의 아키텍처 의존적인 초기화](linux-initialization-7.md) - `setup_arch` 에 관련된 마지막 일들을 기술
-* [스케줄러 초기화](linux-initialization-8.md) - 스케줄러 초기화전에 준비 기술\
+* [스케줄러 초기화](linux-initialization-8.md) - 스케줄러 초기화전에 준비 기술
 * [RCU 초기화](linux-initialization-9.md) - [RCU](http://en.wikipedia.org/wiki/Read-copy-update) 초기화
 * [초기화 마지막](linux-initialization-10.md) - 리눅스 커널 초기화 마무리

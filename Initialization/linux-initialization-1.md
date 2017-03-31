@@ -166,7 +166,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 
 [페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.md) 파트를 한번 읽어 보길 바란다.
 
-`level3_kernel_pgt` - 커널 영역을 맵핑하는 두 개의 엔트리들을 저장한다. 이것의 정의의 시작은, `L3_START_KERNEL` 또는 `510` 반복하여 8 바이트씩 0으로 채운다. `L3_START_KERNEL` 은 `__START_KERNEL_map` 주소를 갖고 있는 `page upper directory` 내의 인덱스이고 그것은 `510`과 같다. 이 다음에 우리는 두 `level3_kernel_pgt` 엔트리들의 정의를 볼 수 있다.: `level2_kernel_pgt` 와 `level2_fixmap_pgt` 이다. 처음은 간단하다. 그것은 커널 영역을 맵핑하는 `page middle directory` 의 포인터를 가지는 페이지 테이블 엔트리들이다.:
+`level3_kernel_pgt` - 커널 영역을 맵핑하는 두 개의 엔트리들을 저장한다. 이것의 정의의 시작은, `L3_START_KERNEL` 또는 `510` 반복하여 8 바이트씩 0으로 채운다. `L3_START_KERNEL` 은 `__START_KERNEL_map` 주소를 갖고 있는 `page upper directory` 내의 인덱스이고 그것은 `510`과 같다. 이 다음에 우리는 두 `level3_kernel_pgt` 엔트리들의 정의를 볼 수 있다.: `level2_kernel_pgt` 와 `level2_fixmap_pgt` 이다. 첫번째는 간단하다. 그것은 커널 영역을 맵핑하는 `page middle directory` 의 포인터를 가지는 페이지 테이블 엔트리들이다.:
 
 ```C
 #define _KERNPG_TABLE   (_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | \
@@ -174,6 +174,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 ```
 
 access rights. The second - `level2_fixmap_pgt` is a virtual addresses which can refer to any physical addresses even under kernel space. They represented by the one `level2_fixmap_pgt` entry and `10` megabytes hole for the [vsyscalls](https://lwn.net/Articles/446528/) mapping. The next `level2_kernel_pgt` calls the `PDMS` macro which creates `512` megabytes from the `__START_KERNEL_map` for kernel `.text` (after these `512` megabytes will be modules memory space).
+위의 `_KERNPG_TABLE` 는 페이지의 권한을 나타낸다. 두 번째는 - `level2_fixmap_pgt` 는 커널 영역 안에서 어떤 물리 주소도 참조할 수 있는 가상 주소이다. 이 주소들은 [vsyscalls](https://lwn.net/Articles/446528/) 맵핑을 위해 `10` 메가 바이트의 공간 함께 하나의 `level2_fixmap_pgt` 엔트리로 표현된다. 다음 `level2_kernel_pgt` 은 커널 `.text` 를 위한 `__START_KERNEL_map` 에서 부터 `512` MB 를 만드는 `PDMS` 매크로를 호출한다.(`512` MB 뒤에는 모듈을 위한 메모리 공간이 될 것이다.)
 
 Now, after we saw definitions of these symbols, let's get back to the code which is described at the beginning of the section. Remember that the `rbp` register contains delta between the address of the `startup_64` symbol which was got during kernel [linking](https://en.wikipedia.org/wiki/Linker_%28computing%29) and the actual address. So, for this moment, we just need to add this delta to the base address of some page table entries, that they'll have correct addresses. In our case these entries are:
 

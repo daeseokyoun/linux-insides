@@ -372,16 +372,16 @@ GLOBAL(initial_stack)
          name:
 ```
 
-The `THREAD_SIZE` macro is defined in the [arch/x86/include/asm/page_64_types.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/page_64_types.h) header file and depends on value of the `KASAN_STACK_ORDER` macro:
+`THREAD_SIZE` 매크로는 [arch/x86/include/asm/page_64_types.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/page_64_types.h) 헤더 파일에 정의되어 있고, `KASAN_STACK_ORDER` 매크로의 값에 의존적이다.:
 
 ```C
 #define THREAD_SIZE_ORDER       (2 + KASAN_STACK_ORDER)
 #define THREAD_SIZE  (PAGE_SIZE << THREAD_SIZE_ORDER)
 ```
 
-We consider when the [kasan](http://lxr.free-electrons.com/source/Documentation/kasan.txt) is disabled and the `PAGE_SIZE` is `4096` bytes. So the `THREAD_SIZE` will expands to `16` kilobytes and represents size of the stack of a thread. Why is `thread`? You may already know that each [process](https://en.wikipedia.org/wiki/Process_%28computing%29) may have parent [processes](https://en.wikipedia.org/wiki/Parent_process) and [child](https://en.wikipedia.org/wiki/Child_process) processes. Actually, a parent process and child process differ in stack. A new kernel stack is allocated for a new process. In the Linux kernel this stack is represented by the [union](https://en.wikipedia.org/wiki/Union_type#C.2FC.2B.2B) with the `thread_info` structure.
+우리는 [kasan](http://lxr.free-electrons.com/source/Documentation/kasan.txt) 이 비활성화 되어 있고 `PAGE_SIZE` 가 `4096` 일 때 고려해야 한다. 그래서 `THREAD_SIZE` 가 `16` KB 까지 확장될 수 있고 쓰레드의 스택 크기를 알려준다. 왜 `thread(쓰레드)` 일까? 당신은 각 [프로세스](https://en.wikipedia.org/wiki/Process_%28computing%29)는  [부모 프로세스](https://en.wikipedia.org/wiki/Parent_process) 들과 [자식 프로세스](https://en.wikipedia.org/wiki/Child_process) 를 가질 수 있다는 것을 알고 있을 것이다. 실제로, 하나의 부모 프로세스와 자식 프로세스는 다른 스택을 사용한다. 새로운 프로세스를 위해 새로운 커널 스택이 할당된다. 리눅스 커널은 `thread_info` 구조체와 스택이 함께 사용하는 [union](https://en.wikipedia.org/wiki/Union_type#C.2FC.2B.2B) 타입을 사용한다.
 
-And as we can see the `init_thread_union` is represented by the `thread_union` [union](https://en.wikipedia.org/wiki/Union_type#C.2FC.2B.2B). Earlier this union looked like:
+`init_thread_union` 은 `thread_union` 이라는 [union](https://en.wikipedia.org/wiki/Union_type#C.2FC.2B.2B) 타입이라는 것을 볼 수 있다. 초기 이 구조체는 아래와 같이 구성된다.:
 
 ```C
 union thread_union {
@@ -390,7 +390,7 @@ union thread_union {
 };
 ```
 
-but from the Linux kernel `4.9-rc1` release, `thread_info` was moved to the `task_struct` structure which represents a thread. So, for now `thread_union` looks like:
+그러나 리눅스 커널 `4.9-rc1` 릴리즈 부터, `thread_info` 변수는 쓰레드를 대표하는 `task_struct` 로 이동되었다. 그래서 이제는 `thread_union` 이 아래 처럼 변경되었다:
 
 ```C
 union thread_union {
@@ -401,9 +401,9 @@ union thread_union {
 };
 ```
 
-where the `CONFIG_THREAD_INFO_IN_TASK` kernel configuration option is enabled for `x86_64` architecture. So, as we consider only `x86_64` architecture in this book, an instance of `thread_union` will contain only stack and `thread_info` structure will be placed in the `task_struct`.
+`CONFIG_THREAD_INFO_IN_TASK` 커널 구성 옵션은 `x86_64` 아키텍처를 위해 활성화된다. 우리는 이 책에서 `x86_64` 아키텍처에 대해서만 살펴보기 때문에, `thread_union` 구조체는 스택만 가지고 있을 것이고, `thread_info` 구조체는 `task_struct` 내에 위치 할 것이다.
 
-The `init_thread_union` looks like:
+`init_thread_union` 는 아래와 같이 되어 있다:
 
 ```
 union thread_union init_thread_union __init_task_data = {
@@ -413,7 +413,7 @@ union thread_union init_thread_union __init_task_data = {
 };
 ```
 
-which represents just thread stack. Now we may understand this expression:
+이것은 단지 thread 스택만 가질 것이다. 이제 우리는 아래의 표현을 이해 해야 한다.:
 
 ```assembly
 GLOBAL(initial_stack)

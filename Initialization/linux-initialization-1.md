@@ -175,7 +175,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 
 위의 `_KERNPG_TABLE` 는 페이지의 권한을 나타낸다. 두 번째는 - `level2_fixmap_pgt` 는 커널 영역 안에서 어떤 물리 주소도 참조할 수 있는 가상 주소이다. 이 주소들은 [vsyscalls](https://lwn.net/Articles/446528/) 맵핑을 위해 `10` 메가 바이트의 공간 함께 하나의 `level2_fixmap_pgt` 엔트리로 표현된다. 다음 `level2_kernel_pgt` 은 커널 `.text` 를 위한 `__START_KERNEL_map` 에서 부터 `512` MB 를 만드는 `PDMS` 매크로를 호출한다.(`512` MB 뒤에는 모듈을 위한 메모리 공간이 될 것이다.)
 
-Now, after we saw definitions of these symbols, let's get back to the code which is described at the beginning of the section. Remember that the `rbp` register contains delta between the address of the `startup_64` symbol which was got during kernel [linking](https://en.wikipedia.org/wiki/Linker_%28computing%29) and the actual address. So, for this moment, we just need to add this delta to the base address of some page table entries, that they'll have correct addresses. In our case these entries are:
+이 심볼들의 정의를 본다음, 섹션의 시작 부분으로 돌아가보자. `rbp` 레지스터는 커널 [링킹](https://en.wikipedia.org/wiki/Linker_%28computing%29) 과정에서 얻을 수 있는 `startup_64` 심볼의 주소와 실제 주소의 차이를 갖고 있다. 그래서, 어떤 페이지 테이블 엔트리들의 베이스 주소에 이 차이값만 더하면 실제 주소들을 얻을 수 있다. 우리의 경우에 이 엔트리들은 다음과 같다.:
 
 ```assembly
 	addq	%rbp, early_level4_pgt + (L4_START_KERNEL*8)(%rip)
@@ -184,9 +184,9 @@ Now, after we saw definitions of these symbols, let's get back to the code which
 	addq	%rbp, level2_fixmap_pgt + (506*8)(%rip)
 ```
 
-or the last entry of the `early_level4_pgt` which is the `level3_kernel_pgt`, last two entries of the `level3_kernel_pgt` which are the `level2_kernel_pgt` and the `level2_fixmap_pgt` and five hundreds seventh entry of the `level2_fixmap_pgt` which is `level1_fixmap_pgt` page directory.
+`early_level4_pgt` 마지막 엔트리는 `level3_kernel_pgt` 이고, `level3_kernel_pgt` 의 마지막 두 개의 엔트리는 `level2_kernel_pgt` 와 `level2_fixmap_pgt` 이다. 그리고 `level2_fixmap_pgt`의 507번째 엔트리는 `level1_fixmap_pgt` 가 된다.
 
-After all of this we will have:
+이 모든 것들이 아래와 같이 표현될 수 있다:
 
 ```
 early_level4_pgt[511] -> level3_kernel_pgt[0]
@@ -196,26 +196,26 @@ level2_kernel_pgt[0]   -> 512 MB kernel mapping
 level2_fixmap_pgt[507] -> level1_fixmap_pgt
 ```
 
-Note that we didn't fixup base address of the `early_level4_pgt` and some of other page table directories, because we will see this during of building/filling of structures for these page tables. As we corrected base addresses of the page tables, we can start to build it.
+`early_level4_pgt`와 몇몇의 다른 페이지 테이블 디렉토리들의 베이스 주소를 수정하지 않았다. 이는 이 페이지 테이블의 구조체를 만들거나 채우는 과정에서 볼 수 있기 때문이다. 페이지 테이블의 베이스 주소들을 고친 다음, 페이지 테이블을 빌드할 수 있게 되었다.
 
-Identity mapping setup
+Identity 맵핑 설정
 --------------------------------------------------------------------------------
 
-Now we can see the set up of identity mapping of early page tables. In Identity Mapped Paging, virtual addresses are mapped to physical addresses that have the same value, `1 : 1`. Let's look at it in detail. First of all we get the `rip-relative` address of the `_text` and `_early_level4_pgt` and put they into `rdi` and `rbx` registers:
+초기 페이지 테이블의 identity 맵핑을 설정하는 것을 보자. Identity 맵핑 페이지는, 가상 주소들을 물리 주소로 `1:1`, 같은 값으로 맵핑하기 위한 작업을 한다. 자세하게 살펴보도록 하자. 먼저, 우리는 `_text` 와 `_early_level4_pgt` 의  `rip-상대적인` 주소를 얻고, 그 주소들을 `rdi` 와 `rbx` 레지스터에 넣는다:
 
 ```assembly
 	leaq	_text(%rip), %rdi
 	leaq	early_level4_pgt(%rip), %rbx
 ```
 
-After this we store address of the `_text` in the `rax` and get the index of the page global directory entry which stores `_text` address, by shifting `_text` address on the `PGDIR_SHIFT`:
+`_text` 의 주소를 `rax` 레지스터에 저장한 뒤에, `_text` 주소에 `PGDIR_SHIFT` 만큼 우측 쉬프트 하여 페이지 글로벌 디렉토리 엔트리의 인덱스를 얻어온다.:
 
 ```assembly
 	movq	%rdi, %rax
 	shrq	$PGDIR_SHIFT, %rax
 ```
 
-where `PGDIR_SHIFT` is `39`. `PGDIR_SHFT` indicates the mask for page global directory bits in a virtual address. There are macro for all types of page directories:
+`PGDIR_SHIFT` 는 `39` 의 값을 가진다. `PGDIR_SHFT` 는 가상 주소에서 페이지 글로벌 디렉토리 비트를 갖고 올 수 있도록 한다. 페이지 디렉토리들의 모든 타입을 위한 매크로가 있다:
 
 ```C
 #define PGDIR_SHIFT     39
@@ -223,7 +223,7 @@ where `PGDIR_SHIFT` is `39`. `PGDIR_SHFT` indicates the mask for page global dir
 #define PMD_SHIFT       21
 ```
 
-After this we put the address of the first entry of the `early_dynamic_pgts` page table to the `rdx` register with the `_KERNPG_TABLE` access rights (see above) and fill the `early_level4_pgt` with the 2 `early_dynamic_pgts` entries:
+`early_dynamic_pgts` 페이지 테이블의 첫 엔트리의 주소를 `_KERNPG_TABLE` 접근권한과 함께, `rdx` 레지스터에 넣는다. 그리고 2 개의 `early_dynamic_pgts` 엔트리에 그 값을 채워준다.:
 
 ```assembly
 	leaq	(4096 + _KERNPG_TABLE)(%rbx), %rdx
@@ -232,14 +232,15 @@ After this we put the address of the first entry of the `early_dynamic_pgts` pag
 ```
 
 The `rbx` register contains address of the `early_level4_pgt` and `%rax * 8` here is index of a page global directory occupied by the `_text` address. So here we fill two entries of the `early_level4_pgt` with address of two entries of the `early_dynamic_pgts` which is related to `_text`. The `early_dynamic_pgts` is array of arrays:
+`rbx` 레지스터는 `early_level4_pgt` 의 주소를 담고 있고, `%rax * 8` 에 `_text` 주소에 의해 점유된 페이지 글로벌 디렉토리의 인텍스가 있다. 그래서 우리는 `_text` 와 연관된 `early_dynamic_pgts` 의 두 개의 엔트리 주소값으로 `early_level4_pgt`의 두개의 엔트리를 채울 것이다. `early_dynamic_pgts`은 이차원 배열이다:
 
 ```C
 extern pmd_t early_dynamic_pgts[EARLY_DYNAMIC_PAGE_TABLES][PTRS_PER_PMD];
 ```
 
-which will store temporary page tables for early kernel which we will not move to the `init_level4_pgt`.
+초기 커널을 위한 임시의 페이지 테이블을 저장하겠지만, `init_level4_pgt` 에 옮겨지지는 않는다.
 
-After this we add `4096` (size of the `early_level4_pgt`) to the `rdx` (it now contains the address of the first entry of the `early_dynamic_pgts`) and put `rdi` (it now contains physical address of the `_text`)  to the `rax`. Now we shift address of the `_text` ot `PUD_SHIFT` to get index of an entry from page upper directory which contains this address and clears high bits to get only `pud` related part:
+`4096` (`early_level4_pgt` 의 크기) 를 `rdx` (이제 `early_dynamic_pgts` 의 첫 엔트리의 주소를 가질 것이다.) 에 더해주고, `rdi` (`_text` 의 물리주소를 갖는다) 를 `rax` 에 넣는다. 이제 우리는 `_text` 의 주소를 `PUD_SHIFT` 만큼 우측 쉬프트를 하여 page upper directory 로 부터 엔트리의 인덱스를 얻을 수 있다. 이는 주소에  `pud` 와 관련된 부분만 얻기 위해 상위 비트를 클리어하여 얻을 수 있다.:
 
 ```assembly
 	addq	$4096, %rdx
@@ -248,7 +249,7 @@ After this we add `4096` (size of the `early_level4_pgt`) to the `rdx` (it now c
 	andl	$(PTRS_PER_PUD-1), %eax
 ```
 
-As we have index of a page upper directory we write two addresses of the second entry of the `early_dynamic_pgts` array to the first entry of this temporary page directory:
+`pud` 의 인텍스를 갖고 있기 때문에, 우리는 `early_dynamic_pgts` 배열의 두 번째 엔트리의 주소값을 임시 페이지 디렉토리의 첫번째 엔트리에 써준다.:
 
 ```assembly
 	movq	%rdx, 4096(%rbx,%rax,8)
@@ -257,21 +258,20 @@ As we have index of a page upper directory we write two addresses of the second 
 	movq	%rdx, 4096(%rbx,%rax,8)
 ```
 
-In the next step we do the same operation for last page table directory, but filling not two entries, but all entries to cover full size of the kernel.
+다음 단계에서는 마지막 페이지 테이블 디렉토리를 위해 같은 작업을 수행 한다, 하지만 두 개의 엔트리를 채우지는 않고, 모든 엔트리는 커널의 전체 크기를 관리한다.
 
-After our early page table directories filled, we put physical address of the `early_level4_pgt` to the `rax` register and jump to label `1`:
-
+초기 페이지 테이블 디렉토리들을 채운다음, 우리는 `early_level4_pgt` 의 물리주소를 `rax`에 넣고 라벨 `1` 로 점프한다.:
 ```assembly
 	movq	$(early_level4_pgt - __START_KERNEL_map), %rax
 	jmp 1f
 ```
 
-That's all for now. Our early paging is prepared and we just need to finish last preparation before we will jump into C code and kernel entry point later.
+초기 페이징은 준비되었고, 우리는 C 코드와 커널 엔트리 포인트로 들어가기 전에 마지막 준비를 마무리해야 한다.
 
-Last preparation before jump at the kernel entry point
+커널 엔트리 포인트로 점프하기전에 마지막 준비 작업
 --------------------------------------------------------------------------------
 
-After that we jump to the label `1` we enable `PAE`, `PGE` (Paging Global Extension) and put the physical address of the `phys_base` (see above) to the `rax` register and fill `cr3` register with it:
+라벨 `1` 로 점프하고, 우리는 `PAE` 와 `PGE` (Paging Global Extension) 를 활성화 한다. 그리고 `phys_base` 의 물리주소를 `rax` 에 넣고 `cr3`에 그 값을 넣는다:
 
 ```assembly
 1:
@@ -282,7 +282,7 @@ After that we jump to the label `1` we enable `PAE`, `PGE` (Paging Global Extens
 	movq	%rax, %cr3
 ```
 
-In the next step we check that CPU supports [NX](http://en.wikipedia.org/wiki/NX_bit) bit with:
+다음 단계는, 확장된 cpuid 인 [NX](http://en.wikipedia.org/wiki/NX_bit) 비트를 확인한다:
 
 ```assembly
 	movl	$0x80000001, %eax
@@ -290,16 +290,16 @@ In the next step we check that CPU supports [NX](http://en.wikipedia.org/wiki/NX
 	movl	%edx,%edi
 ```
 
-We put `0x80000001` value to the `eax` and execute `cpuid` instruction for getting the extended processor info and feature bits. The result will be in the `edx` register which we put to the `edi`.
+`0x80000001` 값을 `eax` 에 넣고, 확장된 프로세서의 정보와 관련 정보를 얻기 위해 `cpuid` 명령어를 실행한다. 그러면 그 결과가 `edx` 레지스터로 들어 갈 것이고, 우리는 그 값을 `edi` 에 넣을 것이다.
 
-Now we put `0xc0000080` or `MSR_EFER` to the `ecx` and call `rdmsr` instruction for the reading model specific register.
+이제 `0xc0000080` 나 `MSR_EFER` 를 `ecx` 에 넣고 모델 특정 레지스터를 읽기 위해 `rdmsr` 명령어를 호출한다.
 
 ```assembly
 	movl	$MSR_EFER, %ecx
 	rdmsr
 ```
 
-The result will be in the `edx:eax`. General view of the `EFER` is following:
+그 결과는 `edx:eax` 에 저장될 것이다. 일반 적으로 `EFER`는 아래와 같은 항목을 가질 것이다.:
 
 ```
 63                                                                              32
@@ -316,7 +316,8 @@ The result will be in the `edx:eax`. General view of the `EFER` is following:
  --------------------------------------------------------------------------------
 ```
 
-We will not see all fields in details here, but we will learn about this and other `MSRs` in a special part about it. As we read `EFER` to the `edx:eax`, we check `_EFER_SCE` or zero bit which is `System Call Extensions` with `btsl` instruction and set it to one. By the setting `SCE` bit we enable `SYSCALL` and `SYSRET` instructions. In the next step we check 20th bit in the `edi`, remember that this register stores result of the `cpuid` (see above). If `20` bit is set (`NX` bit) we just write `EFER_SCE` to the model specific register.
+여기서는 모든 항목들을 자세히 다루지 않을 것이지만 다른 `MSRs` 관련된 특별한 파트에서 배워볼 수 있을 것이다. `EFER` 를 읽어서 `edx:eax` 로 저장 했고, 우리는 `_EFER_SCE` 필드나 0 비트에 있는  `System Call Extensions` 의 값을 `btsl` 명령어 호출로 확인 하고, 1 로 설정할 것이다. `SCE` 비트를 설정하면, `SYSCALL` 와 `SYSRET` 명령어를 허용할 것이다. 다음 단계는 `edi` 의 20 비트를 확인하는 것이다. 이 레지스터는 `cpuid` 의 결과를 저장(NX 비트 확인을 위함)하고 있다는 것을 기억하자. 만약 `20` 비트가 설정되어 있다면(`NX` 비트), `EFER_SCE` 를 모델 특정 레지스터에 써준다.
+
 
 ```assembly
 	btsl	$_EFER_SCE, %eax
@@ -327,17 +328,18 @@ We will not see all fields in details here, but we will learn about this and oth
 1:	wrmsr
 ```
 
-If the [NX](https://en.wikipedia.org/wiki/NX_bit) bit is supported we enable `_EFER_NX`  and write it too, with the `wrmsr` instruction. After the [NX](https://en.wikipedia.org/wiki/NX_bit) bit is set, we set some bits in the `cr0` [control register](https://en.wikipedia.org/wiki/Control_register), namely:
+만약 [NX](https://en.wikipedia.org/wiki/NX_bit) 가 지원된다면, 우리는 `_EFER_NX` 활성화 하고 그 값을 `wrmsr` 명령어로 써준다. [NX](https://en.wikipedia.org/wiki/NX_bit)  가 설정된 후에, 우리는 `cr0` [control register](https://en.wikipedia.org/wiki/Control_register) 내에 몇 몇 비트들을 설
+정한다:
 
-* `X86_CR0_PE` - system is in protected mode;
-* `X86_CR0_MP` - controls interaction of WAIT/FWAIT instructions with TS flag in CR0;
-* `X86_CR0_ET` - on the 386, it allowed to specify whether the external math coprocessor was an 80287 or 80387;
-* `X86_CR0_NE` - enable internal x87 floating point error reporting when set, else enables PC style x87 error detection;
-* `X86_CR0_WP` - when set, the CPU can't write to read-only pages when privilege level is 0;
-* `X86_CR0_AM` - alignment check enabled if AM set, AC flag (in EFLAGS register) set, and privilege level is 3;
-* `X86_CR0_PG` - enable paging.
+* `X86_CR0_PE` - 시스템은 보호 모드에 있다.
+* `X86_CR0_MP` - CR0 에 있는 TS 비트와 함께 WAIT/FWAIT 명령어를 컨트롤 한다. EM, TS 비트가 활성화 되어 있다면, #NM Exception 발생 시킨다.
+* `X86_CR0_ET` - P4, P6 그리고 Xeon 을 위해 예약된 비트. 386/486 에서는, 이 비트가 외부 수학 coprocessor 를 지원하는 지에 대한 것을 나타낸다.
+* `X86_CR0_NE` - x87 FPU 연산 에러에 대한 reporting 하는 방법 결정, 만약 설정되어 있다면 internal, 아니라면 PC-style 이다.
+* `X86_CR0_WP` - 설정되어 있다면, 특권 레벨 0 에서(supervisor) read-only 페이지에 쓰는 것을 금한다.
+* `X86_CR0_AM` - 특권 레벨 3이고 AC 플래그(EFLAGS 레지스터), AM 이 설정되어 있다면, alignment 확인을 활성화 한다.
+* `X86_CR0_PG` - 페이징을 사용한다.
 
-by the execution following assembly code:
+아래 어셈블리 코드에 의해 실행된다.:
 
 ```assembly
 #define CR0_STATE	(X86_CR0_PE | X86_CR0_MP | X86_CR0_ET | \
@@ -347,7 +349,7 @@ movl	$CR0_STATE, %eax
 movq	%rax, %cr0
 ```
 
-We already know that to run any code, and even more [C](https://en.wikipedia.org/wiki/C_%28programming_language%29) code from assembly, we need to setup a stack. As always, we are doing it by the setting of [stack pointer](https://en.wikipedia.org/wiki/Stack_register) to a correct place in memory and resetting [flags](https://en.wikipedia.org/wiki/FLAGS_register) register after this:
+어떤 코드든 그리고, 특히나 어셈블리로 부터 C 코드를 실행하기 위해서는 스택을 설정해야 한다. 메모리에 알맞은 위치의 값으로 [stack pointer](https://en.wikipedia.org/wiki/Stack_register) 의 설정함으로써 설정을 하고, 설정한 다음에는 [EFLAGS](https://en.wikipedia.org/wiki/FLAGS_register) 를 리셋해준다.(0으로 초기화):
 
 ```assembly
 movq initial_stack(%rip), %rsp
@@ -355,14 +357,14 @@ pushq $0
 popfq
 ```
 
-The most interesting thing here is the `initial_stack`. This symbol is defined in the [source](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) code file and looks like:
+정말 흥미로은 것은 `initial_stack` 이다. 이 심볼은 [소스 코드](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S)에 선언되어 있고 아래 처럼 생겼다.:
 
 ```assembly
 GLOBAL(initial_stack)
     .quad  init_thread_union+THREAD_SIZE-8
 ```
 
-The `GLOBAL` is already familiar to us from. It defined in the [arch/x86/include/asm/linkage.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/linkage.h) header file expands to the `global` symbol definition:
+`GLOBAL` 은 이미 우리와 아주 친근하다. 이것은 [arch/x86/include/asm/linkage.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/linkage.h) 헤더에 정의되어 있는데, 외부에서 참조 가능하도록 레이블 생성하고 global 로 선언한다.:
 
 ```C
 #define GLOBAL(name)    \

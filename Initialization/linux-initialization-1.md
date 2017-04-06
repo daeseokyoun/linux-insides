@@ -420,16 +420,14 @@ GLOBAL(initial_stack)
     .quad  init_thread_union+THREAD_SIZE-8
 ```
 
+`initial_stack` 심볼은 `thread_union.stack` 배열 + `THREAD_SIZE`(16 KB - 8 바이트) 의 시작을 가리킨다. 스택의 맨 위에서 8 바이트를 빼줄 필요가 있다. 이것은 근접한 페이지 메모리의 잘못된 접근을 막기 위한 gap 이다.
 
-that `initial_stack` symbol points to the start of the `thread_union.stack` array + `THREAD_SIZE` which is 16 killobytes and - 8 bytes. Here we need to subtract `8` bytes at the to of stack. This is necessary to guarantee illegal access of the next page memory.
-
-After the early boot stack is set, to update the [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table) with the `lgdt` instruction:
-
+초기 부트 스택이 설정되면, `lgdt` 명령어로 [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table) 를 업데이트 한다:
 ```assembly
 lgdt	early_gdt_descr(%rip)
 ```
 
-where the `early_gdt_descr` is defined as:
+`early_gdt_descr` 이 어떻게 정의되어 있냐면:
 
 ```assembly
 early_gdt_descr:
@@ -438,15 +436,15 @@ early_gdt_descr_base:
 	.quad	INIT_PER_CPU_VAR(gdt_page)
 ```
 
-We need to reload `Global Descriptor Table` because now kernel works in the low userspace addresses, but soon kernel will work in its own space. Now let's look at the definition of `early_gdt_descr`. Global Descriptor Table contains `32` entries:
+커널은 낮은(low) userspace 주소 공간에서 수행되기 때문에 `Global Descriptor Table` 를 재로드 할 필요가 있다. 하지만 곧 커널은 자신만의 주소 공간을 가지고 수행될 것이다. `early_gdt_descr` 의 정의를 보자. `Global Descriptor Table` 은 `32` 개의 엔트리들을 가진다:
 
 ```C
 #define GDT_ENTRIES 32
 ```
 
-for kernel code, data, thread local storage segments and etc... it's simple. Now let's look at the definition of the `early_gdt_descr_base`.
+커널 코드, 데이터, 쓰레드 로컬 스토리지 세그먼트 등을 위해 쓰여질 엔트리들이다. `early_gdt_descr_base` 의 정의를 보자.
 
-First of `gdt_page` defined as:
+[arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h)내에 정의된 `gdt_page` 를 보면:
 
 ```C
 struct gdt_page {
@@ -454,7 +452,7 @@ struct gdt_page {
 } __attribute__((aligned(PAGE_SIZE)));
 ```
 
-in the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h). It contains one field `gdt` which is array of the `desc_struct` structure which is defined as:
+그것은 `desc_struct` 구조체 배열인 `gdt` 라는 것은 하나의 필드로 가져간다. `desc_struct` 구조체를 살펴 보면:
 
 ```C
 struct desc_struct {
@@ -473,13 +471,15 @@ struct desc_struct {
  } __attribute__((packed));
 ```
 
-and presents familiar to us `GDT` descriptor. Also we can note that `gdt_page` structure aligned to `PAGE_SIZE` which is `4096` bytes. It means that `gdt` will occupy one page. Now let's try to understand what is `INIT_PER_CPU_VAR`. `INIT_PER_CPU_VAR` is a macro which defined in the [arch/x86/include/asm/percpu.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/percpu.h) and just concats `init_per_cpu__` with the given parameter:
+그리고 우리에게 익숙한 `GDT` 디스크립터의 내용을 표현한다. 또한 `gdt_page` 구조체는 `PAGE_SIZE` 인 `4096` 바이트에 정렬되어 있다. 그것은 `gdt` 는 하나의 페이지를 차지한다는 의미이다. 이제 `INIT_PER_CPU_VAR` 가 무엇인지 이해해보도록 하자. `INIT_PER_CPU_VAR` 는 [arch/x86/include/asm/percpu.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/percpu.h) 에 정의된 매크로 이고, 주어진 인자와 단지 `init_per_cpu__` 문자열 연결을 한다.:
+
 
 ```C
 #define INIT_PER_CPU_VAR(var) init_per_cpu__##var
 ```
 
 After the `INIT_PER_CPU_VAR` macro will be expanded, we will have `init_per_cpu__gdt_page`. We can see in the [linker script](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S):
+
 
 ```
 #define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load

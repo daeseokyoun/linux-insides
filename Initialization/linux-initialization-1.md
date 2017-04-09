@@ -478,7 +478,7 @@ struct desc_struct {
 #define INIT_PER_CPU_VAR(var) init_per_cpu__##var
 ```
 
-After the `INIT_PER_CPU_VAR` macro will be expanded, we will have `init_per_cpu__gdt_page`. We can see in the [linker script](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S):
+`INIT_PER_CPU_VAR` 매크로를 통해 우리는 `init_per_cpu__gdt_page` 를 얻을 수 있다. [linker script](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S) 에서 확인 가능하다:
 
 
 ```
@@ -486,12 +486,11 @@ After the `INIT_PER_CPU_VAR` macro will be expanded, we will have `init_per_cpu_
 INIT_PER_CPU(gdt_page);
 ```
 
-As we got `init_per_cpu__gdt_page` in `INIT_PER_CPU_VAR` and `INIT_PER_CPU` macro from linker script will be expanded we will get offset from the `__per_cpu_load`. After this calculations, we will have correct base address of the new GDT.
+링커 스크립트에 있는 `INIT_PER_CPU_VAR` 와 `INIT_PER_CPU` 매크로를 통해 `init_per_cpu__gdt_page` 의 값은 `__per_cpu_load` 에서 offset 으로 결정될 것이다. 이 계산이 완료되면, 우리는 새로운 GDT 의 정확한 베이스 주소를 얻을 수 있다.
 
-Generally per-CPU variables is a 2.6 kernel feature. You can understand what it is from its name. When we create `per-CPU` variable, each CPU will have will have its own copy of this variable. Here we creating `gdt_page` per-CPU variable. There are many advantages for variables of this type, like there are no locks, because each CPU works with its own copy of variable and etc... So every core on multiprocessor will have its own `GDT` table and every entry in the table will represent a memory segment which can be accessed from the thread which ran on the core. You can read in details about `per-CPU` variables in the [Theory/per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) post.
+일반적으로 per-CPU 변수들은 2.6 커널의 특징이다. 당신은 그것의 이름으로 부터 무엇을 나타내는지 이해할 필요가 있다. `per-CPU` 가 변수가 만들어질 때, 각 CPU 는 이 변수를 자신을 위한 복사본을 만들 것이다. 여기서 우리는 `gdt_page` per-CPU 변수를 만들 것이다. 이 타입의 변수들을 갖는 장점들이 많다. 가령, 각 CPU 와 연계되어 복사본을 만들고 사용하기 때문에 lock 이 필요없는 것이다. 그래서 멀티프로세서의 모드 코어들은 자신만을 위한 'GDT' 테이블이 있으며 테이블의 모든 엔트리들은 그 코어에서 수행되는 쓰레드들로 부터 접근 가능한 메모리 세그먼트들을 표현할 것이다. `per-CPU` 에 대해 조금더 자세히 알고 싶다면, [Theory/per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) 에서 참고 바란다. (향후 여기서도 번역될 문서이다.)
 
-As we loaded new Global Descriptor Table, we reload segments as we did it every time:
-
+새로운 GDT 를 로드해야 하니, 매번 새롭게 세그먼트들을 로드 해야 한다.:
 ```assembly
 	xorl %eax,%eax
 	movl %eax,%ds
@@ -502,6 +501,7 @@ As we loaded new Global Descriptor Table, we reload segments as we did it every 
 ```
 
 After all of these steps we set up `gs` register that it post to the `irqstack` which represents special stack where [interrupts](https://en.wikipedia.org/wiki/Interrupt) will be handled on:
+이 단계를 모두 마치고, `gs`를 설정함으로써 우리는 [interrupts](https://en.wikipedia.org/wiki/Interrupt) 가 처리될 수 있도록 하는 특별한 스택인 `irqstack` ???????????
 
 ```assembly
 	movl	$MSR_GS_BASE,%ecx

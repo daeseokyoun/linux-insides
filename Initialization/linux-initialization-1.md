@@ -500,8 +500,7 @@ INIT_PER_CPU(gdt_page);
 	movl %eax,%gs
 ```
 
-After all of these steps we set up `gs` register that it post to the `irqstack` which represents special stack where [interrupts](https://en.wikipedia.org/wiki/Interrupt) will be handled on:
-이 단계를 모두 마치고, `gs`를 설정함으로써 우리는 [interrupts](https://en.wikipedia.org/wiki/Interrupt) 가 처리될 수 있도록 하는 특별한 스택인 `irqstack` ???????????
+이 모든 단계 후에, 우리는 [interrupts](https://en.wikipedia.org/wiki/Interrupt) 가 처리될 수 있도록 하는 특별한 스택인 `irqstack` 에 `gs` 레지스터를 설정한다.:
 
 ```assembly
 	movl	$MSR_GS_BASE,%ecx
@@ -516,9 +515,9 @@ where `MSR_GS_BASE` is:
 #define MSR_GS_BASE             0xc0000101
 ```
 
-We need to put `MSR_GS_BASE` to the `ecx` register and load data from the `eax` and `edx` (which are point to the `initial_gs`) with `wrmsr` instruction. We don't use `cs`, `fs`, `ds` and `ss` segment registers for addressing in the 64-bit mode, but `fs` and `gs` registers can be used. `fs` and `gs` have a hidden part (as we saw it in the real mode for `cs`) and this part contains descriptor which mapped to [Model Specific Registers](https://en.wikipedia.org/wiki/Model-specific_register). So we can see above `0xc0000101` is a `gs.base` MSR address. When a [system call](https://en.wikipedia.org/wiki/System_call) or [interrupt](https://en.wikipedia.org/wiki/Interrupt) occurred, there is no kernel stack at the entry point, so the value of the `MSR_GS_BASE` will store address of the interrupt stack.
+`MSR_GS_BASE` 의 값을 `ecx` 레지스터에 넣고, `wrmsr` 명령어로 `eax` 와 `edx` (`initial_gs` 를 가리킴) 의 데이터를 로드한다. 우리는 64 비트 모드에서 어드레싱을 위한 `cs`, `fs`, `ds` 그리고 `ss` 세그먼트 레지스터를 사용하지 않지만, `fs` 와 `gs` 는 사용될 수 있다. `fs` 는 `gs` 는 숨겨진 부분(real mode 에서 `cs` 를 위한 내용을 봤을 것이다.)을 갖고 [Model Specific Registers](https://en.wikipedia.org/wiki/Model-specific_register) 를 맵핑하고 있는 디스크립터를 포함하는 부분(part) 이다. 그래서 우리는 위에서 본 `0xc0000101` 주소는 `gs.base` MSR 주소가 된다. [system call](https://en.wikipedia.org/wiki/System_call) 이나 [interrupt](https://en.wikipedia.org/wiki/Interrupt) 가 발생하면, 더이상 엔트리 포인트에는 커널 스택이 없고, `MSR_GS_BASE` 의 값은 인터럽트 스택의 주소를 저장할 것이다.
 
-In the next step we put the address of the real mode bootparam structure to the `rdi` (remember `rsi` holds pointer to this structure from the start) and jump to the C code with:
+다음 단계에서는 real 모드 bootparam 구조체의 주소를 `rdi` (`rsi` 는 real mode 구조체를 가리키고 있다.)에 넣고, C 코드로 점프한다.:
 
 ```assembly
 	movq	initial_code(%rip), %rax
@@ -527,7 +526,8 @@ In the next step we put the address of the real mode bootparam structure to the 
 	lretq
 ```
 
-Here we put the address of the `initial_code` to the `rax` and push fake address, `__KERNEL_CS` and the address of the `initial_code` to the stack. After this we can see `lretq` instruction which means that after it return address will be extracted from stack (now there is address of the `initial_code`) and jump there. `initial_code` is defined in the same source code file and looks:
+`initial_code` 의 주소를 `rax`에 넣고, `fake address`, `__KERNEL_CS` 그리고 `initial_code`의 주소를 스택에 넣는다. 이 후에, 우리는 `lretq`(far return) 명령어로
+스택으로 부터 추출될 주소(`initial_code`의 주소)를 반환한 후에, 거기로 점프한다. `initial_code` 는 같은 소스 파일에 정의 되어 있다:
 
 ```assembly
 	.balign	8
@@ -538,7 +538,7 @@ Here we put the address of the `initial_code` to the `rax` and push fake address
 	...
 ```
 
-As we can see `initial_code` contains address of the `x86_64_start_kernel`, which is defined in the [arch/x86/kerne/head64.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head64.c) and looks like this:
+`initial_code` 는 `x86_64_start_kernel` 의 주소를 갖고 있고, [arch/x86/kerne/head64.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head64.c) 에 정의되어 있다.:
 
 ```C
 asmlinkage __visible void __init x86_64_start_kernel(char * real_mode_data) {
@@ -548,16 +548,16 @@ asmlinkage __visible void __init x86_64_start_kernel(char * real_mode_data) {
 }
 ```
 
-It has one argument is a `real_mode_data` (remember that we passed address of the real mode data to the `rdi` register previously).
+이 함수는 `real_mode_data` 의 인자를 하나 가진다.(`rdi` 레지스터에 있는 real mode 데이터의 주소를 전달한다.)
 
-This is first C code in the kernel!
+이제 커널의 첫 C 코드를 보자!
 
-Next to start_kernel
+start_kernel
 --------------------------------------------------------------------------------
 
-We need to see last preparations before we can see "kernel entry point" - start_kernel function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L489).
+"kernel entry point"(커널 엔트리 포인트)를 보기 전에 마지막 준비 작업을 볼 필요가 있다. [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L488) 에 start_kernel 함수가 있다.
 
-First of all we can see some checks in the `x86_64_start_kernel` function:
+`x86_64_start_kernel` 함수에서 몇가지 확인 사항을 보자.:
 
 ```C
 BUILD_BUG_ON(MODULES_VADDR < __START_KERNEL_map);
@@ -571,6 +571,7 @@ BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses) <= MODULES_END);
 ```
 
 There are checks for different things like virtual addresses of modules space is not fewer than base address of the kernel text - `__STAT_KERNEL_map`, that kernel text with modules is not less than image of the kernel and etc... `BUILD_BUG_ON` is a macro which looks as:
+여기에서 몇가지 테스트가 있는데, 가령 모듈 공간들의 가상 주소가 커널
 
 ```C
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))

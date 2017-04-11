@@ -56,7 +56,7 @@ startup_64:
 `__START_KERNEL` 매크로의 정의는 [arch/x86/include/asm/page_types.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/page_types.h) 헤더 파일에 위치 하고 있고 커널 맵핑 가상 베이스 주소와 물리 주소의 시작을 더하는 것이다:
 
 ```C
-#define __START_KERNEL	(__START_KERNEL_map + __PHYSICAL_START) //__ <-- TODO 지우기
+#define __START_KERNEL	(__START_KERNEL_map + __PHYSICAL_START)
 
 #define __PHYSICAL_START  ALIGN(CONFIG_PHYSICAL_START, CONFIG_PHYSICAL_ALIGN)
 ```
@@ -161,7 +161,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 
 ```C
 #define _PAGE_TABLE     (_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
-                         _PAGE_ACCESSED | _PAGE_DIRTY)_ // TODO 여기 마지막 언더바 지우기
+                         _PAGE_ACCESSED | _PAGE_DIRTY)
 ```
 
 [페이징](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/Paging.md) 파트를 한번 읽어 보길 바란다.
@@ -170,7 +170,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 
 ```C
 #define _KERNPG_TABLE   (_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | \
-                         _PAGE_DIRTY)_ // TODO 여기도 마지막 언더바 지우기
+                         _PAGE_DIRTY)
 ```
 
 위의 `_KERNPG_TABLE` 는 페이지의 권한을 나타낸다. 두 번째는 - `level2_fixmap_pgt` 는 커널 영역 안에서 어떤 물리 주소도 참조할 수 있는 가상 주소이다. 이 주소들은 [vsyscalls](https://lwn.net/Articles/446528/) 맵핑을 위해 `10` 메가 바이트의 공간 함께 하나의 `level2_fixmap_pgt` 엔트리로 표현된다. 다음 `level2_kernel_pgt` 은 커널 `.text` 를 위한 `__START_KERNEL_map` 에서 부터 `512` MB 를 만드는 `PDMS` 매크로를 호출한다.(`512` MB 뒤에는 모듈을 위한 메모리 공간이 될 것이다.)
@@ -570,21 +570,20 @@ BUILD_BUG_ON(!(((MODULES_END - 1) & PGDIR_MASK) == (__START_KERNEL & PGDIR_MASK)
 BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses) <= MODULES_END);
 ```
 
-There are checks for different things like virtual addresses of modules space is not fewer than base address of the kernel text - `__STAT_KERNEL_map`, that kernel text with modules is not less than image of the kernel and etc... `BUILD_BUG_ON` is a macro which looks as:
-여기에서 몇가지 테스트가 있는데, 가령 모듈 공간들의 가상 주소가 커널
+여기에서 몇가지 테스트가 있는데, 가령 모듈 공간들의 가상 주소가 커널 텍스트 - `__STAT_KERNEL_map` 의 베이스 주소보다 작지 않는지, 모듈과 함께 있는 커널 텍스트 영역이 커널 이미지 보다 작지 않는지 등을 확인한다. `BUILD_BUG_ON` 은 아래와 같이 생긴 매크로이다:
 
 ```C
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 ```
 
-Let's try to understand how this trick works. Let's take for example first condition: `MODULES_VADDR < __START_KERNEL_map`. `!!conditions` is the same that `condition != 0`. So it means if `MODULES_VADDR < __START_KERNEL_map` is true, we will get `1` in the `!!(condition)` or zero if not. After `2*!!(condition)` we will get or `2` or `0`. In the end of calculations we can get two different behaviors:
+`BUILD_BUG_ON` 가 어떻게 동작하는지 이해해 보도록 하자. 첫번째로 확인했던 `MODULES_VADDR < __START_KERNEL_map` 내용으로 예를 들어보자. `!!conditions` 는 `condition != 0` 과 같은 의미 이다. 그래서 그것은 만약 `MODULES_VADDR < __START_KERNEL_map` 이 참이면, `!!(condition)` 으로 `1` 을 얻는다.(아니면, 0) 그런 다음 `2*!!(condition)` 로 `2` 또는 `0`을 얻을 것이다. 이 계산의 마지막에는 두 개의 서로 다른 행동을 한다는 것을 볼 수 있다:
 
-* We will have compilation error, because try to get size of the char array with negative index (as can be in our case, because `MODULES_VADDR` can't be less than `__START_KERNEL_map` will be in our case);
-* No compilation errors.
+* 음수의 인덱스로 char 배열의 크기를 얻으려고 시도했기 때문에, 컴파일 에러를 가지게 될 것이다. (우리의 경우에는, `__START_KERNEL_map` 보다 `MODULES_VADDR` 가 작을 수 없다.)
+* 컴파일 에러가 없음.
 
-That's all. So interesting C trick for getting compile error which depends on some constants.
+이 두가지가 전부다. 이와 같이 몇 가지 상수에 의존하는 컴파일 오류를 얻는데 흥미로운 C 트릭들이 있다.
 
-In the next step we can see call of the `cr4_init_shadow` function which stores shadow copy of the `cr4` per cpu. Context switches can change bits in the `cr4` so we need to store `cr4` for each CPU. And after this we can see call of the `reset_early_page_tables` function where we resets all page global directory entries and write new pointer to the PGT in `cr3`:
+다음 단계에서는, CPU 마다 `cr4` 의 shadow copy(복사본) 를 저장하기 위해 `cr4_init_shadow` 함수를 호출한다. 문맥 교환(Context Switch) 는 `cr4` 의 비트들을 변경할 수 있기에 우리는 각 CPU 마다 `cr4`를 저장할 필요가 있다. 그리고 나서, 모든 Global Directory 엔트리들을 초기화 하고 `cr3`에 PGT 를 가리키는 새로운 값을 쓰는 `reset_early_page_tables` 함수의 호출을 볼 수 있다:
 
 ```C
 for (i = 0; i < PTRS_PER_PGD-1; i++)
@@ -595,26 +594,26 @@ next_early_pgt = 0;
 write_cr3(__pa_nodebug(early_level4_pgt));
 ```
 
-Soon we will build new page tables. Here we can see that we go through all Page Global Directory Entries (`PTRS_PER_PGD` is `512`) in the loop and make it zero. After this we set `next_early_pgt` to zero (we will see details about it in the next post) and write physical address of the `early_level4_pgt` to the `cr3`. `__pa_nodebug` is a macro which will be expanded to:
+이제 곧 우리는 새로운 페이지 테이블들을 구성 할 것이다. 여기서는 단지 루프 내에서 페이지 글로벌 디렉토리 엔트리(`PTRS_PER_PGD` 는 `512`)들의 값을 모두 0 으로 만든다. 다음에 `next_early_pgt` 에 0을 넣고(다은 챕터에서 자세히), `early_level4_pgt` 의 물리주소를 `cr3` 에 쓴다. `__pa_nodebug` 아래와 같이 확장시켜주는 매크로이다.:
 
 ```C
 ((unsigned long)(x) - __START_KERNEL_map + phys_base)
 ```
 
-After this we clear `_bss` from the `__bss_stop` to `__bss_start` and the next step will be setup of the early `IDT` handlers, but it's big concept so we will see it in the next part.
+이 다음에는 '_bss' 의 영역인 `__bss_stop` 에서 `__bss_start` 까지 클리어하는 것과 초기 `IDT` 핸들어를 설정하는 과정을 살펴 볼 것이다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-This is the end of the first part about linux kernel initialization.
+리눅스 커널 초기화에 관련된 첫번째 파트가 끝이 났다.
 
-If you have questions or suggestions, feel free to ping me in twitter [0xAX](https://twitter.com/0xAX), drop me [email](anotherworldofworld@gmail.com) or just create [issue](https://github.com/0xAX/linux-insides/issues/new).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-In the next part we will see initialization of the early interruption handlers, kernel space memory mapping and a lot more.
+다음 파트에서는 초기 인터럽트 핸들러의 초기화, 커널 공간 메모리 맵핑 등 많은 것을 살펴 볼 것이다.
 
-**Please note that English is not my first language and I am really sorry for any inconvenience. If you found any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [Model Specific Register](http://en.wikipedia.org/wiki/Model-specific_register)

@@ -231,7 +231,6 @@ Identity 맵핑 설정
 	movq	%rdx, 8(%rbx,%rax,8)
 ```
 
-The `rbx` register contains address of the `early_level4_pgt` and `%rax * 8` here is index of a page global directory occupied by the `_text` address. So here we fill two entries of the `early_level4_pgt` with address of two entries of the `early_dynamic_pgts` which is related to `_text`. The `early_dynamic_pgts` is array of arrays:
 `rbx` 레지스터는 `early_level4_pgt` 의 주소를 담고 있고, `%rax * 8` 에 `_text` 주소에 의해 점유된 페이지 글로벌 디렉토리의 인텍스가 있다. 그래서 우리는 `_text` 와 연관된 `early_dynamic_pgts` 의 두 개의 엔트리 주소값으로 `early_level4_pgt`의 두개의 엔트리를 채울 것이다. `early_dynamic_pgts`은 이차원 배열이다:
 
 ```C

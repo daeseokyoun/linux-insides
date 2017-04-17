@@ -1,21 +1,21 @@
-Kernel initialization. Part 3.
+커널 초기화. Part 3.
 ================================================================================
 
-Last preparations before the kernel entry point
+커널 엔트리 포인트로 진입 전 마지막 준비
 --------------------------------------------------------------------------------
 
-This is the third part of the Linux kernel initialization process series. In the previous [part](https://github.com/0xAX/linux-insides/blob/master/Initialization/linux-initialization-2.md) we saw early interrupt and exception handling and will continue to dive into the linux kernel initialization process in the current part. Our next point is 'kernel entry point' - `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) source code file. Yes, technically it is not kernel's entry point but the start of the generic kernel code which does not depend on certain architecture. But before we call the `start_kernel` function, we must do some preparations. So let's continue.
+리눅스 커널 초기화 과정 시리즈중 3 번째 파트이다. 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md)에서 초기 인터럽트와 exception 핸들링을 알아보았고 이 파트에서도 리눅스 커널 초기화 과정을 계속 알아볼 것이다. 우리의 다음 확인 사항은 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일에 있는 '커널 엔트리 포인트'인 `start_kernel` 함수이다. 이함수가 실제로 커널 엔트리 포인트는 아니지만 아키텍처에 의존적이지 않은 일반적인 커널 코드이 시작이라고 볼 수 있다. `start_kernel` 을 보기전에 몇가지 준비사항이 있다. 먼저 그것을 살펴 보기로 하자.
 
-boot_params again
+boot_params 재조명
 --------------------------------------------------------------------------------
 
-In the previous part we stopped at setting Interrupt Descriptor Table and loading it in the `IDTR` register. At the next step after this we can see a call of the `copy_bootdata` function:
+이전 파트에서 우리는 인터럽트 디스크립션 테이블과 `IDTR` 레지스터에 그것을 로드하는 곳에서 마무리하였다. 그 다름 단계로 `copy_bootdata` 함수의 호출을 봐야 할 것이다.:
 
 ```C
 copy_bootdata(__va(real_mode_data));
 ```
 
-This function takes one argument - virtual address of the `real_mode_data`. Remember that we passed the address of the `boot_params` structure from [arch/x86/include/uapi/asm/bootparam.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L114)  to the `x86_64_start_kernel` function as first argument in [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S):
+이 함수는 하나의 인자를 받는다. 그것의 `real_mode_data` 의 가상 주소이다. [arch/x86/include/uapi/asm/bootparam.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/bootparam.h#L114)에 정의되어 있는 `boot_params` 구조체의 주소는 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 에서 `x86_64_start_kernel` 함수의 첫번째 인자로 전달 했다는 것을 기억하자.:
 
 ```
 	/* rsi is pointer to real mode structure with interesting info.
@@ -23,19 +23,19 @@ This function takes one argument - virtual address of the `real_mode_data`. Reme
 	movq	%rsi, %rdi
 ```
 
-Now let's look at `__va` macro. This macro defined in [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c):
+이제 `__va` 매크로를 보자. 이 매크로는  [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c)에 정의되어 있다:
 
 ```C
-#define __va(x)                 ((void *)((unsigned long)(x)+PAGE_OFFSET))
+#define __va(x)                 ((void *)*((unsigned long)(x)+PAGE_OFFSET)) // TODO void *) 다음에 * 지우기
 ```
 
-where `PAGE_OFFSET` is `__PAGE_OFFSET` which is `0xffff880000000000` and the base virtual address of the direct mapping of all physical memory. So we're getting virtual address of the `boot_params` structure and pass it to the `copy_bootdata` function, where we copy `real_mod_data` to the `boot_params` which is declared in the [arch/x86/kernel/setup.h](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.h)
+`PAGE_OFFSET` 은 `__PAGE_OFFSET` 로 되어 있고, 모든 물리 메모리를 직접 맵핑할 수 있는 가상 주소의 베이스이다. 그 값은 `0xffff880000000000` 이다. 그래서 우리는 `boot_params` 구조체의 가상 주소를 얻고 그것을 `copy_bootdata`함수로 넘겨준다. 그 뒤에 우리는 [arch/x86/kernel/setup.h](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.h)에 정의되어 있는 `boot_params`에 `real_mod_data`를 복사한다.
 
 ```C
 extern struct boot_params boot_params;
 ```
 
-Let's look at the `copy_boot_data` implementation:
+`copy_boot_data` 의 구현부를 살펴보자:
 
 ```C
 static void __init copy_bootdata(char *real_mode_data)
@@ -53,9 +53,9 @@ static void __init copy_bootdata(char *real_mode_data)
 }
 ```
 
-First of all, note that this function is declared with `__init` prefix. It means that this function will be used only during the initialization and used memory will be freed.
+제일 먼저, 이 함수는 `__init` 접두사가 붙는다는 것을 주목하자. 이 함수는 초기화 과정에서 사용될 것이며 사용된 메모리를 해제될 것이다는 의미를 포함한다.
 
-We can see declaration of two variables for the kernel command line and copying `real_mode_data` to the `boot_params` with the `memcpy` function. The next call of the `sanitize_boot_params` function which fills some fields of the `boot_params` structure like `ext_ramdisk_image` and etc... if bootloaders which fail to initialize unknown fields in `boot_params` to zero. After this we're getting address of the command line with the call of the `get_cmd_line_ptr` function:
+커널 명령 라인을 위한 두 개의 변수 선언과 `real_mode_data` 를 `boot_params` 로 `memcpy` 함수를 통해 복사한다. 그 다음 `sanitize_boot_params` 함수 호출로 `boot_params` 구조체의 `ext_ramdisk_image` 와 같은 몇 몇 항목 그리고 부트로더가 알수 없는 항목으로 `boot_params` 내에 초기화 하지 못한 것들을 0으로 채워 준다. 이 후에 우리는 `get_cmd_line_ptr` 함수 호출로 명령 라인의 주소를 얻을 것이다.:
 
 ```C
 unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;

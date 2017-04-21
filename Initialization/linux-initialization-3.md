@@ -53,7 +53,7 @@ static void __init copy_bootdata(char *real_mode_data)
 }
 ```
 
-제일 먼저, 이 함수는 `__init` 접두사가 붙는다는 것을 주목하자. 이 함수는 초기화 과정에서 사용될 것이며 사용된 메모리를 해제될 것이다는 의미를 포함한다.
+제일 먼저, 이 함수는 `__init`__ 접두사가 붙는다는 것을 주목하자. 이 함수는 초기화 과정에서 사용될 것이며 사용된 메모리를 해제될 것이다는 의미를 포함한다. // TODO init 뒤에 언더바 두개 지우기
 
 커널 명령 라인을 위한 두 개의 변수 선언과 `real_mode_data` 를 `boot_params` 로 `memcpy` 함수를 통해 복사한다. 그 다음 `sanitize_boot_params` 함수 호출로 `boot_params` 구조체의 `ext_ramdisk_image` 와 같은 몇 몇 항목 그리고 부트로더가 알수 없는 항목으로 `boot_params` 내에 초기화 하지 못한 것들을 0으로 채워 준다. 이 후에 우리는 `get_cmd_line_ptr` 함수 호출로 명령 라인의 주소를 얻을 것이다.:
 
@@ -63,26 +63,26 @@ cmd_line_ptr |= (u64)boot_params.ext_cmd_line_ptr << 32;
 return cmd_line_ptr;
 ```
 
-which gets the 64-bit address of the command line from the kernel boot header and returns it. In the last step we check `cmd_line_ptr`, getting its virtual address and copy it to the `boot_command_line` which is just an array of bytes:
+커널 부트 헤더로 부터 명령라인의 64 비트 주소를 얻고 그것을 반환한다. 마지막 단계에서는 `cmd_line_ptr` 을 확인하고, 그것의 가상 주소를 얻은 다음 바이트 배열인 `boot_command_line` 으로 복사한다.:
 
 ```C
 extern char __initdata boot_command_line[];
 ```
 
-After this we will have copied kernel command line and `boot_params` structure. In the next step we can see call of the `load_ucode_bsp` function which loads processor microcode, but we will not see it here.
+이 다음에 우리는 복사된 커널 명령라인과 `boot_params` 구조체를 가질 것이다. 다음 단계에서는 프로세서의 마이크로 코드를 로드하는 `load_ucode_bsp` 함수의 호출을 볼수 있다. 하지만 여기서는 다루지 않을 것이다.
 
-After microcode was loaded we can see the check of the `console_loglevel` and the `early_printk` function which prints `Kernel Alive` string. But you'll never see this output because `early_printk` is not initialized yet. It is a minor bug in the kernel and i sent the patch - [commit](http://git.kernel.org/cgit/linux/kernel/git/tip/tip.git/commit/?id=91d8f0416f3989e248d3a3d3efb821eda10a85d2) and you will see it in the mainline soon. So you can skip this code.
+마이크로 코드가 로드되고 나면, `console_loglevel` 을 확인해서 loglevel 에 따라 `early_printk` 에서 `Kernel Alive` 문자열을 출력한다. 하지만, `early_printk` 는 이시점에서 초기화 되지 않기 때문에, 이문자열은 결코 볼 수 없을 것이다. 커널내에 마이너 버그이고, [패치](http://git.kernel.org/cgit/linux/kernel/git/tip/tip.git/commit/?id=91d8f0416f3989e248d3a3d3efb821eda10a85d2)를 보내 현재는 이 출력문의 코드는 없어졌다.
 
-Move on init pages
+초기 페이지로 넘어가자
 --------------------------------------------------------------------------------
 
-In the next step, as we have copied `boot_params` structure, we need to move from the early page tables to the page tables for initialization process. We already set early page tables for switchover, you can read about it in the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-1.html) and dropped all it in the `reset_early_page_tables` function (you can read about it in the previous part too) and kept only kernel high mapping. After this we call:
+복사된 `boot_params` 구조체를 얻은 다음에는 초기 페이지 테이블로 부터 초기 프로세스를 위한 페이지 테이블로 전환을 해야 한다. 우리는 지난 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-1.md) 에서 이미 초기 페이지 테이블을 설정하는 것을 살펴보았다. `reset_early_page_tables` 함수의 호출로 모든 페이지 테이블을 정리하였고, 단지 커널 high 맵핑만 남겨두었다. 이 다음의 호출은:
 
 ```C
 	clear_page(init_level4_pgt);
 ```
 
-function and pass `init_level4_pgt` which also defined in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) and looks:
+`clear_page` 함수에 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 에 정의된 `init_level4_pgt` 를 넘겨준다. 그리고 `init_level4_pgt` 는 아래와 같이:
 
 ```assembly
 NEXT_PAGE(init_level4_pgt)
@@ -93,7 +93,8 @@ NEXT_PAGE(init_level4_pgt)
 	.quad   level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE
 ```
 
-which maps first 2 gigabytes and 512 megabytes for the kernel code, data and bss. `clear_page` function defined in the [arch/x86/lib/clear_page_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/lib/clear_page_64.S) let's look on this function:
+이것은 첫 2 GB 와 512 MB 를 커널 코드, 데이터 그리고 BSS 위해 맵핑한다. [arch/x86/lib/clear_page_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/lib/clear_page_64.S) 의 `clear_page` 함수를 살펴보자:
+
 
 ```assembly
 ENTRY(clear_page)
@@ -121,14 +122,14 @@ ENTRY(clear_page)
 	ENDPROC(clear_page)
 ```
 
-As you can understand from the function name it clears or fills with zeros page tables. First of all note that this function starts with the `CFI_STARTPROC` and `CFI_ENDPROC` which are expands to GNU assembly directives:
+이 함수의 이름을 봐도 이 함수는 페이지 테이블을 모두 0으로 채우는 일을 하는 것임을 알 수 있다. 먼저 이함수는 `CFI_STARTPROC` 에서 시작하고 `CFI_ENDPROC`에서 끝난다. 이 매크로는 GNU 어셈블리 [디렉티브](http://reverseengine.tistory.com/entry/%EC%A0%9C-5%EC%9E%A5-%EB%94%94%EB%A0%89%ED%8B%B0%EB%B8%8C)를 확장한 것이다.:
 
 ```C
 #define CFI_STARTPROC           .cfi_startproc
 #define CFI_ENDPROC             .cfi_endproc
 ```
 
-and used for debugging. After `CFI_STARTPROC` macro we zero out `eax` register and put 64 to the `ecx` (it will be a counter). Next we can see loop which starts with the `.Lloop` label and it starts from the `ecx` decrement. After it we put zero from the `rax` register to the `rdi` which contains the base address of the `init_level4_pgt` now and do the same procedure seven times but every time move `rdi` offset on 8. After this we will have first 64 bytes of the `init_level4_pgt` filled with zeros. In the next step we put the address of the `init_level4_pgt` with 64-bytes offset to the `rdi` again and repeat all operations until `ecx` reaches zero. In the end we will have `init_level4_pgt` filled with zeros.
+그리고 디버깅을 위해 사용된다. `CFI_STARTPROC` 매크로 바로 다음에 `eax` 레지스터를 0으로 만들고 64 의 값을 `ecx` 레지스터에 넣어준다.(이것은 카운터 값으로 사용될 것이다.) 다음에는 `.Lloop` 라벨로 시작하는 루프를 볼 수 있고 그것은 `ecx`를 하나 감소하는 코드로 시작한다. `rax` 레지스터의 0 값을 현재 `init_level4_pgt` 의 베이스 주소값을 갖고 있는 `rdi` 에 넣고 이와 같은 작업을 7번 더 해주는데 이 때, 매번마다 `rdi` 의 오프셋을 8씩 이동시킨다. 이렇게 하면, 우리는 `init_level4_pgt` 의 첫 64 바이트를 0으로 채우게 된다. 다음 단계는 `rdi` 의 64 바이트 오프셋을 더해 `init_level4_pgt` 의 주소를 넣어주는 일을 `ecx` 의 값이 0이 될 때까지 한다. 결국 `init_level4_pgt` 의 모든 내용을 0으로 채우는 것이다.())( // TODO 이괄호들 지우기
 
 As we have `init_level4_pgt` filled with zeros, we set the last `init_level4_pgt` entry to kernel high mapping with the:
 

@@ -131,24 +131,24 @@ ENTRY(clear_page)
 
 그리고 디버깅을 위해 사용된다. `CFI_STARTPROC` 매크로 바로 다음에 `eax` 레지스터를 0으로 만들고 64 의 값을 `ecx` 레지스터에 넣어준다.(이것은 카운터 값으로 사용될 것이다.) 다음에는 `.Lloop` 라벨로 시작하는 루프를 볼 수 있고 그것은 `ecx`를 하나 감소하는 코드로 시작한다. `rax` 레지스터의 0 값을 현재 `init_level4_pgt` 의 베이스 주소값을 갖고 있는 `rdi` 에 넣고 이와 같은 작업을 7번 더 해주는데 이 때, 매번마다 `rdi` 의 오프셋을 8씩 이동시킨다. 이렇게 하면, 우리는 `init_level4_pgt` 의 첫 64 바이트를 0으로 채우게 된다. 다음 단계는 `rdi` 의 64 바이트 오프셋을 더해 `init_level4_pgt` 의 주소를 넣어주는 일을 `ecx` 의 값이 0이 될 때까지 한다. 결국 `init_level4_pgt` 의 모든 내용을 0으로 채우는 것이다.())( // TODO 이괄호들 지우기
 
-As we have `init_level4_pgt` filled with zeros, we set the last `init_level4_pgt` entry to kernel high mapping with the:
+`init_level4_pgt` 를 0 으로 모두 초기화 하고, 마지막 511 엔트리에는 `early_level4_pgt` 의 511 엔트리의 주소를 대입한다. 이것은 나중에 사용할 level 4 페이지 테이블에 커널이 사용할 커널 텍스트 맵핑 영역을 설정해주는 것이다.:
 
 ```C
 init_level4_pgt[511] = early_level4_pgt[511];
 ```
 
-Remember that we dropped all `early_level4_pgt` entries in the `reset_early_page_table` function and kept only kernel high mapping there.
+`reset_early_page_table` 함수에서 커널 텍스트 맵핑 영역만 남기고 모두 초기화를 했다는 것을 기억하자.
 
-The last step in the `x86_64_start_kernel` function is the call of the:
+`x86_64_start_kernel` 함수의 마지막 단계는 아래의 함수 호출이다.:
 
 ```C
 x86_64_start_reservations(real_mode_data);
 ```
 
-function with the `real_mode_data` as argument. The `x86_64_start_reservations` function defined in the same source code file as the `x86_64_start_kernel` function and looks:
+이 함수는 `real_mode_data` 를 인자로 받는다. `x86_64_start_reservations` 함수는 `x86_64_start_kernel` 함수가 있던 파일과 동일한 소스코드에 있고 아래와 같이 구현되어 있다:
 
 ```C
-void __init x86_64_start_reservations(char *real_mode_data)
+void __init x86_64_start_reservations(char *real_mode_data*) // TODO 마지막 별 지우기
 {
 	if (!boot_params.hdr.version)
 		copy_bootdata(__va(real_mode_data));
@@ -159,54 +159,55 @@ void __init x86_64_start_reservations(char *real_mode_data)
 }
 ```
 
-You can see that it is the last function before we are in the kernel entry point - `start_kernel` function. Let's look what it does and how it works.
+이제 커널 엔트리 포인트인 `start_kernel` 에 진입하기 전의 마지막 함수의 호출을 볼 수 있다. 마지막 함수는 어떤 일을 하고 어떻게 동작하는지 살펴보자.
 
-Last step before kernel entry point
+커널 엔트리 포인트 전의 마지막 단계
 --------------------------------------------------------------------------------
 
-First of all we can see in the `x86_64_start_reservations` function the check for `boot_params.hdr.version`:
+`x86_64_start_reservations` 함수에서 제일 처음으로 볼 수 있는 것이 `boot_params.hdr.version` 를 확인하는 것이다:
 
 ```C
 if (!boot_params.hdr.version)
-	copy_bootdata(__va(real_mode_data));
+	copy_bootdata(__va__(real_mode_data)); // va 뒤의 언더바 두개 지우기
 ```
 
-and if it is zero we call `copy_bootdata` function again with the virtual address of the `real_mode_data` (read about its implementation).
+만약 그 값이 0이면, `copy_bootdata` 함수를 `real_mode_data` 의 가상 주소와 함께 다시 호출해준다.
 
-In the next step we can see the call of the `reserve_ebda_region` function which defined in the [arch/x86/kernel/head.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head.c). This function reserves memory block for the `EBDA` or Extended BIOS Data Area. The Extended BIOS Data Area located in the top of conventional memory and contains data about ports, disk parameters and etc...
+다음 단계에서는 [arch/x86/kernel/head.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head.c) 에 구현되어 있는 `reserve_ebda_region` 함수의 호출이다. 이 함수는 `EBDA` 혹은 `확장된 BIOS 데이터 영역` 을 위해 메모리 블럭을 예약해둔다. 확장된 BIOS 데이터 영역(Extended BIOS Data Area)은 기본 메모리의 꼭대기(TOP) 에 위치하고 포트, 디스크 파라미터등의 데이터를 담고 있다. )((( // TODO 마지막 괄호들 지우기
 
-Let's look on the `reserve_ebda_region` function. It starts from the checking is paravirtualization enabled or not:
+`reserve_ebda_region` 함수를 살펴보자. 그것은 반가상화(paravirtualization) 이 활성화 되어 있는지 확인하는 것으로 부터 시작한다.: )((( // TODO 마지막 괄호들 지우기
 
 ```C
 if (paravirt_enabled())
 	return;
 ```
 
-we exit from the `reserve_ebda_region` function if paravirtualization is enabled because if it enabled the extended bios data area is absent. In the next step we need to get the end of the low memory:
+만약 반가상화가 활성화 되어 있다면, `reserve_ebda_region` 함수를 빠져나간다. 활성화 되어 있다는 것은 EBDA 데이터가 없다는 것을 의미하기 때문이다. 다음 단계에서는 low 메모리의 마지막을 얻어야 한다.:
 
 ```C
 lowmem = *(unsigned short *)__va(BIOS_LOWMEM_KILOBYTES);
 lowmem <<= 10;
 ```
 
-We're getting the virtual address of the BIOS low memory in kilobytes and convert it to bytes with shifting it on 10 (multiply on 1024 in other words). After this we need to get the address of the extended BIOS data are with the:
+우리는 BIOS low 메모리의 가상 주소를 KB 단위의 값으로 갖고 오기 때문에 우측 10 만큼 쉬프트를 해줘야 한다.(이는 1024를 곱하는 것과 같은 의미이다.) 그 다음 확장된 BIOS 데이터의 주소를 아래와 같이 얻는다.:
+(( // TODO 마지막 괄호들 지우기
 
 ```C
 ebda_addr = get_bios_ebda();
 ```
 
-where `get_bios_ebda` function defined in the [arch/x86/include/asm/bios_ebda.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/bios_ebda.h) and looks like:
+`get_bios_ebda` 함수는 [arch/x86/include/asm/bios_ebda.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/bios_ebda.h)에 아래와 같이 구현되어 있다:
 
 ```C
 static inline unsigned int get_bios_ebda(void)
 {
-	unsigned int address = *(unsigned short *)phys_to_virt(0x40E);
+	unsigned int address = *(unsigned short *)phys_to_virt(0x40E)**; // TODO 마지막 별 두개 지우기
 	address <<= 4;
 	return address;
 }
 ```
 
-Let's try to understand how it works. Here we can see that we converting physical address `0x40E` to the virtual, where `0x0040:0x000e` is the segment which contains base address of the extended BIOS data area. Don't worry that we are using `phys_to_virt` function for converting a physical address to virtual address. You can note that previously we have used `__va` macro for the same point, but `phys_to_virt` is the same:
+이 함수가 어떻게 동작하는지 이해해보도록 하자. 우리는 물리주소 `0x40E`를 가상 주소로 변환할 것이다. 이는 `0x0040:0x000e` 로 변환 시도 될 것이며, 이 세그먼트는 확장된 BIOS 데이터 영역의 베이스 주소를 갖고 있다. 물리 주소에서 가상 주소로 변환하기 위해 `phys_to_virt` 함수를 사용할 것이다. 이미 이전에 `__va` 매크로를 통해 이와 동일한 작업을 했었고, `phys_to_virt` 함수도 이와 같은 일을 한다:
 
 ```C
 static inline void *phys_to_virt(phys_addr_t address)
@@ -215,7 +216,7 @@ static inline void *phys_to_virt(phys_addr_t address)
 }
 ```
 
-only with one difference: we pass argument with the `phys_addr_t` which depends on `CONFIG_PHYS_ADDR_T_64BIT`:
+단지 하나의 차이점이 있다면: 우리는 `CONFIG_PHYS_ADDR_T_64BIT` 옵션에 의존적인 `phys_addr_t` 타입의 인자를 넘겨 줄것이다.:
 
 ```C
 #ifdef CONFIG_PHYS_ADDR_T_64BIT

@@ -1,12 +1,13 @@
-Kernel initialization. Part 4.
+커널 초기화. Part 4.
 ================================================================================
 
-Kernel entry point
+커널 엔트리 포인트
 ================================================================================
 
-If you have read the previous part - [Last preparations before the kernel entry point](https://github.com/0xAX/linux-insides/blob/master/Initialization/linux-initialization-3.md), you can remember that we finished all pre-initialization stuff and stopped right before the call to the `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c). The `start_kernel` is the entry of the generic and architecture independent kernel code, although we will return to the `arch/` folder many times. If you look inside of the `start_kernel` function, you will see that this function is very big. For this moment it contains about `86` calls of functions. Yes, it's very big and of course this part will not cover all the processes that occur in this function. In the current part we will only start to do it. This part and all the next which will be in the [Kernel initialization process](https://github.com/0xAX/linux-insides/blob/master/Initialization/README.md) chapter will cover it.
+[init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일에 있는 `start_kernel` 함수 호출 바로 직전에 수행하는 모든 초기화 작업을 확인했을 것이다. `start_kernel` 는 일반적인 엔트리 포인트(모드 아키텍쳐가 부르는)이고 비록 `arch/` 디렉토리의 호출이 있지만 아키텍처에 독립적인 커널 코드이다. 이미 `start_kernel` 함수를 봤다면, 이 함수가 얼마나 많은 내용을 담고 있는지 알 수 있을 것이다. 이 함수는 약 `86` 개의 함수 호출을 갖고 있다. 그렇다. 이 함수는 매우 크고, 이 파트에서 이 함수에서 일어나는 모든 일들을 다룰 수는 없을 것이다. 현재 파트에서는 단지 시작에 불과하다. [커널 초기화 과정](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/README.md) 을 보면, 다음 파트에서 어떤 내용을 다룰지 대략적으로 알 수 있다.
 
 The main purpose of the `start_kernel` to finish kernel initialization process and launch the first `init` process. Before the first process will be started, the `start_kernel` must do many things such as: to enable [lock validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt), to initialize processor id, to enable early [cgroups](http://en.wikipedia.org/wiki/Cgroups) subsystem, to setup per-cpu areas, to initialize different caches in [vfs](http://en.wikipedia.org/wiki/Virtual_file_system), to initialize memory manager, rcu, vmalloc, scheduler, IRQs, ACPI and many many more. Only after these steps will we see the launch of the first `init` process in the last part of this chapter. So much kernel code awaits us, let's start.
+`start_kernel` 함수의 주된 목적은 커널 초기화 과정을 마무리하고 `init` 프로세스를 실행하는 것이다. 
 
 **NOTE: All parts from this big chapter `Linux Kernel initialization process` will not cover anything about debugging. There will be a separate chapter about kernel debugging tips.**
 
@@ -74,7 +75,7 @@ Every process has its own stack and it is 16 kilobytes or 4 page frames. in `x86
 struct thread_info {
         struct task_struct      *task;
         struct exec_domain      *exec_domain;
-        __u32                   flags; 
+        __u32                   flags;
         __u32                   status;
         __u32                   cpu;
         int                     saved_preempt_count;
@@ -263,7 +264,7 @@ Remember that we have passed `cpu_number` as `pcp` to the `this_cpu_read` from t
                 __bad_size_call_parameter(); break;                     \
         }                                                               \
         pscr_ret__;                                                     \
-}) 
+})
 ```
 
 Yes, it looks a little strange but it's easy. First of all we can see the definition of the `pscr_ret__` variable with the `int` type. Why int? Ok, `variable` is `common_cpu` and it was declared as per-cpu int variable:

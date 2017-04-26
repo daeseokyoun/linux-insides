@@ -6,70 +6,69 @@
 
 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일에 있는 `start_kernel` 함수 호출 바로 직전에 수행하는 모든 초기화 작업을 확인했을 것이다. `start_kernel` 는 일반적인 엔트리 포인트(모드 아키텍쳐가 부르는)이고 비록 `arch/` 디렉토리의 호출이 있지만 아키텍처에 독립적인 커널 코드이다. 이미 `start_kernel` 함수를 봤다면, 이 함수가 얼마나 많은 내용을 담고 있는지 알 수 있을 것이다. 이 함수는 약 `86` 개의 함수 호출을 갖고 있다. 그렇다. 이 함수는 매우 크고, 이 파트에서 이 함수에서 일어나는 모든 일들을 다룰 수는 없을 것이다. 현재 파트에서는 단지 시작에 불과하다. [커널 초기화 과정](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/README.md) 을 보면, 다음 파트에서 어떤 내용을 다룰지 대략적으로 알 수 있다.
 
-The main purpose of the `start_kernel` to finish kernel initialization process and launch the first `init` process. Before the first process will be started, the `start_kernel` must do many things such as: to enable [lock validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt), to initialize processor id, to enable early [cgroups](http://en.wikipedia.org/wiki/Cgroups) subsystem, to setup per-cpu areas, to initialize different caches in [vfs](http://en.wikipedia.org/wiki/Virtual_file_system), to initialize memory manager, rcu, vmalloc, scheduler, IRQs, ACPI and many many more. Only after these steps will we see the launch of the first `init` process in the last part of this chapter. So much kernel code awaits us, let's start.
-`start_kernel` 함수의 주된 목적은 커널 초기화 과정을 마무리하고 `init` 프로세스를 실행하는 것이다. 
+`start_kernel` 함수의 주된 목적은 커널 초기화 과정을 마무리하고 `init` 프로세스를 실행하는 것이다. 첫 프로세스가 시작되기 전에 `start_kernel` 은 많은 일들을 처리해야 한다: [lock validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt) 활성화, 프로세서 ID 초기화, 초기 [cgroups](http://en.wikipedia.org/wiki/Cgroups) 서브 시스템 활성화, per-cpu 영역 설정, [vfs](http://en.wikipedia.org/wiki/Virtual_file_system) 내에 서로 다른 캐쉬들을 초기화, 메모리 관리 시스템, RCU, vmalloc, 스케쥴러, IRQ 들, ACPI 그리고 많은 것을 초기화 한다. 이 모든 단계 바로 뒤에는 이 파트에 마지막에서 첫 `init` 프로세스의 실행으로 볼 수 있다. 정말 많은 커널 코드가 우리를 기다리고 있다. 시작해보자.
 
-**NOTE: All parts from this big chapter `Linux Kernel initialization process` will not cover anything about debugging. There will be a separate chapter about kernel debugging tips.**
+**NOTE: 이 파트를 포함한 `리눅스 커널 초기화 과정` 내에서는 디버깅과 관련된 내용을 포함하지 않는다. 디버깅 관련사항은 디버깅 챕터에서 따로 살펴 볼 것이다.**
 
-A little about function attributes
+함수 속성
 ---------------------------------------------------------------------------------
 
-As I wrote above, the `start_kernel` function is defined in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c). This function defined with the `__init` attribute and as you already may know from other parts, all functions which are defined with this attribute are necessary during kernel initialization.
+[init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에 `start_kernel`은 구현되어 있다. 이 함수는 `__init` 속성과 함께 선언이 되어 있고, 다른 파트에서 이미 봐서 알고 있을 수 있겠지만, 커널 초기화 동안에 필요했던 함수들은 이 속성과 함께 선언되어 있다.
 
 ```C
-#define __init      __section(.init.text) __cold notrace
+#define __init      __section(.init.text) __cold notrace__ // TODO 맨뒤 언더바 두개
 ```
 
-After the initialization process have finished, the kernel will release these sections with a call to the `free_initmem` function. Note also that `__init` is defined with two attributes: `__cold` and `notrace`. The purpose of the first `cold` attribute is to mark that the function is rarely used and the compiler must optimize this function for size. The second `notrace` is defined as:
+초기화 과정이 끝나면, 커널은 `free_initmem` 함수 호출을 통해 이 섹션들을 해제한다. `__init` 은 두 개의 속성 `__cold` 와 `notrace` 이 함께 정의 되어 있다. 첫번째 `cold` 속성의 목적은 이 함수는 거의 사용되지 않는 함수로 설정하는 것이고 컴파일러에게 크기를 위한 최적화를 하도록 한다. 두번째 `notrace` 속성은 아래와 같이 선언되어 있다:
 
 ```C
 #define notrace __attribute__((no_instrument_function))
 ```
 
-where `no_instrument_function` says to the compiler not to generate profiling function calls.
+`no_instrument_function` 은 컴파일러에게 이 속성을 사용한 함수에서 프로파일링을 위한 추가 코드를 생성하지 않도록 한다.
 
-In the definition of the `start_kernel` function, you can also see the `__visible` attribute which expands to the:
+`start_kernel` 함수의 선언을 보면, 또 다른 `__visible` 속성을 볼 수 있을 것이다:
 
 ```
 #define __visible __attribute__((externally_visible))
 ```
 
-where `externally_visible` tells to the compiler that something uses this function or variable, to prevent marking this function/variable as `unusable`. You can find the definition of this and other macro attributes in [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h).
+`externally_visible` 속성은 컴파일러에게 함수나 변수에게 `unusable` 로 마킹하는 것을 방지 하도록 한다. 다른 매크로 속성들을 확인하고 싶다면, [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h) 을 보시길 바란다.
 
-First steps in the start_kernel
+start_kernel 의 첫 단계
 --------------------------------------------------------------------------------
 
-At the beginning of the `start_kernel` you can see the definition of these two variables:
+`start_kernel` 함수 첫 부분에 두 개의 변수 선언을 볼 수 있다:
 
 ```C
 char *command_line;
 char *after_dashes;
 ```
 
-The first represents a pointer to the kernel command line and the second will contain the result of the `parse_args` function which parses an input string with parameters in the form `name=value`, looking for specific keywords and invoking the right handlers. We will not go into the details related with these two variables at this time, but will see it in the next parts. In the next step we can see a call to the `set_task_stack_end_magic` function. This function takes address of the `init_task` and sets `STACK_END_MAGIC` (`0x57AC6E9D`) as canary for it. `init_task` represents the initial task structure:
+첫 번째 변수는 커널 명령 라인의 포인터을 위한 포인터이고, 두 번째는 `name=value` 의 형태로 주어지는 인자들의 문자열을 파싱하고 특정 키워드를 찾아 알맞은 핸들러를 수행하도록 하는 `parse_args` 함수의 결과를 저장하기 위한 것이다. 지금은 이 변수들을 자세히 살펴 보진 않을 것이고, 다음 파트에서 보도록 하자. 다음 단계는 `set_task_stack_end_magic` 함수의 호출이다. 이 함수는 `init_task` 의 주소를 받아서 canary 값인 `STACK_END_MAGIC` (`0x57AC6E9D`) 을 설정한다. `init_task` 은 초기 태스크 구조체를 나타낸다.:
 
 ```C
 struct task_struct init_task = INIT_TASK(init_task);
 ```
 
-where `task_struct` stores all the information about a process. I will not explain this structure in this book because it's very big. You can find its definition in [include/linux/sched.h](https://github.com/torvalds/linux/blob/master/include/linux/sched.h#L1278). At this moment `task_struct` contains more than `100` fields! Although you will not see the explanation of the `task_struct` in this book, we will use it very often since it is the fundamental structure which describes the `process` in the Linux kernel. I will describe the meaning of the fields of this structure as we meet them in practice.
+`task_struct` 는 하나의 프로세스에 관련된 모든 정보를 저장한다. 나는 너무 설명이 많이 필요한 이 구조체 대해서 설명하지 않은 것이다. [include/linux/sched.h](https://github.com/torvalds/linux/blob/master/include/linux/sched.h#L1278) 에서 선언을 찾아 볼 수 있다. 보면 알겠지만, `task_struct` 에는 100 개가 넘는 필드가 있다! 비록 `task_struct` 의 설명을 이 책에서 얻을 수는 없겠지만, 우리는 리눅스 커널에서 `process(프로세스)` 를 기술하면서 기본적인 구조체이기 때문에 매우 많이 사용될 것이고, 사용되는 과정에서 각각에 설명이 필요한 필드들은 설명을 진행할 것이다.
 
-You can see the definition of the `init_task` and it initialized by the `INIT_TASK` macro. This macro is from [include/linux/init_task.h](https://github.com/torvalds/linux/blob/master/include/linux/init_task.h) and it just fills the `init_task` with the values for the first process. For example it sets:
+`init_task` 의 선언을 보면, `INIT_TASK` 매크로에 의해 초기화 된다는 것을 알 수 있다. 이 매크로는 [include/linux/init_task.h](https://github.com/torvalds/linux/blob/master/include/linux/init_task.h) 에 있고, 첫 프로세스를 위한 값들을 `init_task`에 채워넣는다. 예를 들어, 그것은 아래와 같이 설정한다:
 
-* init process state to zero or `runnable`. A runnable process is one which is waiting only for a CPU to run on;
-* init process flags - `PF_KTHREAD` which means - kernel thread;
-* a list of runnable task;
-* process address space;
-* init process stack to the `&init_thread_info` which is `init_thread_union.thread_info` and `initthread_union` has type - `thread_union` which contains `thread_info` and process stack:
+* init 프로세스 상태를 0 또는 `runnable` 로 한다. 수행가능한 상태(`runnable`) 프로세스는 단지 CPU 에서 수행되기를 기다리는 상태 이다.
+* init 프로세스 플래그 - `PF_KTHREAD` 로 한다. 이는 커널 쓰레드라는 의미 이다.
+* 수행가능한 상태 태스크들의 리스트
+* 프로세스 주소 공간
+* init 프로세스 스택은 `thread_info` 와 프로세스 스택을 갖고 있는 `thread_union` 에 `&init_thread_info` 를 할당하여 정한다.:
 
 ```C
 union thread_union {
-	struct thread_info thread_info;
+	  struct thread_info thread_info;
     unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 ```
 
-Every process has its own stack and it is 16 kilobytes or 4 page frames. in `x86_64`. We can note that it is defined as array of `unsigned long`. The next field of the `thread_union` is - `thread_info` defined as:
+모든 프로세스는 각자의 스택을 가지고 그 크기는 16 킬로바이트 이거나 4 개의 페이지 프레임을 가진다. 물론 `x86_64` 기준이다. 우리는 `unsigned long` 의 배열으로 선언된 것을 볼 수 있다. 다음 항목으로는 `thread_info` 가 있고 아래와 같이 선언되어 있다:
 
 ```C
 struct thread_info {
@@ -81,13 +80,14 @@ struct thread_info {
         int                     saved_preempt_count;
         mm_segment_t            addr_limit;
         struct restart_block    restart_block;
-        void __user             *sysenter_return;
+        void __user             *sysenter_return;* // TODO 마지막 별 지우기
         unsigned int            sig_on_uaccess_error:1;
         unsigned int            uaccess_err:1;
 };
 ```
 
 and occupies 52 bytes. The `thread_info` structure contains architecture-specific information on the thread. We know that on `x86_64` the stack grows down and `thread_union.thread_info` is stored at the bottom of the stack in our case. So the process stack is 16 kilobytes and `thread_info` is at the bottom. The remaining thread_size will be `16 kilobytes - 62 bytes = 16332 bytes`. Note that `thread_union` represented as the [union](http://en.wikipedia.org/wiki/Union_type) and not structure, it means that `thread_info` and stack share the memory space.
+이 구조체는 52 바이트를 차지 한다. `thread_info` 구조체는 쓰레드의 아키텍처 의존적인 정보를 포함한다. 우리는 ``
 
 Schematically it can be represented as follows:
 

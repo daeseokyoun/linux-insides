@@ -86,10 +86,9 @@ struct thread_info {
 };
 ```
 
-and occupies 52 bytes. The `thread_info` structure contains architecture-specific information on the thread. We know that on `x86_64` the stack grows down and `thread_union.thread_info` is stored at the bottom of the stack in our case. So the process stack is 16 kilobytes and `thread_info` is at the bottom. The remaining thread_size will be `16 kilobytes - 62 bytes = 16332 bytes`. Note that `thread_union` represented as the [union](http://en.wikipedia.org/wiki/Union_type) and not structure, it means that `thread_info` and stack share the memory space.
-이 구조체는 52 바이트를 차지 한다. `thread_info` 구조체는 쓰레드의 아키텍처 의존적인 정보를 포함한다. 우리는 ``
+이 구조체는 52 바이트를 차지 한다. `thread_info` 구조체는 쓰레드의 아키텍처 의존적인 정보를 포함한다. 우리는 `x86_64` 에서 스택은 아래로 자라고 `thread_union.thread_info` 는 스택의 맨 바닥에 저장되어 있다는 것을 알 것이다. 그래서 프로세스 스택은 16 KB 이고, `thread_info` 는 스택의 맨 밑바닥에 있다. 남은 쓰레드의 크기는 `16 킬로바이트 - 52 바이트 = 16332 bytes` 가 될 것이다. 아시다 시피 `thread_union` 의 타입인 [union](http://en.wikipedia.org/wiki/Union_type) 은 구조체가 아니기 때문에 `thread_info` 와 스택은 같은 메모리 공간을 공유할 것이다.
 
-Schematically it can be represented as follows:
+개략적으로 아래와 같이 표현될 수 있다.:
 
 ```C
 +-----------------------+
@@ -110,32 +109,32 @@ Schematically it can be represented as follows:
 
 http://www.quora.com/In-Linux-kernel-Why-thread_info-structure-and-the-kernel-stack-of-a-process-binds-in-union-construct
 
-So the `INIT_TASK` macro fills these `task_struct's` fields and many many more. As I already wrote above, I will not describe all the fields and values in the `INIT_TASK` macro but we will see them soon.
+그래서 `INIT_TASK` 매크로는 `task_struct 의` 많은 필드들을 채운다. 내가 위에서 언급했듯이 모든 필드들을 살펴보진 않을 것이고 차차 나오게 되면 그때 하나씩 보도록 하자.
 
-Now let's go back to the `set_task_stack_end_magic` function. This function defined in the [kernel/fork.c](https://github.com/torvalds/linux/blob/master/kernel/fork.c#L297) and sets a [canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow) to the `init` process stack to prevent stack overflow.
+이제 `set_task_stack_end_magic` 함수로 돌아가 보자. 이 함수는 [kernel/fork.c](https://github.com/torvalds/linux/blob/master/kernel/fork.c#L297) 에 선언되어 있고 [canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow) 값을 스택 오버플로우를 막기 위해 `init` 프로세스 스택에 설정한다.
 
 ```C
 void set_task_stack_end_magic(struct task_struct *tsk)
 {
 	unsigned long *stackend;
 	stackend = end_of_stack(tsk);
-	*stackend = STACK_END_MAGIC; /* for overflow detection */
+	*stackend = STACK_END_MAGIC; /* for overflow detection */* // TODO 마지막 별
 }
 ```
 
-Its implementation is simple. `set_task_stack_end_magic` gets the end of the stack for the given `task_struct` with the `end_of_stack` function. Earlier (and now for all architectures besides `x86_64`) stack was located in the `thread_info` structure. So the end of a process stack depends on the `CONFIG_STACK_GROWSUP` configuration option. As we learn in `x86_64` architecture, the stack grows down. So the end of the process stack will be:
+이 함수의 구현은 간단하다. `set_task_stack_end_magic` 함수는 주어진 `task_struct` 타입의 변수를 가지고 `end_of_stack` 함수를 통해 스택의 끝을 얻는다. 초기 (`x86_64` 이외의 모든 아키텍쳐) 스택은 `thread_info` 구조체에 위치한다. 그래서 프로세스 스택의 끝은 `CONFIG_STACK_GROWSUP` 구성 옵션에 의존적이다. `x86_64` 아키텍쳐를 배우고 있으니까, 스택은 아래로 자란다. 그래서 프로세스 스택의 끝은 아래와 같이 된다:
 
 ```C
 (unsigned long *)(task_thread_info(p) + 1);
 ```
 
-where `task_thread_info` just returns the stack which we filled with the `INIT_TASK` macro:
+`task_thread_info` 는 단지 `INIT_TASK` 매크로에 의해 채워진 스택을 반환한다.:
 
 ```C
-#define task_thread_info(task)  ((struct thread_info *)(task)->stack)
+#define task_thread_info(task)  ((struct thread_info *)*(task)->stack) // TODO 타입뒤에 두번째 별 지우기
 ```
 
-From the Linux kernel `v4.9-rc1` release, `thread_info` structure may contains only flags and stack pointer resides in `task_struct` structure which represents a thread in the Linux kernel. This depends on `CONFIG_THREAD_INFO_IN_TASK` kernel configuration option which is enabled by default for `x86_64`. You can be sure in this if you will look in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) configuration build file:
+리눅스 커널 `v4.9-rc1` 릴리즈에서는, `thread_info` 구조체는 아마도 단지 플래그들과 리눅스 커널에서 쓰레드를 표현하는 `task_struct` 구조체에 있는 스택 포인터만 포함 할 것이다. 그것은 `x86_64` 에서는 기본적으로 활성화 되어 있는  `CONFIG_THREAD_INFO_IN_TASK` 커널 구성 옵션에 의존적이다. 당신은 [init/Kconfig](https://github.com/torvalds/linux/blob/master/init/Kconfig) 를 확인해 보면 관련 내용을 확인 할 수 있을 것이다.:
 
 ```
 config THREAD_INFO_IN_TASK
@@ -147,9 +146,12 @@ config THREAD_INFO_IN_TASK
 
 	  One subtle change that will be needed is to use try_get_task_stack()
 	  and put_task_stack() in save_thread_stack_tsk() and get_wchan().
+  [번역] 이 옵션의 선택으로 thread_info 를 task_struct 로 옮기고, thread_union 에
+	스택만 남긴다. 이것이 가능하려면, arch 는 플래그를 제외한 thread_info 관련 항목을
+	모두 지우고 runtime 버그를 수정해야 한다.
 ```
 
-and [arch/x86/Kconfig](https://github.com/torvalds/linux/blob/master/arch/x86/Kconfig):
+그리고 [arch/x86/Kconfig](https://github.com/torvalds/linux/blob/master/arch/x86/Kconfig):
 
 ```
 config X86
@@ -163,28 +165,28 @@ config X86
         ...
 ```
 
-So, in this way we may just get end of a thread stack from the given `task_struct` structure:
+이러면, 주어진 `task_struct` 구조체로 부터 쓰레드 스택의 끝을 바로 얻을 수 있다.:
 
 ```C
 #ifdef CONFIG_THREAD_INFO_IN_TASK
-static inline unsigned long *end_of_stack(const struct task_struct *task)
+static inline unsigned long *end_of_stack(const struct task_struct *task)* // TODO 마지막 별
 {
 	return task->stack;
 }
 #endif
 ```
 
-As we got the end of the init process stack, we write `STACK_END_MAGIC` there. After `canary` is set, we can check it like this:
+init 프로세스 스택의 끝을 얻었으니, 거기에 `STACK_END_MAGIC` 값을 쓴다. `canary` 가 설정되면, 우리는 아래와 같이 확인 가능하다.:
 
 ```C
-if (*end_of_stack(task) != STACK_END_MAGIC) {
+if (*end_of_stack(task) != STACK_END_MAGIC) {* // TODO 마지막 별
         //
         // handle stack overflow here
 	//
 }
 ```
 
-The next function after the `set_task_stack_end_magic` is `smp_setup_processor_id`. This function has an empty body for `x86_64`:
+`set_task_stack_end_magic` 가 완료되면, 다음 호출 함수는 `smp_setup_processor_id` 이다. 이 함수는 `x86_64` 에서는 비어 있다.:
 
 ```C
 void __init __weak smp_setup_processor_id(void)
@@ -192,11 +194,11 @@ void __init __weak smp_setup_processor_id(void)
 }
 ```
 
-as it not implemented for all architectures, but some such as [s390](http://en.wikipedia.org/wiki/IBM_ESA/390) and [arm64](http://en.wikipedia.org/wiki/ARM_architecture#64.2F32-bit_architecture).
+모든 아키텍쳐에서 필요한 사항은 아니고, 몇몇의 [s390](http://en.wikipedia.org/wiki/IBM_ESA/390) 와 [arm64](http://en.wikipedia.org/wiki/ARM_architecture#64.2F32-bit_architecture)에서 필요하다.
 
-The next function in `start_kernel` is `debug_objects_early_init`. Implementation of this function is almost the same as `lockdep_init`, but fills hashes for object debugging. As I wrote above, we will not see the explanation of this and other functions which are for debugging purposes in this chapter.
+`start_kernel` 에서 다음 함수는 `debug_objects_early_init` 이다. 이 함수의 구현은 `lockdep_init` 와 거의 유사하지만, 오브젝트 디버깅을 위해 해쉬들을 초기화 한다. 이 챕터에서는 디버깅 목적을 위한 내용을 다루지 않을 것이다.
 
-After the `debug_object_early_init` function we can see the call of the `boot_init_stack_canary` function which fills `task_struct->canary` with the canary value for the `-fstack-protector` gcc feature. This function depends on the `CONFIG_CC_STACKPROTECTOR` configuration option and if this option is disabled, `boot_init_stack_canary` does nothing, otherwise it generates random numbers based on random pool and the [TSC](http://en.wikipedia.org/wiki/Time_Stamp_Counter):
+`debug_object_early_init` 호출 다음에 `-fstack-protector` gcc 옵션을 위해 canary 값을 `task_struct->canary` 에 채우는 `boot_init_stack_canary` 함수를 호출한다. 이 함수는 `CONFIG_CC_STACKPROTECTOR` 구성 옵션에 의존적이며, 만약 이 옵션이 비활성화 되어 있다면, `boot_init_stack_canary` 함수는 아무것도 하지 않을 것이며, 반대로 활성화 되어 있다면, [TSC](http://en.wikipedia.org/wiki/Time_Stamp_Counter) 와 랜덤 풀을 기반으로 난수값을 생성한다.:
 
 ```C
 get_random_bytes(&canary, sizeof(canary));
@@ -204,19 +206,19 @@ tsc = __native_read_tsc();
 canary += tsc + (tsc << 32UL);
 ```
 
-After we got a random number, we fill the `stack_canary` field of `task_struct` with it:
+난수를 얻은 다음에, 우리는 `task_struct` 구조체의 `stack_canary` 항목을 그 값으로 채운다.:
 
 ```C
 current->stack_canary = canary;
 ```
 
-and write this value to the top of the IRQ stack with the:
+그리고 이 값을 IRQ 스택의 맨 위에 쓴다.
 
 ```C
 this_cpu_write(irq_stack_union.stack_canary, canary); // read below about this_cpu_write
 ```
 
-Again, we will not dive into details here, we will cover it in the part about [IRQs](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29). As canary is set, we disable local and early boot IRQs and register the bootstrap CPU in the CPU maps. We disable local IRQs (interrupts for current CPU) with the `local_irq_disable` macro which expands to the call of the `arch_local_irq_disable` function from [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h):
+이 부분도 자세히 다루지 않을 것이고, [IRQs](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29) 관련된 파트에서 더 살펴 보자. canary 값이 설정되면, [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h) 에 선언된 대로 `arch_local_irq_disable` 함수의 호출을 하는 `local_irq_disable` 함수를 통해 현재 인터럽트를 금지하도록 한다.:
 
 ```C
 static inline notrace void arch_local_irq_enable(void)
@@ -225,30 +227,30 @@ static inline notrace void arch_local_irq_enable(void)
 }
 ```
 
-Where `native_irq_enable` is `cli` instruction for `x86_64`. As interrupts are disabled we can register the current CPU with the given ID in the CPU bitmap.
+`native_irq_enable` 함수는 `x86_64` 에서 `cli` 명령어를 수행한다. 인터럽트를 금지함으로써 우리는 CPU 비트맵에서 주어진 ID 로 현재 CPU를 등록할 수 있다.
 
-The first processor activation
+첫번째 프로세서 활성화
 ---------------------------------------------------------------------------------
 
-The current function from the `start_kernel` is `boot_cpu_init`. This function initializes various CPU masks for the bootstrap processor. First of all it gets the bootstrap processor id with a call to:
+이제 봐야 하는 함수는 `boot_cpu_init` 이다. 이 함수는 부트스트랩 프로세서를 위해 다양한 CPU 마스크를 초기화 한다. 제일 처음으로는 아래와 같은 호출로 부트스트랩 프토세서의 ID 를 얻어온다:
 
 ```C
 int cpu = smp_processor_id();
 ```
 
-For now it is just zero. If the `CONFIG_DEBUG_PREEMPT` configuration option is disabled, `smp_processor_id` just expands to the call of `raw_smp_processor_id` which expands to the:
+지금은 그냥 0 이다. 만약 `CONFIG_DEBUG_PREEMPT` 구성 옵션이 비활성화 상태라면, `smp_processor_id` 함수는 `raw_smp_processor_id` 의 호출을 하고, 그 호출은 아래와 같다:
 
 ```C
 #define raw_smp_processor_id() (this_cpu_read(cpu_number))
 ```
 
-`this_cpu_read` as many other function like this (`this_cpu_write`, `this_cpu_add` and etc...) defined in the [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h) and presents `this_cpu` operation. These operations provide a way of optimizing access to the [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Theory/per-cpu.html) variables which are associated with the current processor. In our case it is `this_cpu_read`:
+`this_cpu_read` 와 같은 다음 많은 시리즈(`this_cpu_write`, `this_cpu_add` 과 같은)의 함수가 [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h) 에 선언되어 있고, `this_cpu` 수행을 표현한다. 이 모든 수행은 현재 프로세서와 연결된 [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Theory/per-cpu.html) 변수들을 최적화된 접근 방법을 제공한다. 현재 우리의 상황에 `this_cpu_read`는 아래와 같다:
 
 ```
 __pcpu_size_call_return(this_cpu_read_, pcp)
 ```
 
-Remember that we have passed `cpu_number` as `pcp` to the `this_cpu_read` from the `raw_smp_processor_id`. Now let's look at the `__pcpu_size_call_return` implementation:
+우리는 `raw_smp_processor_id` 매크로를 통해 `this_cpu_read` 를 호출하고 `pcp` 로 `cpu_number` 를 넘겨주었다. 이제 `__pcpu_size_call_return` 구현을 살펴보자.:
 
 ```C
 #define __pcpu_size_call_return(stem, variable)                         \
@@ -267,22 +269,22 @@ Remember that we have passed `cpu_number` as `pcp` to the `this_cpu_read` from t
 })
 ```
 
-Yes, it looks a little strange but it's easy. First of all we can see the definition of the `pscr_ret__` variable with the `int` type. Why int? Ok, `variable` is `common_cpu` and it was declared as per-cpu int variable:
+그렇다, 조금 이상해 보일 수는 있지만 쉬운 내용이다. 첫째로 `pscr_ret__` 변수를 `int` 타입으로 선언하는 것을 볼 수 있다. 왜 int 인가? `variable` 는 `cpu_number` 이고 그것은 per-cpu 로써 int 로 선언되어 있다:
 
 ```C
 DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
 ```
 
-In the next step we call `__verify_pcpu_ptr` with the address of `cpu_number`. `__veryf_pcpu_ptr` used to verify that the given parameter is a per-cpu pointer. After that we set `pscr_ret__` value which depends on the size of the variable. Our `common_cpu` variable is `int`, so it 4 bytes in size. It means that we will get `this_cpu_read_4(common_cpu)` in `pscr_ret__`. In the end of the `__pcpu_size_call_return` we just call it. `this_cpu_read_4` is a macro:
+다음 단계는 `cpu_number` 주소와 함께 `__verify_pcpu_ptr` 의 호출이다. `__veryf_pcpu_ptr` 은 주어진 인자가 per-cpu 포인터 인지 검증한다. 그 다음에 `variable` 의 크기에 의존적으로 `pscr_ret__`를 설정한다. `cpu_number` 변수는 `int` 이니, 그 크기는 4 바이트 일 것이다. 그것은 `pscr_ret__` 로 부터 `this_cpu_read_4(cpu_number)` 를 얻을 수 있다는 의미이다. `__pcpu_size_call_return` 의 마지막에는 단지 그것을 호출하는 것으로 끝을 낸다.:
 
 ```C
 #define this_cpu_read_4(pcp)       percpu_from_op("mov", pcp)
 ```
 
-which calls `percpu_from_op` and pass `mov` instruction and per-cpu variable there. `percpu_from_op` will expand to the inline assembly call:
+`this_cpu_read_4` 는 `percpu_from_op` 를 호출하고 `mov` 명령어와 per-cpu 변수를 넘겨준다. 결국 `percpu_from_op` 는 아래와 같이 인라인 어셈블리 호출로 변환된다.:
 
 ```C
-asm("movl %%gs:%1,%0" : "=r" (pfo_ret__) : "m" (common_cpu))
+asm("movl %%gs:%1,%0" : "=r" (pfo_ret__) : "m" (cpu_number))
 ```
 
 Let's try to understand how it works and what it does. The `gs` segment register contains the base of per-cpu area. Here we just copy `common_cpu` which is in memory to the `pfo_ret__` with the `movl` instruction. Or with another words:
@@ -482,3 +484,4 @@ Links
 * [IRQs](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29)
 * [initrd](http://en.wikipedia.org/wiki/Initrd)
 * [Previous part](https://github.com/0xAX/linux-insides/blob/master/Initialization/linux-initialization-3.md)
+* [SSP (stack-smashing protector)](http://egloos.zum.com/studyfoss/v/5279959)

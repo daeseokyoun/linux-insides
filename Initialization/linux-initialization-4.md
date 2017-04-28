@@ -244,7 +244,7 @@ int cpu = smp_processor_id();
 #define raw_smp_processor_id() (this_cpu_read(cpu_number))
 ```
 
-`this_cpu_read` 와 같은 다음 많은 시리즈(`this_cpu_write`, `this_cpu_add` 과 같은)의 함수가 [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h) 에 선언되어 있고, `this_cpu` 수행을 표현한다. 이 모든 수행은 현재 프로세서와 연결된 [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Theory/per-cpu.html) 변수들을 최적화된 접근 방법을 제공한다. 현재 우리의 상황에 `this_cpu_read`는 아래와 같다:
+`this_cpu_read` 와 같은 다음 많은 시리즈(`this_cpu_write`, `this_cpu_add` 과 같은)의 함수가 [include/linux/percpu-defs.h](https://github.com/torvalds/linux/blob/master/include/linux/percpu-defs.h) 에 선언되어 있고, `this_cpu` 수행을 표현한다. 이 모든 수행은 현재 프로세서와 연결된 [per-cpu](https://github.com/daeseokyoun/linux-insides/blob/master/Theory/per-cpu.html) 변수들을 최적화된 접근 방법을 제공한다. 현재 우리의 상황에 `this_cpu_read`는 아래와 같다:
 
 ```
 __pcpu_size_call_return(this_cpu_read_, pcp)
@@ -287,21 +287,21 @@ DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
 asm("movl %%gs:%1,%0" : "=r" (pfo_ret__) : "m" (cpu_number))
 ```
 
-Let's try to understand how it works and what it does. The `gs` segment register contains the base of per-cpu area. Here we just copy `common_cpu` which is in memory to the `pfo_ret__` with the `movl` instruction. Or with another words:
+이것이 어떻게 동작하고 무엇을 하는지 이해해보자. `gs` 세그먼트 레지스터는 per-cpu 영역의 기본 주소를 갖고 있다. 여기서 우리는 단지 `movl` 명령어로 `cpu_number` 에서 `pfo_ret__` 로 복사를 한다. 즉, :
 
 ```C
-this_cpu_read(common_cpu)
+this_cpu_read(cpu_number)
 ```
 
-is the same as:
+는 아래와 같다:
 
 ```C
-movl %gs:$common_cpu, $pfo_ret__
+movl %gs:$cpu_number, $pfo_ret__
 ```
 
-As we didn't setup per-cpu area, we have only one - for the current running CPU, we will get `zero` as a result of the `smp_processor_id`.
+아직 per-cpu 영역이 설정되지 않아, 우리는 단지 현재 수행중인 CPU 를 위한 하나만 갖고 있다. 그래서 `smp_processor_id` 의 결과는 0으로 얻어질 것이다.
 
-As we got the current processor id, `boot_cpu_init` sets the given CPU online, active, present and possible with the:
+우리는 현재 프로세서 ID 를 얻어, `boot_cpu_init` 에서 주어진 CPU 를 online, active, present 그리고 possible 상태로 설정한다.:
 
 ```C
 set_cpu_online(cpu, true);
@@ -310,27 +310,27 @@ set_cpu_present(cpu, true);
 set_cpu_possible(cpu, true);
 ```
 
-All of these functions use the concept - `cpumask`. `cpu_possible` is a set of CPU ID's which can be plugged in at any time during the life of that system boot. `cpu_present` represents which CPUs are currently plugged in. `cpu_online` represents subset of the `cpu_present` and indicates CPUs which are available for scheduling. These masks depend on the `CONFIG_HOTPLUG_CPU` configuration option and if this option is disabled `possible == present` and `active == online`. Implementation of the all of these functions are very similar. Every function checks the second parameter. If it is `true`, it calls `cpumask_set_cpu` or `cpumask_clear_cpu` otherwise.
+위의 모든 함수들은 `cpumask` 라는 개념을 사용한다. `cpu_possible` 은 시스템 부팅 중에 언제든지 끼워넣을 수 있는 CPU ID 들의 집합이다. `cpu_present`는 현재 존재하는 CPU ID 들의 집합이다. `cpu_online` 은 `cpu_present` 의 서브셋인데, 스케쥴러가 관리하는 현재 존재하는 CPU 를 가르킨다. 이 mask 들은 `CONFIG_HOTPLUG_CPU` 구성 옵션에 의존적이며, 이 옵션이 비활성화 되어 있다면, `possible == present` 와 `active == online` 의 공식이 성립한다. 이 모든 것을 위한 함수의 구현들은 매우 비슷하다. 모든 함수는 두 번째 인자를 확인한다. 만약 그것이 `true` 이면, `cpumask_set_cpu` 를 호출하고 아니라면, `cpumask_clear_cpu`를 호출한다.
 
-For example let's look at `set_cpu_possible`. As we passed `true` as the second parameter, the:
+예를들어 `set_cpu_possible`를 보자. 두 번째 인자로 `true`를 넘긴다면, :
 
 ```C
 cpumask_set_cpu(cpu, to_cpumask(cpu_possible_bits));
 ```
 
-will be called. First of all let's try to understand the `to_cpumask` macro. This macro casts a bitmap to a `struct cpumask *`. CPU masks provide a bitmap suitable for representing the set of CPU's in a system, one bit position per CPU number. CPU mask presented by the `cpu_mask` structure:
+위의 함수가 호출될 것이다. 우선 `to_cpumask` 매크로를 이해해야 한다. 이 매크로는 비트맵을 `struct cpumask *` 로 타입 캐스팅한다. CPU mask 는 시스템에서 CPU 의 설정을 비트맵으로 제공한다. 하나의 비트 위치는 CPU 번호를 의미한다. CPU mask 는 `cpu_mask` 구조체로 표현된다.:
 
 ```C
 typedef struct cpumask { DECLARE_BITMAP(bits, NR_CPUS); } cpumask_t;
-```
+```로
 
-which is just bitmap declared with the `DECLARE_BITMAP` macro:
+`DECLARE_BITMAP` 매크로와 함께 비트맵을 선언한다.:
 
 ```C
 #define DECLARE_BITMAP(name, bits) unsigned long name[BITS_TO_LONGS(bits)]
 ```
 
-As we can see from its definition, the `DECLARE_BITMAP` macro expands to the array of `unsigned long`. Now let's look at how the `to_cpumask` macro is implemented:
+이 정의에서 볼 수 있듯이, `DECLARE_BITMAP`는 `unsigned long` 의 배열로 확장된다. 이제 `to_cpumask` 매크로가 어떻게 구현되었는지 살펴 보자:
 
 ```C
 #define to_cpumask(bitmap)                                              \
@@ -338,44 +338,45 @@ As we can see from its definition, the `DECLARE_BITMAP` macro expands to the arr
                             : (void *)sizeof(__check_is_bitmap(bitmap))))
 ```
 
-I don't know about you, but it looked really weird for me at the first time. We can see a ternary operator here which is `true` every time, but why the `__check_is_bitmap` here? It's simple, let's look at it:
+이 매크로의 구성을 보면 이상하다는 것을 알 수 있다. 무조건 `true` 를 가지는 조건의 문장이지만, 왜 `__check_is_bitmap` 가 필요한 것인가? 그것은 아주 간단하다. 아래를 보자:
 
 ```C
-static inline int __check_is_bitmap(const unsigned long *bitmap)
+static inline int __check_is_bitmap(const unsigned long *bitmap*) // TODO 마지막 별지우기
 {
         return 1;
 }
 ```
 
 Yeah, it just returns `1` every time. Actually we need in it here only for one purpose: at compile time it checks that the given `bitmap` is a bitmap, or in other words it checks that the given `bitmap` has a type of `unsigned long *`. So we just pass `cpu_possible_bits` to the `to_cpumask` macro for converting the array of `unsigned long` to the `struct cpumask *`. Now we can call `cpumask_set_cpu` function with the `cpu` - 0 and `struct cpumask *cpu_possible_bits`. This function makes only one call of the `set_bit` function which sets the given `cpu` in the cpumask. All of these `set_cpu_*` functions work on the same principle.
+`__check_is_bitmap` 함수는 무조건 `1`을 반환한다. 실제 우리는 이것을 사용하는 것은 단지 하나의 목적밖에 없다: 컴파일 시간에 그것은 주어진 `bitmap` 을 bitmap 인지 아니면 `unsigned long *` 의 타입을 가지는 `bitmap` 변수인지 확인한다. 그래서 우리는 넘어온 `cpu_possible_bits` 를 `to_cpumask` 매크로를 통해 `unsigned long` 에서 `struct cpumask *` 으로 변환한다. 이제 우리는 `cpumask_set_cpu` 함수를 `cpu` - 0 과 `struct cpumask *cpu_possible_bits` 함께 호출할 수 있다. 이 함수는 주어진 cpu mask 내에 `cpu` 가 설정하도록 하는 `set_bit` 함수를 호출한다. `set_cpu_*` 이런 종류의 함수들은 같은 원칙을 갖고 수행한다.
 
-If you're not sure that this `set_cpu_*` operations and `cpumask` are not clear for you, don't worry about it. You can get more info by reading the special part about it - [cpumask](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html) or [documentation](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt).
+만약 `set_cpu_*` 수행과 `cpumask` 에 관련해서 명확하지 않는다해도 걱정말자. 당신이 추가적으로 정보를 얻을 수 있는 파트를 마련해 두었다. [cpumask](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.html) 와 [documentation](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt)이다.
 
-As we activated the bootstrap processor, it's time to go to the next function in the `start_kernel.` Now it is `page_address_init`, but this function does nothing in our case, because it executes only when all `RAM` can't be mapped directly.
+우리는 부트스트랩 프로세서를 활성화했으니, `start_kernel` 내의 그 다음 함수를 살펴보자. 이제 `page_address_init` 함수이다. 하지만 이 함수는 우리가 진행하고 있는 경우에는 아무 것도 하지 않는다. 왜냐하면 그것은 모든 `RAM` 을 직접 맵핑 할 수 없는 경우에만 실행되기 때문이다.
 
-Print linux banner
+리눅스 배너 출력
 ---------------------------------------------------------------------------------
 
-The next call is `pr_notice`:
+다음 호출은 `pr_notice`이다:
 
 ```C
 #define pr_notice(fmt, ...) \
     printk(KERN_NOTICE pr_fmt(fmt), ##__VA_ARGS__)
 ```
 
-as you can see it just expands to the `printk` call. At this moment we use `pr_notice` to print the Linux banner:
+이 함수는 단지 `printk` 의 호출을 확장했다는 것을 볼 수 있다. 그리고 이것은 리눅스 배너를 출력할때 사용된다:
 
 ```C
 pr_notice("%s", linux_banner);
 ```
 
-which is just the kernel version with some additional parameters:
+추가적인 인자들과 커널 버전을 출력한다.:
 
 ```
 Linux version 4.0.0-rc6+ (alex@localhost) (gcc version 4.9.1 (Ubuntu 4.9.1-16ubuntu6) ) #319 SMP
 ```
 
-Architecture-dependent parts of initialization
+아키텍처 의존적인 부분의 초기화
 ---------------------------------------------------------------------------------
 
 The next step is architecture-specific initialization. The Linux kernel does it with the call of the `setup_arch` function. This is a very big function like `start_kernel` and we do not have time to consider all of its implementation in this part. Here we'll only start to do it and continue in the next part. As it is `architecture-specific`, we need to go again to the `arch/` directory. The `setup_arch` function defined in the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c) source code file and takes only one argument - address of the kernel command line.
@@ -485,3 +486,4 @@ Links
 * [initrd](http://en.wikipedia.org/wiki/Initrd)
 * [Previous part](https://github.com/0xAX/linux-insides/blob/master/Initialization/linux-initialization-3.md)
 * [SSP (stack-smashing protector)](http://egloos.zum.com/studyfoss/v/5279959)
+* [SMP 초기화](http://egloos.zum.com/studyfoss/v/5444259)

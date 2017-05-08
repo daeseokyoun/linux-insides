@@ -347,10 +347,9 @@ static inline int __check_is_bitmap(const unsigned long *bitmap*) // TODO 마지
 }
 ```
 
-Yeah, it just returns `1` every time. Actually we need in it here only for one purpose: at compile time it checks that the given `bitmap` is a bitmap, or in other words it checks that the given `bitmap` has a type of `unsigned long *`. So we just pass `cpu_possible_bits` to the `to_cpumask` macro for converting the array of `unsigned long` to the `struct cpumask *`. Now we can call `cpumask_set_cpu` function with the `cpu` - 0 and `struct cpumask *cpu_possible_bits`. This function makes only one call of the `set_bit` function which sets the given `cpu` in the cpumask. All of these `set_cpu_*` functions work on the same principle.
 `__check_is_bitmap` 함수는 무조건 `1`을 반환한다. 실제 우리는 이것을 사용하는 것은 단지 하나의 목적밖에 없다: 컴파일 시간에 그것은 주어진 `bitmap` 을 bitmap 인지 아니면 `unsigned long *` 의 타입을 가지는 `bitmap` 변수인지 확인한다. 그래서 우리는 넘어온 `cpu_possible_bits` 를 `to_cpumask` 매크로를 통해 `unsigned long` 에서 `struct cpumask *` 으로 변환한다. 이제 우리는 `cpumask_set_cpu` 함수를 `cpu` - 0 과 `struct cpumask *cpu_possible_bits` 함께 호출할 수 있다. 이 함수는 주어진 cpu mask 내에 `cpu` 가 설정하도록 하는 `set_bit` 함수를 호출한다. `set_cpu_*` 이런 종류의 함수들은 같은 원칙을 갖고 수행한다.
 
-만약 `set_cpu_*` 수행과 `cpumask` 에 관련해서 명확하지 않는다해도 걱정말자. 당신이 추가적으로 정보를 얻을 수 있는 파트를 마련해 두었다. [cpumask](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.html) 와 [documentation](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt)이다.
+만약 `set_cpu_*` 수행과 `cpumask` 에 관련해서 명확하지 않는다해도 걱정말자. 당신이 추가적으로 정보를 얻을 수 있는 파트를 마련해 두었다. [cpumask](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.md) 와 [documentation](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt)이다.
 
 우리는 부트스트랩 프로세서를 활성화했으니, `start_kernel` 내의 그 다음 함수를 살펴보자. 이제 `page_address_init` 함수이다. 하지만 이 함수는 우리가 진행하고 있는 경우에는 아무 것도 하지 않는다. 왜냐하면 그것은 모든 `RAM` 을 직접 맵핑 할 수 없는 경우에만 실행되기 때문이다.
 
@@ -379,39 +378,39 @@ Linux version 4.0.0-rc6+ (alex@localhost) (gcc version 4.9.1 (Ubuntu 4.9.1-16ubu
 아키텍처 의존적인 부분의 초기화
 ---------------------------------------------------------------------------------
 
-The next step is architecture-specific initialization. The Linux kernel does it with the call of the `setup_arch` function. This is a very big function like `start_kernel` and we do not have time to consider all of its implementation in this part. Here we'll only start to do it and continue in the next part. As it is `architecture-specific`, we need to go again to the `arch/` directory. The `setup_arch` function defined in the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c) source code file and takes only one argument - address of the kernel command line.
+다음 단계는 아키텍처 의존적인 초기화이다. 리눅스 커널은 `setup_arch` 함수를 통해 그런 일을 한다. 이 함수는 `start_kernel` 과 같이 아주 큰 함수이고 이 파트에서 모든 구현 내용을 살펴보기에는 시간이 부족한다. 여기서는 단지 시작만하고 다른 파트에서 계속해서 살펴보도록 하자. `architecture-specific(아키텍처에 특정한)` 부분으로써, 우리는 `arch/` 디렉토리로 다시 가봐야 한다. `setup_arch` 함수는 [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c) 파일에 구현되어 있으며, 커널 명령 라인의 주소만 인자로 받는다.
 
-This function starts from the reserving memory block for the kernel `_text` and `_data` which starts from the `_text` symbol (you can remember it from the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S#L46)) and ends before `__bss_stop`. We are using `memblock` for the reserving of memory block:
+이 함수는 커널의 `_text` 와 `_text` 심볼로 부터 시작하는 `_data`를 위해 메모리 블럭을 예약하는 것 부터 시작한다.(당신은 이것이 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S#L46)) 에 정의되어 확인 가능하다.) 그리고 `__bss_stop` 까지가 범위이다. 우리는 `memblock` 을 이용하여 메모리 블럭을 예약한다.:
 
 ```C
-memblock_reserve(__pa_symbol(_text), (unsigned long)__bss_stop - (unsigned long)_text);
+memblock_reserve(__pa_symbol(_text), (unsigned long)__bss_stop - (unsigned long)_text___); // TODO 마지막 언더바 3개
 ```
 
-You can read about `memblock` in the [Linux kernel memory management Part 1.](http://0xax.gitbooks.io/linux-insides/content/mm/linux-mm-1.html). As you can remember `memblock_reserve` function takes two parameters:
+당신은 [리눅스 커널 메모리 관리 Part 1.](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-1.html) 에서 `memblock` 관련 내용을 볼 수 있다. `memblock_reserve` 는 두개의 인자를 받는다는 것을 기억하자:
 
-* base physical address of a memory block;
-* size of a memory block.
+* 메모리 블럭 시작 물리 주소
+* 메모리 블럭의 크기
 
-We can get the base physical address of the `_text` symbol with the `__pa_symbol` macro:
+`__pa_symbol` 매크로를 이용하여 `_text` 심볼의 베이스 물리 주소를 얻을 수 있다:
 
 ```C
 #define __pa_symbol(x) \
-	__phys_addr_symbol(__phys_reloc_hide((unsigned long)(x)))
+	__phys_addr_symbol(__phys_reloc_hide__((unsigned long)(x))) // TODO hide 뒤에 언더바 2개
 ```
 
-First of all it calls `__phys_reloc_hide` macro on the given parameter. The `__phys_reloc_hide` macro does nothing for `x86_64` and just returns the given parameter. Implementation of the `__phys_addr_symbol` macro is easy. It just subtracts the symbol address from the base address of the kernel text mapping base virtual address (you can remember that it is `__START_KERNEL_map`) and adds `phys_base` which is the base address of `_text`:
+`__pa_symbol` 매크로는 `__phys_reloc_hide` 를 주어진 인자를 넘겨 호출한다. `__phys_reloc_hide` 매크로는 `x86_64` 를 위해 아무 것도 하지 않을 것이고 주어진 인자를 단지 반환할 것이다. `__phys_addr_symbol` 매크로의 구현은 아주 쉽다. 그것은 단지 심볼 주소에서 커널 텍스트 가상 주소의 시작(`__START_KERNEL_map`)과 `_text` 의 시작주소인 `phys_base` 를 더한 것을 빼준다.:
 
 ```C
 #define __phys_addr_symbol(x) \
- ((unsigned long)(x) - __START_KERNEL_map + phys_base)
+ ((unsigned long)(x) - __START_KERNEL_map__ + phys_base) // TODO map 뒤에 언더바 2개
 ```
 
-After we got the physical address of the `_text` symbol, `memblock_reserve` can reserve a memory block from the `_text` to the `__bss_stop - _text`.
+`_text` 심볼의 물리 주소를 얻은 다음, `memblock_reserve` 는 `_text` 에서 `__bss_stop - _text` 크기 만큼 메모리 블럭을 예약할 수 있다.
 
-Reserve memory for initrd
+initrd 를 위한 메모리 예약
 ---------------------------------------------------------------------------------
 
-In the next step after we reserved place for the kernel text and data is reserving place for the [initrd](http://en.wikipedia.org/wiki/Initrd). We will not see details about `initrd` in this post, you just may know that it is temporary root file system stored in memory and used by the kernel during its startup. The `early_reserve_initrd` function does all work. First of all this function gets the base address of the ram disk, its size and the end address with:
+커널 텍스와 데이터를 위한 공간 예약이후에는 [initrd](http://en.wikipedia.org/wiki/Initrd)를 위한 공간의 확보되어야 한다. 우리는 `initrd` 관련된 내용을 자세히 살펴보지는 않을 것이고, 단지 이것은 커널이 시작하는 과정에서 사용되기 위해 메모리에 저장되는 임시의 루트 파일 시스템이라고 알고 있으면 된다. `early_reserve_initrd` 함수에서 이 공간 확보를 한다. 이함수의 처음 하는 일은 램디스크의 시작 주소, 크기 그리고 마지막 주소를 얻는 것이다:
 
 ```C
 u64 ramdisk_image = get_ramdisk_image();
@@ -419,7 +418,7 @@ u64 ramdisk_size  = get_ramdisk_size();
 u64 ramdisk_end   = PAGE_ALIGN(ramdisk_image + ramdisk_size);
 ```
 
-All of these parameters are taken from `boot_params`. If you have read the chapter about [Linux Kernel Booting Process](http://0xax.gitbooks.io/linux-insides/content/Booting/index.html), you must remember that we filled the `boot_params` structure during boot time. The kernel setup header contains a couple of fields which describes ramdisk, for example:
+이 모든 내용은 `boot_params` 로 부터 가져온다. 만약 [리눅스 커널 부팅 과정](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/README.md) 을 읽었다면, 부팅 시간에 `boot_params` 가 어떻게 채워지는지 파악했을 것이다. 커널 설정 헤더는 램디스크와 관련된 몇몇의 항목을 갖고 있다. 예를 들면:
 
 ```
 Field name:	ramdisk_image
@@ -431,7 +430,7 @@ Protocol:	2.00+
   zero if there is no initial ramdisk/ramfs.
 ```
 
-So we can get all the information that interests us from `boot_params`. For example let's look at `get_ramdisk_image`:
+그래서 우리는 `boot_params` 부터 관심있는 정보를 모두 얻을 수 잇다. 예를 들어 `get_ramdisk_image` 함수를 살펴보자:
 
 ```C
 static u64 __init get_ramdisk_image(void)
@@ -444,13 +443,13 @@ static u64 __init get_ramdisk_image(void)
 }
 ```
 
-Here we get the address of the ramdisk from the `boot_params` and shift left it on `32`. We need to do it because as you can read in the [Documentation/x86/zero-page.txt](https://github.com/0xAX/linux/blob/master/Documentation/x86/zero-page.txt):
+`boot_params` 로 부터 램디스크 관련 주소를 `32` 왼쪽 쉬프트 하여 얻는다. [Documentation/x86/zero-page.txt](https://github.com/0xAX/linux/blob/master/Documentation/x86/zero-page.txt) 내용을 보면 왜 이렇게 하는지 알 수 있다.:
 
 ```
 0C0/004	ALL	ext_ramdisk_image ramdisk_image high 32bits
 ```
 
-So after shifting it on 32, we're getting a 64-bit address in `ramdisk_image` and we return it. `get_ramdisk_size` works on the same principle as `get_ramdisk_image`, but it used `ext_ramdisk_size` instead of `ext_ramdisk_image`. After we got ramdisk's size, base address and end address, we check that bootloader provided ramdisk with the:
+32 비트 쉬프트까지 하고, 64 비트 `ramdisk_image` 주소를 얻어 반환한다. `get_ramdisk_size` 함수는 `get_ramdisk_image` 와 같은 원리로 동작하지만, `ext_ramdisk_image` 대신에 `ext_ramdisk_size`를 사용한다. 램디스크의 크기, 시작 주소 그리고 마지막 주소를 얻고나서, 부트로더에서 제공된 램디스크 정보를 확인한다.:
 
 ```C
 if (!boot_params.hdr.type_of_loader ||
@@ -458,22 +457,22 @@ if (!boot_params.hdr.type_of_loader ||
 	return;
 ```
 
-and reserve memory block with the calculated addresses for the initial ramdisk in the end:
+마지막으로 초기 램디스크를 위해 계산된 주소들과 함께 메모리 블럭을 예약한다:
 
 ```C
 memblock_reserve(ramdisk_image, ramdisk_end - ramdisk_image);
 ```
 
-Conclusion
+결론
 ---------------------------------------------------------------------------------
 
-It is the end of the fourth part about the Linux kernel initialization process. We started to dive in the kernel generic code from the `start_kernel` function in this part and stopped on the architecture-specific initialization in the `setup_arch`. In the next part we will continue with architecture-dependent initialization steps.
+리눅스 커널 초기화 과정의 4번째 파트가 마무리되었다. 우리는 이 파트에서 `start_kernel` 함수에서 부터 커널 일반 코드를 살펴보기 시작했고 아키텍처 특화의 초기화하는 `setup_arch` 에서 끝난다. 다음 파트에서 아키텍처 의존적인 초기화 과정이 계속 진행 될 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me a PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
-Links
+링크
 --------------------------------------------------------------------------------
 
 * [GCC function attributes](https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html)

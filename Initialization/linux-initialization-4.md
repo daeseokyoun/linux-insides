@@ -16,7 +16,7 @@
 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에 `start_kernel`은 구현되어 있다. 이 함수는 `__init` 속성과 함께 선언이 되어 있고, 다른 파트에서 이미 봐서 알고 있을 수 있겠지만, 커널 초기화 동안에 필요했던 함수들은 이 속성과 함께 선언되어 있다.
 
 ```C
-#define __init      __section(.init.text) __cold notrace__ // TODO 맨뒤 언더바 두개
+#define __init      __section(.init.text) __cold notrace
 ```
 
 초기화 과정이 끝나면, 커널은 `free_initmem` 함수 호출을 통해 이 섹션들을 해제한다. `__init` 은 두 개의 속성 `__cold` 와 `notrace` 이 함께 정의 되어 있다. 첫번째 `cold` 속성의 목적은 이 함수는 거의 사용되지 않는 함수로 설정하는 것이고 컴파일러에게 크기를 위한 최적화를 하도록 한다. 두번째 `notrace` 속성은 아래와 같이 선언되어 있다:
@@ -80,7 +80,7 @@ struct thread_info {
         int                     saved_preempt_count;
         mm_segment_t            addr_limit;
         struct restart_block    restart_block;
-        void __user             *sysenter_return;* // TODO 마지막 별 지우기
+        void __user             *sysenter_return;
         unsigned int            sig_on_uaccess_error:1;
         unsigned int            uaccess_err:1;
 };
@@ -118,7 +118,7 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 {
 	unsigned long *stackend;
 	stackend = end_of_stack(tsk);
-	*stackend = STACK_END_MAGIC; /* for overflow detection */* // TODO 마지막 별
+	*stackend = STACK_END_MAGIC; /* for overflow detection */
 }
 ```
 
@@ -131,7 +131,7 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 `task_thread_info` 는 단지 `INIT_TASK` 매크로에 의해 채워진 스택을 반환한다.:
 
 ```C
-#define task_thread_info(task)  ((struct thread_info *)*(task)->stack) // TODO 타입뒤에 두번째 별 지우기
+#define task_thread_info(task)  ((struct thread_info *)(task)->stack)
 ```
 
 리눅스 커널 `v4.9-rc1` 릴리즈에서는, `thread_info` 구조체는 아마도 단지 플래그들과 리눅스 커널에서 쓰레드를 표현하는 `task_struct` 구조체에 있는 스택 포인터만 포함 할 것이다. 그것은 `x86_64` 에서는 기본적으로 활성화 되어 있는  `CONFIG_THREAD_INFO_IN_TASK` 커널 구성 옵션에 의존적이다. 당신은 [init/Kconfig](https://github.com/torvalds/linux/blob/master/init/Kconfig) 를 확인해 보면 관련 내용을 확인 할 수 있을 것이다.:
@@ -169,7 +169,7 @@ config X86
 
 ```C
 #ifdef CONFIG_THREAD_INFO_IN_TASK
-static inline unsigned long *end_of_stack(const struct task_struct *task)* // TODO 마지막 별
+static inline unsigned long *end_of_stack(const struct task_struct *task)
 {
 	return task->stack;
 }
@@ -179,7 +179,7 @@ static inline unsigned long *end_of_stack(const struct task_struct *task)* // TO
 init 프로세스 스택의 끝을 얻었으니, 거기에 `STACK_END_MAGIC` 값을 쓴다. `canary` 가 설정되면, 우리는 아래와 같이 확인 가능하다.:
 
 ```C
-if (*end_of_stack(task) != STACK_END_MAGIC) {* // TODO 마지막 별
+if (*end_of_stack(task) != STACK_END_MAGIC) {
         //
         // handle stack overflow here
 	//
@@ -341,7 +341,7 @@ typedef struct cpumask { DECLARE_BITMAP(bits, NR_CPUS); } cpumask_t;
 이 매크로의 구성을 보면 이상하다는 것을 알 수 있다. 무조건 `true` 를 가지는 조건의 문장이지만, 왜 `__check_is_bitmap` 가 필요한 것인가? 그것은 아주 간단하다. 아래를 보자:
 
 ```C
-static inline int __check_is_bitmap(const unsigned long *bitmap*) // TODO 마지막 별지우기
+static inline int __check_is_bitmap(const unsigned long *bitmap)
 {
         return 1;
 }
@@ -383,7 +383,7 @@ Linux version 4.0.0-rc6+ (alex@localhost) (gcc version 4.9.1 (Ubuntu 4.9.1-16ubu
 이 함수는 커널의 `_text` 와 `_text` 심볼로 부터 시작하는 `_data`를 위해 메모리 블럭을 예약하는 것 부터 시작한다.(당신은 이것이 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S#L46)) 에 정의되어 확인 가능하다.) 그리고 `__bss_stop` 까지가 범위이다. 우리는 `memblock` 을 이용하여 메모리 블럭을 예약한다.:
 
 ```C
-memblock_reserve(__pa_symbol(_text), (unsigned long)__bss_stop - (unsigned long)_text___); // TODO 마지막 언더바 3개
+memblock_reserve(__pa_symbol(_text), (unsigned long)__bss_stop - (unsigned long)_text);
 ```
 
 당신은 [리눅스 커널 메모리 관리 Part 1.](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-1.html) 에서 `memblock` 관련 내용을 볼 수 있다. `memblock_reserve` 는 두개의 인자를 받는다는 것을 기억하자:
@@ -395,14 +395,14 @@ memblock_reserve(__pa_symbol(_text), (unsigned long)__bss_stop - (unsigned long)
 
 ```C
 #define __pa_symbol(x) \
-	__phys_addr_symbol(__phys_reloc_hide__((unsigned long)(x))) // TODO hide 뒤에 언더바 2개
+	__phys_addr_symbol(__phys_reloc_hide((unsigned long)(x)))
 ```
 
 `__pa_symbol` 매크로는 `__phys_reloc_hide` 를 주어진 인자를 넘겨 호출한다. `__phys_reloc_hide` 매크로는 `x86_64` 를 위해 아무 것도 하지 않을 것이고 주어진 인자를 단지 반환할 것이다. `__phys_addr_symbol` 매크로의 구현은 아주 쉽다. 그것은 단지 심볼 주소에서 커널 텍스트 가상 주소의 시작(`__START_KERNEL_map`)과 `_text` 의 시작주소인 `phys_base` 를 더한 것을 빼준다.:
 
 ```C
 #define __phys_addr_symbol(x) \
- ((unsigned long)(x) - __START_KERNEL_map__ + phys_base) // TODO map 뒤에 언더바 2개
+ ((unsigned long)(x) - __START_KERNEL_map + phys_base)
 ```
 
 `_text` 심볼의 물리 주소를 얻은 다음, `memblock_reserve` 는 `_text` 에서 `__bss_stop - _text` 크기 만큼 메모리 블럭을 예약할 수 있다.

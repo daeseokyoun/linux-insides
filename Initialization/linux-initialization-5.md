@@ -4,7 +4,7 @@ Kernel initialization. Part 5.
 Continue of architecture-specific initialization
 ================================================================================
 
-In the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html), we stopped at the initialization of an architecture-specific stuff from the [setup_arch](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c#L856) function and now we will continue with it. As we reserved memory for the [initrd](http://en.wikipedia.org/wiki/Initrd), next step is the `olpc_ofw_detect` which detects [One Laptop Per Child support](http://wiki.laptop.org/go/OFW_FAQ). We will not consider platform related stuff in this book and will skip functions related with it. So let's go ahead. The next step is the `early_trap_init` function. This function initializes debug (`#DB` - raised when the `TF` flag of rflags is set) and `int3` (`#BP`) interrupts gate. If you don't know anything about interrupts, you can read about it in the [Early interrupt and exception handling](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html). In `x86` architecture `INT`, `INTO` and `INT3` are special instructions which allow a task to explicitly call an interrupt handler. The `INT3` instruction calls the breakpoint (`#BP`) handler. You may remember, we already saw it in the [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html) about interrupts: and exceptions:
+이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-4.md) 에서, 우리는 [setup_arch](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c#L856) 함수에서 아키텍처 의존적인 것들을 초기화하는 과정에서 멈추었고 그것을 이 파트에서 계속진행하려 한다. [initrd](http://en.wikipedia.org/wiki/Initrd) 를 위해 메모리 블럭을 예약했고, 다음 단계는 [One Laptop Per Child support](http://wiki.laptop.org/go/OFW_FAQ) 를 검출하는 `olpc_ofw_detect` 이다. 이 책에서는 플랫폼과 관련된 것은 다루지 않을 것이고 그것과 관련된 함수들은 넘어갈 것이다. 계속 진행해보자. 다음 단계는 `early_trap_init` 함수이다. 이 함수는 디버그와(`#DB` rflags 의 `TF` 플래그를 셋할 때, 올라온다) `int3`(`#BP`) 인터럽트 게이트를 초기화한다. 만약 인터럽트에 대해 아무것도 모른다면, 너는 [초기 인터럽트와 Exception](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md) 을 읽어보도록 하자. `x86` 아키텍처에서 `INT`, `INTO` 그리고 `INT3` 는 명시적으로 인터럽트 핸들러를 호출하도록 허가하는 특별한 명령어이다. `INT3` 명령어는 브레이크포인트(`#BP`) 핸들러를 호출한다. 이것 또한 [이전 파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md) 에서 인터럽트와 예외 처리를 알아보았다.:
 
 ```
 ----------------------------------------------------------------------------------------------
@@ -14,7 +14,7 @@ In the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initializat
 ----------------------------------------------------------------------------------------------
 ```
 
-Debug interrupt `#DB` is the primary method of invoking debuggers. `early_trap_init` defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c). This functions sets `#DB` and `#BP` handlers and reloads [IDT](http://en.wikipedia.org/wiki/Interrupt_descriptor_table):
+디버그 인터럽트인 `#DB`는 디버거를 수행하는 주요 함수인 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) 에 구현되어 있는 `early_trap_init` 를 보자. 이 함수는 `#DB` 는 `#BP` 핸들러를 설정하고 [IDT](http://en.wikipedia.org/wiki/Interrupt_descriptor_table) 를 재 로드 한다.:
 
 ```C
 void __init early_trap_init(void)
@@ -25,25 +25,24 @@ void __init early_trap_init(void)
 }
 ```
 
-We already saw implementation of the `set_intr_gate` in the previous part about interrupts. Here are two similar functions `set_intr_gate_ist` and `set_system_intr_gate_ist`. Both of these two functions take three parameters:
+인터럽트와 관련된 `set_intr_gate` 의 구현을 이전 파트에서 이미 보았다. 여기에 또 다른 두개의 비슷한 함수인 `set_intr_gate_ist` 와 `set_system_intr_gate_ist`가 있다. 이 두개의 함수는 3개의 인자를 받는다.:
 
-* number of the interrupt;
-* base address of the interrupt/exception handler;
-* third parameter is - `Interrupt Stack Table`. `IST` is a new mechanism in the `x86_64` and part of the [TSS](http://en.wikipedia.org/wiki/Task_state_segment). Every active thread in kernel mode has own kernel stack which is `16` kilobytes. While a thread in user space, this kernel stack is empty.
+* 인터럽트 번호
+* 인터럽트/예외 핸들러의 베이스 주소
+* 세번째 인자는 `Interrupt Stack Table` 이다.  `IST`  는 `x86_64` 에서 새로운 매커니즘이고 [TSS](http://en.wikipedia.org/wiki/Task_state_segment) 의 일부이다. 모든 활성화된 커널 모드 쓰레드들은 `16` 킬로바이트의 자신만의 커널 스택을 가진다. 반면, 유저 영역의 쓰레드는 이 커널 스택은 비어 있다.
 
-In addition to per-thread stacks, there are a couple of specialized stacks associated with each CPU. All about these stack you can read in the linux kernel documentation - [Kernel stacks](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks). `x86_64` provides feature which allows to switch to a new `special` stack for during any events as non-maskable interrupt and etc... And the name of this feature is - `Interrupt Stack Table`. There can be up to 7 `IST` entries per CPU and every entry points to the dedicated stack. In our case this is `DEBUG_STACK`.
+per-thread 스택 이외에, 각 CPU 와 연관된 특별한 몇개의 스택들이 있다. 이 모든 스택은 리눅스 커널 문서인 [Kernel stacks](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks) 를 보자. `x86_64` 는 넌 마스커블 인터럽트등과 같은 어떤 이벤트를 처리하는 동안 새로운 `특별한` 스택으로 전환할 수 있도록 하는 기능을 제공한다. 그리고 기능의 이름을 `Interrupt Stack Table` 라 한다. 각 CPU 마다 7 개의 `IST` 이상의 엔트리들이 있을 수 있고 모든 엔트리 포인트들은 전용의 스택을 갖고 있다. 우리의 경우에는 `DEBUG_STACK` 이다.
 
-`set_intr_gate_ist` and `set_system_intr_gate_ist` work by the same principle as `set_intr_gate` with only one difference. Both of these functions checks
-interrupt number and call `_set_gate` inside:
+`set_intr_gate_ist` 와 `set_system_intr_gate_ist` 는 단지 하나의 차이점만 있지 기능적으로는 `set_intr_gate` 와 같다. 이 두 함수는 인터럽트 번호확인과 내부적으로 `_set_gate`를 호출한다.:
 
 ```C
 BUG_ON((unsigned)n > 0xFF);
-_set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS);
+_set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS__); // TODO 마지막 언더바 2개
 ```
 
-as `set_intr_gate` does this. But `set_intr_gate` calls `_set_gate` with [dpl](http://en.wikipedia.org/wiki/Privilege_level) - 0, and ist - 0, but `set_intr_gate_ist` and `set_system_intr_gate_ist` sets `ist` as `DEBUG_STACK` and `set_system_intr_gate_ist` sets `dpl` as `0x3` which is the lowest privilege. When an interrupt occurs and the hardware loads such a descriptor, then hardware automatically sets the new stack pointer based on the IST value, then invokes the interrupt handler. All of the special kernel stacks will be set in the `cpu_init` function (we will see it later).
+`set_intr_gate`도 이와 같은 일을 한다. 하지만, `set_intr_gate` 는 [dpl](http://en.wikipedia.org/wiki/Privilege_level) 0과 함께 `_set_gate` 호출하고, ist - 0, 하지만 `set_intr_gate_ist` 와 `set_system_intr_gate_ist`는 `ist`로 `DEBUG_STACK` 설정하고 `set_system_intr_gate_ist`는 `dpl` 을 가장 낮은 특권인 `0x3` 으로 설정한다. 인터럽트가 발생하고 하드웨어가 디스크립터를 로드할 때, 하드웨어는 자동적으로 IST 값을 기반으로 새로운 스택 포인터로 설정하고, 그 다음 인터럽트를 실행한다. 모든 특별한 커널 스택은 `cpu_init` 함수내에서 설정될 것이다.(우리는 나중에 볼 것이다.)
 
-As `#DB` and `#BP` gates written to the `idt_descr`, we reload `IDT` table with `load_idt` which just cals `ldtr` instruction. Now let's look on interrupt handlers and will try to understand how they works. Of course, I can't cover all interrupt handlers in this book and I do not see the point in this. It is very interesting to delve in the linux kernel source code, so we will see how `debug` handler implemented in this part, and understand how other interrupt handlers are implemented will be your task.
+`idt_descr` 쓰여진 `#DB` 와 `#BP` 게이트는, `ldtr` 명령어를 단지 호출하는 `load_idt` 으로 `IDT` 테이블을 재로드 한다. 이제 인터럽트 핸들러를 봤고, 그것들이 어떻게 동작하는지 이해해보도록 하자. 물론, 여기서 모든 인터럽트 핸들러를 알아볼 수 없다. 그것은 리눅스 커널 소스에서 매우 흥미로운 부분이며, 이 파트에서는 `debug` 핸들어가 어떻게 구현이 되어 있는지 볼 것이고, 다른 인터럽트 핸들러의 구현 방식은 당신이 차차 알아보면 좋을 것 이다.
 
 #DB handler
 --------------------------------------------------------------------------------
@@ -298,7 +297,7 @@ presents abstraction for a tree-like subset of system resources. This structure 
        |
 +-------------+
 |             |
-|    child    | 
+|    child    |
 |             |
 +-------------+
 ```
@@ -422,7 +421,7 @@ The next step is initialization of the memory descriptor of the init process. As
 }
 ```
 
-`mm` points to the process address space and `active_mm` points to the active address space if process has no address space such as kernel threads (more about it you can read in the [documentation](https://www.kernel.org/doc/Documentation/vm/active_mm.txt)). Now we fill memory descriptor of the initial process: 
+`mm` points to the process address space and `active_mm` points to the active address space if process has no address space such as kernel threads (more about it you can read in the [documentation](https://www.kernel.org/doc/Documentation/vm/active_mm.txt)). Now we fill memory descriptor of the initial process:
 
 ```C
 	init_mm.start_code = (unsigned long) _text;
@@ -477,7 +476,7 @@ static struct resource code_resource = {
 };
 ```
 
-The last step which we will cover in this part will be `NX` configuration. `NX-bit` or no execute bit is 63-bit in the page directory entry which controls the ability to execute code from all physical pages mapped by the table entry. This bit can only be used/set when the `no-execute` page-protection mechanism is enabled by the setting `EFER.NXE` to 1. In the `x86_configure_nx` function we check that CPU has support of `NX-bit` and it does not disabled. After the check we fill `__supported_pte_mask` depend on it: 
+The last step which we will cover in this part will be `NX` configuration. `NX-bit` or no execute bit is 63-bit in the page directory entry which controls the ability to execute code from all physical pages mapped by the table entry. This bit can only be used/set when the `no-execute` page-protection mechanism is enabled by the setting `EFER.NXE` to 1. In the `x86_configure_nx` function we check that CPU has support of `NX-bit` and it does not disabled. After the check we fill `__supported_pte_mask` depend on it:
 
 ```C
 void x86_configure_nx(void)

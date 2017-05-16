@@ -47,27 +47,27 @@ _set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS__); // TODO 마지막 언
 #DB handler
 --------------------------------------------------------------------------------
 
-As you can read above, we passed address of the `#DB` handler as `&debug` in the `set_intr_gate_ist`. [lxr.free-electrons.com](http://lxr.free-electrons.com/ident) is a great resource for searching identifiers in the linux kernel source code, but unfortunately you will not find `debug` handler with it. All of you can find, it is `debug` definition in the [arch/x86/include/asm/traps.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/traps.h):
+위에서 봤듯이, 우리는 `#DB` 핸들러의 주소인 `&debug` 를 `set_intr_gate_ist` 함수로 넘긴다. [lxr.free-electrons.com](http://lxr.free-electrons.com/ident) 는 리눅스 커널 소스에서 심볼들을 찾는데 아주 훌륭한 사이트이다. 하지만 안타깝게도 `debug` 핸들러는 찾아볼 수 없을 것이다. `debug` 의 정의는 [arch/x86/include/asm/traps.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/traps.h) 에 있다.:
 
 ```C
 asmlinkage void debug(void);
 ```
 
-We can see `asmlinkage` attribute which tells to us that `debug` is function written with [assembly](http://en.wikipedia.org/wiki/Assembly_language). Yeah, again and again assembly :). Implementation of the `#DB` handler as other handlers is in this [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S) and defined with the `idtentry` assembly macro:
+`debug` 함수는 [assembly](http://en.wikipedia.org/wiki/Assembly_language) 와 함께 작성된 것이라고 알려주는 `asmlinkage` 속성을 볼 수 있다. 다른 핸들러와 마찬가지로 `#DB` 핸들러의 구현은 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 에 있고, `idtentry` 어셈블리 매크로와 함께 정의되어 있다.:
 
 ```assembly
 idtentry debug do_debug has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK
 ```
 
-`idtentry` is a macro which defines an interrupt/exception entry point. As you can see it takes five arguments:
+`idtentry` 는 인터럽트/예외 엔트리 포인트를 정의하는 매크로이다. 이것은 5 개의 인자를 받는다.:
 
-* name of the interrupt entry point;
-* name of the interrupt handler;
-* has interrupt error code or not;
-* paranoid  - if this parameter = 1, switch to special stack (read above);
-* shift_ist - stack to switch during interrupt.
+* 인터럽트 엔트리 포인트의 이름
+* 인터럽트 핸들러의 이름
+* 인터럽트 에러 코드가 있는지에 대한 여부
+* paranoid  - 만약 1이면, 특별한 스택으로 전환 (위에서 다시 보자)
+* shift_ist - 인터럽트 동안에 스택 전환
 
-Now let's look on `idtentry` macro implementation. This macro defined in the same assembly file and defines `debug` function with the `ENTRY` macro. For the start `idtentry` macro checks that given parameters are correct in case if need to switch to the special stack. In the next step it checks that give interrupt returns error code. If interrupt does not return error code (in our case `#DB` does not return error code), it calls `INTR_FRAME` or `XCPT_FRAME` if interrupt has error code. Both of these macros `XCPT_FRAME` and `INTR_FRAME` do nothing and need only for the building initial frame state for interrupts. They uses `CFI` directives and used for debugging. More info you can find in the [CFI directives](https://sourceware.org/binutils/docs/as/CFI-directives.html). As comment from the [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S) says: `CFI macros are used to generate dwarf2 unwind information for better backtraces. They don't change any code.` so we will ignore them.
+이제 `idtentry` 매크로 구현을 살펴보자. 이 매크로는 entry_64.S 파일에 정의되어 있고, `debug` 함수를 `ENTRY` 매크로를 이용해서 정의한다. `idtentry` 는 스페셜 스택으로 전환할 필요한 경우에 주어진 인자들이 알맞은 것인지 확인한다. 다음 단계로는 인터럽트가 에러 코드를 반환하는지 확인한다. 만약 인터럽트가 에러코드를 반환하지 않는다면(우리의 경우에 `#DB` 핸들러는 에러코드를 반환하지 않는다), `INTR_FRAME` 호출하고, 만약 인터럽트가 에러 코드를 가진다면 `XCPT_FRAME` 를 호출한다. `XCPT_FRAME` 와 `INTR_FRAME` 매크로는 아무것도 하지 않고 인터럽트를 위해 초기 프레임 상태를 만들기 위해 필요한 것이다. 그것들은 `CFI`(Call Frame Infomation) 지시문을 디버깅을 위해 사용한다.  [CFI directives](https://sourceware.org/binutils/docs/as/CFI-directives.html) 에서 자세한 사항을 볼 수 있을 것이다. [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 에 관련 커멘트를 보면, `CFI 매크로는 더 나은 백트레이스를 위해 dwarf2 unwind 정보를 생성할 때 사용된다. 어떤 코드도 변경하지 않는다.` 그래서 우리는 이것들을 무시할 것이다.
 
 ```assembly
 .macro idtentry sym do_sym has_error_code:req paranoid=0 shift_ist=-1
@@ -87,7 +87,7 @@ ENTRY(\sym)
 	...
 ```
 
-You can remember from the previous part about early interrupts/exceptions handling that after interrupt occurs, current stack will have following format:
+당신은 이전 파트에서 인터럽트 발생 후에 초기 인터럽트/예외 핸들링에 관한 내용을 기억할 수 있고, 현재 스택은 아래의 포멧으로 구성될 것이다.:
 
 ```
     +-----------------------+
@@ -102,16 +102,16 @@ You can remember from the previous part about early interrupts/exceptions handli
     +-----------------------+
 ```
 
-The next two macro from the `idtentry` implementation are:
+`idtentry` 의 구현에서 다음 두개의 매크로를 볼 수 있다:
 
 ```assembly
 	ASM_CLAC
 	PARAVIRT_ADJUST_EXCEPTION_FRAME
 ```
 
-First `ASM_CLAC` macro depends on `CONFIG_X86_SMAP` configuration option and need for security reason, more about it you can read [here](https://lwn.net/Articles/517475/). The second `PARAVIRT_ADJUST_EXCEPTION_FRAME` macro is for handling handle Xen-type-exceptions (this chapter about kernel initialization and we will not consider virtualization stuff here).
+첫 `ASM_CLAC` 매크로는 `CONFIG_X86_SMAP` 구성 옵션에 의존적이고 보안을 위해 필요하다. 이것에 관해서는 [여기](https://lwn.net/Articles/517475/)를 참고 바란다. 다음 `PARAVIRT_ADJUST_EXCEPTION_FRAME` 매크로는 Xen-type-exceptions 을 핸들링하기 위한 것이다. (커널 초기화 관련인 이 파트에서는 가상화 관련된 내용은 다루지 않을 것이다.)
 
-The next piece of code checks if interrupt has error code or not and pushes `$-1` which is `0xffffffffffffffff` on `x86_64` on the stack if not:
+다음 코드 조각은 만약 인터럽트가 에러 코드를 가지는지 아닌지 확인하고, 스택에 `$-1` 를 넣는다.(-1 은 `x86_64` 에서 `0xffffffffffffffff` 이다.):
 
 ```assembly
 	.ifeq \has_error_code
@@ -119,20 +119,20 @@ The next piece of code checks if interrupt has error code or not and pushes `$-1
 	.endif
 ```
 
-We need to do it as `dummy` error code for stack consistency for all interrupts. In the next step we subtract from the stack pointer `$ORIG_RAX-R15`:
+모든 인터럽트의 스택 일관성을 위한 `dummy` 에러코드가 필요한 것이다. 다음 단계는 스택 포인터로 부터 `$ORIG_RAX-R15` 를 빼준다:
 
 ```assembly
 	subq $ORIG_RAX-R15, %rsp
 ```
 
-where `ORIRG_RAX`, `R15` and other macros defined in the [arch/x86/include/asm/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/calling.h) and `ORIG_RAX-R15` is 120 bytes. General purpose registers will occupy these 120 bytes because we need to store all registers on the stack during interrupt handling. After we set stack for general purpose registers, the next step is checking that interrupt came from userspace with:
+`ORIRG_RAX`, `R15` 등의 매크로들은 [arch/x86/include/asm/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/calling.h) 에 정의되어 있고 `ORIG_RAX-R15` 는 120 바이트이다. 인터럽트 핸들링을 하는 동안 스택에 모든 레지스터의 값을 저장 할 필요가 있고 범용 레스터의 경우 120 바이트를 차지 하기 때문에, 이렇게 하는 것이다. 범용 레지스터를 위한 스택 설정 이후에, 유저 영역에서 인터럽트가 온것인지 아래와 같이 확인한다:
 
 ```assembly
 testl $3, CS(%rsp)
 jnz 1f
 ```
 
-Here we checks first and second bits in the `CS`. You can remember that `CS` register contains segment selector where first two bits are `RPL`. All privilege levels are integers in the range 0–3, where the lowest number corresponds to the highest privilege. So if interrupt came from the kernel mode we call `save_paranoid`	or jump on label `1` if not. In the `save_paranoid` we store all general purpose registers on the stack and switch user `gs` on kernel `gs` if need:
+여기서 `CS` 의 첫 번째와 두 번째의 비트를 확인한다. `CS` 레지스터는 세그먼트 레지스터를 포함하고 첫 두 비트는 `RPL` 를 위한 것이다. 모든 특권 레벨은 정수로 0-3 까지 값이고, 가장 낮은 번호가 가장 높은 특권을 나타낸다. 그래서 만얀 인터럽트가 커널 모드로 부터 왔다면, `save_paranoid` 를 호출하고, 아니라면 라벨 `1`로 점프한다. `save_paranoid` 에서는 스택에 모든 범용 레지스터를 저장하고, 필요하다면 유저 `gs` 에서 커널 `gs` 로 전환한다.:
 
 ```assembly
 	movl $1,%ebx
@@ -145,14 +145,14 @@ Here we checks first and second bits in the `CS`. You can remember that `CS` reg
 1:	ret
 ```
 
-In the next steps we put `pt_regs` pointer to the `rdi`, save error code in the `rsi` if it has and call interrupt handler which is - `do_debug` in our case from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c). `do_debug` like other handlers takes two parameters:
+다음 단계는 `pt_regs` 포인터를 `rdi` 에 넣고, `rsi` 에 있는 에러코드를 저장하고 만약 인터럽트가 발생했거나 호출이 있었다면, - 우리의 경우 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) 에 있는 `do_debug` 이다.  `do_debug` 는 다른 핸들러와 같이 두개의 인자를 받는다:
 
-* pt_regs - is a structure which presents set of CPU registers which are saved in the process' memory region;
-* error code - error code of interrupt.
+* pt_regs - 프로세스의 메모리 영역에 저장되어 있는 CPU 레지스터 셋을 갖고 있는 구조체
+* error code - 인터럽트 에러코드.
 
-After interrupt handler finished its work, calls `paranoid_exit` which restores stack, switch on userspace if interrupt came from there and calls `iret`. That's all. Of course it is not all :), but we will see more deeply in the separate chapter about interrupts.
+모든 인터럽트 핸들러가 자신의 일을 마무리 했다면, 스택을 복구하고, 유저영역에서의 호출이었다면 다시 복귀하고 `iret` 을 호출하는 `paranoid_exit` 를 호출한다. 이것이 여기서 설명하는 전부이다. 하지만 우리는 다른 챕터에서 인터럽트에 관해 깊게 살펴보도록 하자.
 
-This is general view of the `idtentry` macro for `#DB` interrupt. All interrupts are similar to this implementation and defined with idtentry too. After `early_trap_init` finished its work, the next function is `early_cpu_init`. This function defined in the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) and collects information about CPU and its vendor.
+이것은 `#DB` 인터럽트를 위한 `idtentry` 매크로의 일반적인 설명이다. 모든 인터럽트는 idtentry 와 함께 구현된 사항과 비슷할 것이다. `early_trap_init` 이 마무리되면, 다음 함수는 `early_cpu_init` 이다. 이 함수는 [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) 에 정의되어 있고 CPU 와 벤더 정보를 모은다.
 
 Early ioremap initialization
 --------------------------------------------------------------------------------

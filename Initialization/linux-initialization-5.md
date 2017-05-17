@@ -154,31 +154,30 @@ jnz 1f
 
 이것은 `#DB` 인터럽트를 위한 `idtentry` 매크로의 일반적인 설명이다. 모든 인터럽트는 idtentry 와 함께 구현된 사항과 비슷할 것이다. `early_trap_init` 이 마무리되면, 다음 함수는 `early_cpu_init` 이다. 이 함수는 [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) 에 정의되어 있고 CPU 와 벤더 정보를 모은다.
 
-Early ioremap initialization
+초기 ioremap 초기화
 --------------------------------------------------------------------------------
 
-The next step is initialization of early `ioremap`. In general there are two ways to communicate with devices:
+다음 단계는 초기 `ioremap` 을 초기화하는 것이다. 일반적으로 장치들과의 통신은 두 가지 방법이 있다.:
 
-* I/O Ports;
-* Device memory.
+* I/O 포트;
+* 장치 메모리(Device memory).
 
-We already saw first method (`outb/inb` instructions) in the part about linux kernel booting [process](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html). The second method is to map I/O physical addresses to virtual addresses. When a physical address is accessed by the CPU, it may refer to a portion of physical RAM which can be mapped on memory of the I/O device. So `ioremap` used to map device memory into kernel address space.
+우리는 이미 리눅스 커널 부팅 [과정](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-3.md) 에서 첫 번째 방법(`outb/inb` 명령어들)을 보았다. 두 번째 방법은 I/O 물리 주소를 가상 주소에 맵핑해 놓는 것이다. CPU 에 의해 물리 주소가 접근이 될 때, 그것은 I/O 장치의 메모리에 맵핑 될 수 있는 물리적인 램의 영역을 참조 할 것이다. 그래서 `ioremap` 이 장치 메모리를 커널 주소 공간에 맵핑하기 위해 사용된다.
 
-As i wrote above next function is the `early_ioremap_init` which re-maps I/O memory to kernel address space so it can access it. We need to initialize early ioremap for early initialization code which needs to temporarily map I/O or memory regions before the normal mapping functions like `ioremap` are available. Implementation of this function is in the [arch/x86/mm/ioremap.c](https://github.com/torvalds/linux/blob/master/arch/x86/mm/ioremap.c). At the start of the `early_ioremap_init` we can see definition of the `pmd` point with `pmd_t` type (which presents page middle directory entry `typedef struct { pmdval_t pmd; } pmd_t;` where `pmdval_t` is `unsigned long`) and make a check that `fixmap` aligned in a correct way:
+바로 위에 언급했던 함수는 `early_ioremap_init` 이고, 이 함수는 그것이 접근 가능 하도록 I/O 메모리를 커널 주소 공간에 재 맵핑을 해준다. 우리는 `ioremap` 사용 가능하기 전에 임시적으로 I/O 나 메모리 영역을 맵핑 해놓았던 초기화 했던 것을 정리 하기 위해 ioremap 을 초기화 할 필요가 있다. 이 함수의 구현은 [arch/x86/mm/ioremap.c](https://github.com/torvalds/linux/blob/master/arch/x86/mm/ioremap.c) 에 있다. `early_ioremap_init` 함수의 시작을 보면, `pmd_t` 타입(PMD-page middle directory 엔트리를 표현한다. 정의는 `typedef struct { pmdval_t pmd; } pmd_t;` 반면에 `pmdval_t` 는 `unsigned long`이다.)의 포인터인 `pmd`를 선언하고 알맞은 방법으로 `fixmap`에 정렬(aligned)되어 있는지 확인한다.:
 
 ```C
 pmd_t *pmd;
 BUILD_BUG_ON((fix_to_virt(0) + PAGE_SIZE) & ((1 << PMD_SHIFT) - 1));
 ```
 
-`fixmap` - is fixed virtual address mappings which extends from `FIXADDR_START` to `FIXADDR_TOP`. Fixed virtual addresses are needed for subsystems that need to know the virtual address at compile time. After the check `early_ioremap_init` makes a call of the `early_ioremap_setup` function from the [mm/early_ioremap.c](https://github.com/torvalds/linux/blob/master/mm/early_ioremap.c). `early_ioremap_setup` fills `slot_virt` array of the `unsigned long` with virtual addresses with 512 temporary boot-time fix-mappings:
-
+`fixmap` 은 `FIXADDR_START` 에서 `FIXADDR_TOP` 까지 내용을 담은 고정된 가상 주소 맵핑이다. 고정된 가상 주소들은 컴파일 시간에 가상 주소를 알아야 하는 서브 시스템을 위해 필요하다. 이런 확인 후에, `early_ioremap_init`는 [mm/early_ioremap.c](https://github.com/torvalds/linux/blob/master/mm/early_ioremap.c) 에 있는 `early_ioremap_setup` 를 호출한다. `early_ioremap_setup` 은 `unsigned long` 타입의 `slot_virt` 배열에 512 개의 임시 부트 시간(boot-time) 고정 맵핑(fix-mappings)을 채운다.:
 ```C
 for (i = 0; i < FIX_BTMAPS_SLOTS; i++)
     slot_virt[i] = __fix_to_virt(FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i);
 ```
 
-After this we get page middle directory entry for the `FIX_BTMAP_BEGIN` and put to the `pmd` variable, fills `bm_pte` with zeros which is boot time page tables and call `pmd_populate_kernel` function for setting given page table entry in the given page middle directory:
+`FIX_BTMAP_BEGIN` 을 위한 페이지 미들 디렉토리 엔트리를 얻고, 그 값을 `pmd` 변수에 넣는다. 그리고 부트 타임 페이지 테이블인 `bm_pte` 에 0 을 채우고, 주어진 페이지 미들 디렉토리 엔트리에  페이지 테이블 엔트리를 설정하기 위해 `pmd_populate_kernel`를 호출 한다:
 
 ```C
 pmd = early_ioremap_pmd(fix_to_virt(FIX_BTMAP_BEGIN));
@@ -186,7 +185,7 @@ memset(bm_pte, 0, sizeof(bm_pte));
 pmd_populate_kernel(&init_mm, pmd, bm_pte);
 ```
 
-That's all for this. If you feeling puzzled, don't worry. There is special part about `ioremap` and `fixmaps` in the [Linux Kernel Memory Management. Part 2](https://github.com/0xAX/linux-insides/blob/master/mm/linux-mm-2.md) chapter.
+여기가 전부다. 당신이 약간 당혹스럽긴하지만, 걱정말자. `ioremap` 과 `fixmaps` 에 관해 [리눅스 커널 메모리 관리. Part 2](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-2.md) 에서 더 살표 볼 것이다.
 
 Obtaining major and minor numbers for the root device
 --------------------------------------------------------------------------------

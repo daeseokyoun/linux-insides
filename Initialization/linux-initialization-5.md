@@ -187,16 +187,16 @@ pmd_populate_kernel(&init_mm, pmd, bm_pte);
 
 여기가 전부다. 당신이 약간 당혹스럽긴하지만, 걱정말자. `ioremap` 과 `fixmaps` 에 관해 [리눅스 커널 메모리 관리. Part 2](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-2.md) 에서 더 살표 볼 것이다.
 
-Obtaining major and minor numbers for the root device
+루트 장치를 위한 Major / Minor 번호 얻기
 --------------------------------------------------------------------------------
 
-After early `ioremap` was initialized, you can see the following code:
+초기 `ioremap`이 초기화 되면, 다음 코드를 볼 수 있을 것이다:
 
 ```C
 ROOT_DEV = old_decode_dev(boot_params.hdr.root_dev);
 ```
 
-This code obtains major and minor numbers for the root device where `initrd` will be mounted later in the `do_mount_root` function. Major number of the device identifies a driver associated with the device. Minor number referred on the device controlled by driver. Note that `old_decode_dev` takes one parameter from the `boot_params_structure`. As we can read from the x86 linux kernel boot protocol:
+이 코드는 나중에 `do_mount_root` 함수에서 `initrd` 를 마운트 할 루트 장치의 major / minor 번호를 얻어온다. 이 장치의 Major 번호는 장치와 연결된 드라이버를 확인해 준다. Minor 번호는 드라이버에 의해 컨트롤되는 장치를 참조한다. `old_decode_dev`는 `boot_params_structure`에 있는 하나의 필드를 인자로 받는다. x86 리눅스 커널 부트 프로토콜에서 아래와 같이 볼 수 있다:
 
 ```
 Field name:	root_dev
@@ -204,11 +204,14 @@ Type:		modify (optional)
 Offset/size:	0x1fc/2
 Protocol:	ALL
 
-  The default root device device number.  The use of this field is
+  The default root device number.  The use of this field is
   deprecated, use the "root=" option on the command line instead.
+
+  기본 루트 장치 번호. 이 필드는 더이상 사용되진 않고, 명령 라인의 "root=" 옵션에서
+  값을 넣을 수 있다.
 ```
 
-Now let's try to understand what `old_decode_dev` does. Actually it just calls `MKDEV` inside which generates `dev_t` from the give major and minor numbers. It's implementation is pretty simple:
+이제 `old_decode_dev` 에서 무엇을 하는지 이해해 보자. 실제, 이 함수는 주어진 major 와 minor 번호로 `dev_t`를 만드는 `MKDEV` 를 호출한다. 이 구현은 정말 단순하다.:
 
 ```C
 static inline dev_t old_decode_dev(u16 val)
@@ -217,7 +220,7 @@ static inline dev_t old_decode_dev(u16 val)
 }
 ```
 
-where `dev_t` is a kernel data type to present major/minor number pair.  But what's the strange `old_` prefix? For historical reasons, there are two ways of managing the major and minor numbers of a device. In the first way major and minor numbers occupied 2 bytes. You can see it in the previous code: 8 bit for major number and 8 bit for minor number. But there is a problem: only 256 major numbers and 256 minor numbers are possible. So 16-bit integer was replaced by 32-bit integer where 12 bits reserved for major number and 20 bits for minor. You can see this in the `new_decode_dev` implementation:
+`dev_t` 는 major/minor 번호의 쌍을 표현하기 위한 커널 데이터 타입이다. 하지만, 이상한 `old_` 접두사는 무엇인가? 역사적으로 살펴 보면, 장치의 major 와 minor 번호를 관리하는 두 가지 방법이 있다. 첫 번째 방법은 major 와 minor 번호를 위해 2 바이트를 사용하는 것이다. 당신이 이전 코드를 본다면: major 번호를 위해 8 비트, minor 번호를 위해 8 비트를 사용한다. 하지만 이 방법은 major/minor 번호를 각각 256 개만 사용할 수 있다는 것이다. 그래서 16 비트 정수 형을 사용해서 32 비트 정수형에다가 12 비트는 major 번호로 사용하고 20 비트는 minor 번호를 관리하는데 사용한다. `new_decode_dev` 구현을 살펴보자.:
 
 ```C
 static inline dev_t new_decode_dev(u32 dev)
@@ -228,12 +231,12 @@ static inline dev_t new_decode_dev(u32 dev)
 }
 ```
 
-After calculation we will get `0xfff` or 12 bits for `major` if it is `0xffffffff` and `0xfffff` or 20 bits for `minor`. So in the end of execution of the `old_decode_dev` we will get major and minor numbers for the root device in `ROOT_DEV`.
+이 계산이 끝나면, 만약 dev 값이 `0xffffffff` 라면, `major` 를 위한 12 비트(`0xfff`) 와 `minor`를 위한 20 비트를 얻을 수 있다. 그래서 `old_decode_dev` 의 수행이 끝나면, 우리는 루트 장치를 위한 major 와 minor 번호를 `ROOT_DEV` 로 할당할 것이다.
 
-Memory map setup
+메모리 맵 설정
 --------------------------------------------------------------------------------
 
-The next point is the setup of the memory map with the call of the `setup_memory_map` function. But before this we setup different parameters as information about a screen (current row and column, video page and etc... (you can read about it in the [Video mode initialization and transition to protected mode](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html))), Extended display identification data, video mode, bootloader_type and etc...:
+다음 단계에서는 `setup_memory_map` 함수를 호출하여 메모리 맵을 설정한다. 하지만, 그 전에 스크린(현재 열과 행, 비디오 페이지 등-[Video mode initialization and transition to protected mode](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html) 여기서 더 자세한 정보를 볼 수 있다.)에 관한 정보, 확장된 디스플레이 정보, 비디오 모드, bootloader_type 등의 설정이 필요하다.:
 
 ```C
 	screen_info = boot_params.screen_info;
@@ -248,12 +251,12 @@ The next point is the setup of the memory map with the call of the `setup_memory
 	bootloader_version |= boot_params.hdr.ext_loader_ver << 4;
 ```
 
-All of these parameters we got during boot time and stored in the `boot_params` structure. After this we need to setup the end of the I/O memory. As you know one of the main purposes of the kernel is resource management. And one of the resource is memory. As we already know there are two ways to communicate with devices are I/O ports and device memory. All information about registered resources are available through:
+이 모든 값들은 부팅 시간에 `boot_params` 구조체에 저장된 내용들이다. 이것 이후에, I/O 메모리의 끝을 설정할 필요가 있다. 당신이 알고 있는 리눅스 커널의 주요 목적 중 하나는 자원 관리이다. 그 자원 중 하나는 메모리이다. 이미 알고 있겠지만, 장치들과 통신하는 방법은 장치 포트들과 장치 메모리를 통해서 가능하다. 등록된 자원의 모든 정보는 아래와 같이 접근 가능하다.:
 
-* /proc/ioports - provides a list of currently registered port regions used for input or output communication with a device;
-* /proc/iomem   - provides current map of the system's memory for each physical device.
+* /proc/ioports - 현재 장치와 입력/출력을 위해 사용되는 등록된 포트 영역의 리스트를 제공한다.
+* /proc/iomem   - 각 물리 장치를 위한 시스템의 메모리 맵을 제공한다.
 
-At the moment we are interested in `/proc/iomem`:
+여기서 `/proc/iomem` 에 관해 조금 더 살펴 보자:
 
 ```
 cat /proc/iomem
@@ -267,12 +270,12 @@ cat /proc/iomem
 000d8000-000dbfff : PCI Bus 0000:00
 000dc000-000dffff : PCI Bus 0000:00
 000e0000-000fffff : reserved
-  000e0000-000e3fff : PCI Bus 0000:00
-  000e4000-000e7fff : PCI Bus 0000:00
-  000f0000-000fffff : System ROM
+000e0000-000e3fff : PCI Bus 0000:00
+000e4000-000e7fff : PCI Bus 0000:00
+000f0000-000fffff : System ROM
 ```
 
-As you can see range of addresses are shown in hexadecimal notation with its owner. Linux kernel provides API for managing any resources in a general way. Global resources (for example PICs or I/O ports) can be divided into subsets - relating to any hardware bus slot. The main structure `resource`:
+보시다 시피 장치가 갖고 있는 주소의 범위를 16 진수로 보여준다. 리눅스 커널은 일반적으로 어떤 자원을 관리하기 위한 API 를 제공한다. 글로벌 자원(예를 들어, PIC 들 또는 I/O 포트들)들은 연관된 하드웨어 버스 슬롯에 의해 하위 세트로 나누어 질 수 있다. 그리고 이것을 위한 자료 구조인 `resource` 가 있다.:
 
 ```C
 struct resource {
@@ -280,11 +283,11 @@ struct resource {
         resource_size_t end;
         const char *name;
         unsigned long flags;
-        struct resource *parent, *sibling, *child;
+        struct resource *parent, *sibling, *child*; // TODO 마지막 별
 };
 ```
 
-presents abstraction for a tree-like subset of system resources. This structure provides range of addresses from `start` to `end` (`resource_size_t` is `phys_addr_t` or `u64` for `x86_64`) which a resource covers, `name` of a resource (you see these names in the `/proc/iomem` output) and `flags` of a resource (All resources flags defined in the [include/linux/ioport.h](https://github.com/torvalds/linux/blob/master/include/linux/ioport.h)). The last are three pointers to the `resource` structure. These pointers enable a tree-like structure:
+시스템 자원들을 트리와 비슷한 서브셋 형태로 추상화로 보여주는 것이다. 이 구조체는 자원이 갖고 있는 `start` 에서 `end` 까지의 주소 영역(`resource_size_t` 는 `x86_64` 에서는 `phys_addr_t` 또는 `u64` 이다.), 자원의 `name`(`/proc/iomem` 출력에서 보여지는 이름들)과 자원의 `flags`([include/linux/ioport.h](https://github.com/torvalds/linux/blob/master/include/linux/ioport.h)에서 모든 자원의 플래그들을 정의되어 있다.)를 제공한다. 이 구조체의 마지막은 3개의 포인터를 선언한다. 이 포인터들은 트리 같은 구조를 만들기 위한 것이다.:
 
 ```
 +-------------+      +-------------+
@@ -301,7 +304,7 @@ presents abstraction for a tree-like subset of system resources. This structure 
 +-------------+
 ```
 
-Every subset of resources has root range resources. For `iomem` it is `iomem_resource` which defined as:
+자원의 모든 서브셋은 루트 범위 자원들을 가진다. `iomem` 를 위해, 아래와 같이 `iomem_resource` 를 정의한다.:
 
 ```C
 struct resource iomem_resource = {
@@ -315,20 +318,20 @@ EXPORT_SYMBOL(iomem_resource);
 
 TODO EXPORT_SYMBOL
 
-`iomem_resource` defines root addresses range for io memory with `PCI mem` name and `IORESOURCE_MEM` (`0x00000200`) as flags. As i wrote above our current point is setup the end address of the `iomem`. We will do it with:
+`iomem_resource`는 `PCI mem` 이름을 가지는 IO 메모리 주소 범위와 플래그로 `IORESOURCE_MEM` (`0x00000200`) 값을 정의한다. 지금 중요한 것은 `iomem` 의 시작과 끝 주소를 설정한다. 그것은 아래와 같이 될 것이다.:
 
 ```C
 iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
 ```
 
-Here we shift `1` on `boot_cpu_data.x86_phys_bits`. `boot_cpu_data` is `cpuinfo_x86` structure which we filled during execution of the `early_cpu_init`. As you can understand from the name of the `x86_phys_bits` field, it presents maximum bits amount of the maximum physical address in the system. Note also that `iomem_resource` is passed to the `EXPORT_SYMBOL` macro. This macro exports the given symbol (`iomem_resource` in our case) for dynamic linking or in other words it makes a symbol accessible to dynamically loaded modules.
+1을 `boot_cpu_data.x86_phys_bits` 만큼 쉬프트한다. `boot_cpu_data` 는 `early_cpu_init`의 실행 중에 채워진 `cpuinfo_x86` 구조체이다. `x86_phys_bits` 항목의 이름을 봐서 알겠지만, 그것은 시스템에서 최대 물리 주소의 최대 비트들의 양을 표현한다. 또한 `iomem_resource` 는 `EXPORT_SYMBOL` 매크로에 전달된다. 이 매크로는 주어진 심볼(여기서는 `iomem_resource`)을 동적 로드 가능한 모듈에서 접근이 가능하게 만들거나 동적 링킹을 위해 사용된다.
 
-After we set the end address of the root `iomem` resource address range, as I wrote above the next step will be setup of the memory map. It will be produced with the call of the `setup_ memory_map` function:
+루트 `iomem` 자원 주소 범위의 시작과 끝을 설정한 뒤에, 메모리 맵의 설정을 할 것이다. `setup_ memory_map` 의 호출로 진행된다.:
 
 ```C
 void __init setup_memory_map(void)
 {
-        char *who;
+        char *who*; // TODO 마지막 별
 
         who = x86_init.resources.memory_setup();
         memcpy(&e820_saved, &e820, sizeof(struct e820map));
@@ -337,7 +340,7 @@ void __init setup_memory_map(void)
 }
 ```
 
-First of all we call look here the call of the `x86_init.resources.memory_setup`. `x86_init` is a `x86_init_ops` structure which presents platform specific setup functions as resources initialization, pci initialization and etc... initialization of the `x86_init` is in the [arch/x86/kernel/x86_init.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/x86_init.c). I will not give here the full description because it is very long, but only one part which interests us for now:
+처음으로 `x86_init.resources.memory_setup`의 호출을 볼 수 있다. `x86_init`은 자원 초기화, PCI 초기화 등, [arch/x86/kernel/x86_init.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/x86_init.c) 에 구현되어 있는 플랫폼 특정 설정을 하는 `x86_init_ops` 구조체이다. 이것은 내용이 너무 많아 여기서는 다루지는 않고 우리가 현재 이 파트에서 관심을 가져야 하는 부분만 살펴보자:
 
 ```C
 struct x86_init_ops x86_init __initdata = {
@@ -352,7 +355,7 @@ struct x86_init_ops x86_init __initdata = {
 }
 ```
 
-As we can see here `memry_setup` field is `default_machine_specific_memory_setup` where we get the number of the [e820](http://en.wikipedia.org/wiki/E820) entries which we collected in the [boot time](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-2.html), sanitize the BIOS e820 map and fill `e820map` structure with the memory regions. As all regions are collected, print of all regions with printk. You can find this print if you execute `dmesg` command and you can see something like this:
+`memry_setup` 항목은 [부트 시간](https://github.com/daeseokyoun/linux-insides/blob/master/Booting/linux-bootstrap-2.md)에서 모은 [e820](http://en.wikipedia.org/wiki/E820) 개수 엔트리 개수를 얻고, BIOS e820 맵을 검증하고 `e820map` 구조체에 메모리 영역의 값을 채우는 `default_machine_specific_memory_setup` 함수이다. 모든 영역들의 정보가 모아지면, printk로 모든 영역의 정보를 출력한다. `dmesg` 명령어를 통해 관련 내용을 모두 확인 가능하다.:
 
 ```
 [    0.000000] e820: BIOS-provided physical RAM map:

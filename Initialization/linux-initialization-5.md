@@ -37,7 +37,7 @@ per-thread 스택 이외에, 각 CPU 와 연관된 특별한 몇개의 스택들
 
 ```C
 BUG_ON((unsigned)n > 0xFF);
-_set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS__); // TODO 마지막 언더바 2개
+_set_gate(n, GATE_INTERRUPT, addr, 0, ist, __KERNEL_CS);
 ```
 
 `set_intr_gate`도 이와 같은 일을 한다. 하지만, `set_intr_gate` 는 [dpl](http://en.wikipedia.org/wiki/Privilege_level) 0과 함께 `_set_gate` 호출하고, ist - 0, 하지만 `set_intr_gate_ist` 와 `set_system_intr_gate_ist`는 `ist`로 `DEBUG_STACK` 설정하고 `set_system_intr_gate_ist`는 `dpl` 을 가장 낮은 특권인 `0x3` 으로 설정한다. 인터럽트가 발생하고 하드웨어가 디스크립터를 로드할 때, 하드웨어는 자동적으로 IST 값을 기반으로 새로운 스택 포인터로 설정하고, 그 다음 인터럽트를 실행한다. 모든 특별한 커널 스택은 `cpu_init` 함수내에서 설정될 것이다.(우리는 나중에 볼 것이다.)
@@ -283,7 +283,7 @@ struct resource {
         resource_size_t end;
         const char *name;
         unsigned long flags;
-        struct resource *parent, *sibling, *child*; // TODO 마지막 별
+        struct resource *parent, *sibling, *child;
 };
 ```
 
@@ -331,7 +331,7 @@ iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
 ```C
 void __init setup_memory_map(void)
 {
-        char *who*; // TODO 마지막 별
+        char *who;
 
         who = x86_init.resources.memory_setup();
         memcpy(&e820_saved, &e820, sizeof(struct e820map));
@@ -377,10 +377,10 @@ struct x86_init_ops x86_init __initdata = {
 ...
 ```
 
-Copying of the BIOS Enhanced Disk Device information
+BIOS 향상된 디스크 장치 정보의 복사
 --------------------------------------------------------------------------------
 
-The next two steps is parsing of the `setup_data` with `parse_setup_data` function and copying BIOS EDD to the safe place. `setup_data` is a field from the kernel boot header and as we can read from the `x86` boot protocol:
+다음 두 단계는 `parse_setup_data` 함수에서 `setup_data` 파싱하는 것과 BIOS EDD(Enhanced Disk Device) 를 안전한 곳으로 복사한다. `setup_data`는 커널 부트 헤더에 있는 필드이고, `x86` 부트 프로토콜에서 관련 내용을 볼 수 있다.:
 
 ```
 Field name:	setup_data
@@ -391,9 +391,12 @@ Protocol:	2.09+
   The 64-bit physical pointer to NULL terminated single linked list of
   struct setup_data. This is used to define a more extensible boot
   parameters passing mechanism.
+
+  NULL 로 마무리되는 struct setup_data 의 단일 연결 리스트를 가리키는 64 비트 물리 포인터.
+  이것은 보다 확장 가능한 부트 매개 변수 전달 메커니즘을 정의하는 데 사용됩니다.
 ```
 
-It used for storing setup information for different types as device tree blob, EFI setup data and etc... In the second step we copy BIOS EDD information from the `boot_params` structure that we collected in the [arch/x86/boot/edd.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/edd.c) to the `edd` structure:
+그것은 Device Tree Blob, EFT 설정 데이터등의 다른 타입의 설정 정보를 저장할 때 사용한다. 두 번째 단계에서는] [arch/x86/boot/edd.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/edd.c) 에서 수집된 BIOS EDD 정보가 있는 `boot_params` 에서 `edd` 구조체로 복사한다.:
 
 ```C
 static inline void __init copy_edd(void)
@@ -406,10 +409,10 @@ static inline void __init copy_edd(void)
 }
 ```
 
-Memory descriptor initialization
+메모리 디스크립터 초기화
 --------------------------------------------------------------------------------
 
-The next step is initialization of the memory descriptor of the init process. As you already can know every process has its own address space. This address space presented with special data structure which called `memory descriptor`. Directly in the linux kernel source code memory descriptor presented with `mm_struct` structure. `mm_struct` contains many different fields related with the process address space as start/end address of the kernel code/data, start/end of the brk, number of memory areas, list of memory areas and etc... This structure defined in the [include/linux/mm_types.h](https://github.com/torvalds/linux/blob/master/include/linux/mm_types.h). As every process has its own memory descriptor, `task_struct` structure contains it in the `mm` and `active_mm` field. And our first `init` process has it too. You can remember that we saw the part of initialization of the init `task_struct` with `INIT_TASK` macro in the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html):
+다음 단계는 init 프로세스의 메모리 디스크립터의 초기화이다. 당신도 알다시피 모든 프로세스는 자신만의 주소공간을 갖고 있다. 이 주소 공간은 `memory descriptor` 라 불리는 특별한 자료 구조로 표현된다. 리눅스 커널 소스 코드에서 메모리 디스크립터는 `mm_struct` 구조체로 표현된다. `mm_struct` 는 커널 코드/데이터의 시작과 끝 주소, brk 영역의 시작과 끝, 메모리 영역 수, 메모리 영역 리스드등 프로세스 주소 공간과 관련된 많은 서로 다른 필드들을 포함한다. 이 구조체는 [include/linux/mm_types.h](https://github.com/torvalds/linux/blob/master/include/linux/mm_types.h)에 정의되어 있다. 모든 프로세스는 자신의 메모리 디스크립터를 갖고 있으므로, `task_struct` 구조체는 그것을 `mm` 과 `active_mm` 이라는 이름의 항목으로 갖고 있다. 그리고 우리의 첫 `init` 프로세스도 갖고 있다. 이미 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-4.md)에서 `INIT_TASK` 매크로로 init 프로세스를 위한 `task_struct` 초기화하는 것을 봤을 것이다.:
 
 ```C
 #define INIT_TASK(tsk)  \
@@ -423,7 +426,7 @@ The next step is initialization of the memory descriptor of the init process. As
 }
 ```
 
-`mm` points to the process address space and `active_mm` points to the active address space if process has no address space such as kernel threads (more about it you can read in the [documentation](https://www.kernel.org/doc/Documentation/vm/active_mm.txt)). Now we fill memory descriptor of the initial process:
+`mm` 은 프로세스 주소 공간을 가리키고, 프로세스가 커널 쓰레드와 같이 주소 공간을 가지지 않는다면 `active_mm`는 활성(active) 주소 공간을 가르킵니다.([문서](https://www.kernel.org/doc/Documentation/vm/active_mm.txt)에서 조금 더 자세히 살펴 볼 수 있다.) 이제 초기 프로세스의 메모리 디스크립터를 커널의 코드, 데이터 그리고 brk 로 채운다.:
 
 ```C
 	init_mm.start_code = (unsigned long) _text;
@@ -432,7 +435,7 @@ The next step is initialization of the memory descriptor of the init process. As
 	init_mm.brk = _brk_end;
 ```
 
-with the kernel's text, data and brk. `init_mm` is the memory descriptor of the initial process and defined as:
+`init_mm` 는 초기 프로세스의 메모리 디스크립터 이고, 아래와 같의 정의되어 있다.:
 
 ```C
 struct mm_struct init_mm = {
@@ -447,7 +450,7 @@ struct mm_struct init_mm = {
 };
 ```
 
-where `mm_rb` is a red-black tree of the virtual memory areas, `pgd` is a pointer to the page global directory, `mm_users` is address space users, `mm_count` is primary usage counter and `mmap_sem` is memory area semaphore. After we setup memory descriptor of the initial process, next step is initialization of the Intel Memory Protection Extensions with `mpx_mm_init`. The next step is initialization of the code/data/bss resources with:
+`mm_rb` 는 가상 메모리 영역의 레드-블랙 트리이고, `pgd` 는 페이지 글로벌 디렉토리의 포인터, `mm_users` 는 사용자 주소 공간, `mm_count`는 최최의 사용 카운터 그리고 `mmap_sem` 은 메모리 영역 세마포어 있다. 초기 프로세스의 메모리 디스크립터를 설정하고 나서, `mpx_mm_init` 함수 호출로 인텔 메모리 보호 확장(Intel Memory Protection Extensions)을 초기화 한다. 그 다음 단계는 코드/데이터/bss 자원들의 초기화를 진행한다.:
 
 ```C
 	code_resource.start = __pa_symbol(_text);
@@ -458,7 +461,7 @@ where `mm_rb` is a red-black tree of the virtual memory areas, `pgd` is a pointe
 	bss_resource.end = __pa_symbol(__bss_stop)-1;
 ```
 
-We already know a little about `resource` structure (read above). Here we fills code/data/bss resources with their physical addresses. You can see it in the `/proc/iomem`:
+우리는 이미 `resource` 구조체에 관해 조금 알고 있다. 여기서 우리는 그것들의 물리 주소로 코드/데이터/bss 자원을 채운다. 그러면 `/proc/iomem` 을 통해 확인 할 수 있다.:
 
 ```C
 00100000-be825fff : System RAM
@@ -467,7 +470,7 @@ We already know a little about `resource` structure (read above). Here we fills 
   01a11000-01ac3fff : Kernel bss
 ```
 
-All of these structures are defined in the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c) and look like typical resource initialization:
+이 모든 구조체들은 [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c)에 선언되어 있고, 전형적인 자원 초기화로 보인다.:
 
 ```C
 static struct resource code_resource = {
@@ -478,7 +481,7 @@ static struct resource code_resource = {
 };
 ```
 
-The last step which we will cover in this part will be `NX` configuration. `NX-bit` or no execute bit is 63-bit in the page directory entry which controls the ability to execute code from all physical pages mapped by the table entry. This bit can only be used/set when the `no-execute` page-protection mechanism is enabled by the setting `EFER.NXE` to 1. In the `x86_configure_nx` function we check that CPU has support of `NX-bit` and it does not disabled. After the check we fill `__supported_pte_mask` depend on it:
+이 파트에서 살펴볼 마지막 단계는 `NX` 구성이다. 테이블 엔트리에 맵된 모든 물리 페이지로 부터 실행 가능 여부를 제어 가능한 `NX-bit` 또는 no execute 비트는 페이지 디렉토리 엔트리에서 63번째 비트에 있다. 이 비트는 단지 `no-execute` 페이지-보호 매커니즘을 `EFER.NXE` 1로 설정하여 활성화 할 때 사용된다. `x86_configure_nx` 함수에서 `NX-bit` 의 지연 여부를 확인 하고, 지원하지 않는다면 비활성화 시킨다. 그리고 그것에 의존적인 `__supported_pte_mask` 를 설정해준다.:
 
 ```C
 void x86_configure_nx(void)
@@ -490,14 +493,14 @@ void x86_configure_nx(void)
 }
 ```
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the fifth part about linux kernel initialization process. In this part we continued to dive in the `setup_arch` function which makes initialization of architecture-specific stuff. It was long part, but we have not finished with it. As i already wrote, the `setup_arch` is big function, and I am really not sure that we will cover all of it even in the next part. There were some new interesting concepts in this part like `Fix-mapped` addresses, ioremap and etc... Don't worry if they are unclear for you. There is a special part about these concepts - [Linux kernel memory management Part 2.](https://github.com/0xAX/linux-insides/blob/master/mm/linux-mm-2.md). In the next part we will continue with the initialization of the architecture-specific stuff and will see parsing of the early kernel parameters, early dump of the pci devices, direct Media Interface scanning and many many more.
+리눅스 커널 초기화 과정 5번째 파트의 끝이다. 이 파트에서는 아키텍처 의존적인 것을을 초기화하는 `setup_arch` 함수를 계속해서 살펴 보았다. 아주 긴 파트였지만, 아직 끝나지 않았다. 예전에도 언급했듯이, `setup_arch`는 굉자히 큰 함수이고, 다음 파트에서도 모두 살펴 볼 수 있을지도 의문이다. 여기에 `Fix-mapped`, ioremap 과 같은 몇 가지 흥미로운 개념들이 있었다. 이것을 잘 모르겠다 하더라도 걱정하지 말자. 이 개념들을 위해 특별한 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-2.md)가 있다. 다음 파트에서 아키텍처 의존적인 것들의 초기화를 계속해서 보고, 초기 커널 인자들을 파싱하는 것, 초기 PCI 장치의 덤프(dump), direct Meida Interface scanning 그리고 다른 많은 것을 살펴 볼 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------
@@ -513,3 +516,4 @@ Links
 * [PDF. dwarf4 specification](http://dwarfstd.org/doc/DWARF4.pdf)
 * [Call stack](http://en.wikipedia.org/wiki/Call_stack)
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html)
+* [Device Tree, 이게 뭐지?](http://linuxfactory.or.kr/archives/116)

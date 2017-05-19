@@ -4,25 +4,25 @@ Kernel initialization. Part 6.
 Architecture-specific initialization, again...
 ================================================================================
 
-In the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-5.html) we saw architecture-specific (`x86_64` in our case) initialization stuff from the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c) and finished on `x86_configure_nx` function which sets the `_PAGE_NX` flag depends on support of [NX bit](http://en.wikipedia.org/wiki/NX_bit). As I wrote before `setup_arch` function and `start_kernel` are very big, so in this and in the next part we will continue to learn about architecture-specific initialization process. The next function after `x86_configure_nx` is `parse_early_param`. This function is defined in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) and as you can understand from its name, this function parses kernel command line and setups different services depends on the given parameters (all kernel command line parameters you can find are in the [Documentation/kernel-parameters.txt](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt)). You may remember how we setup `earlyprintk` in the earliest [part](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-2.html). On the early stage we looked for kernel parameters and their value with the `cmdline_find_option` function and `__cmdline_find_option`, `__cmdline_find_option_bool` helpers from the [arch/x86/boot/cmdline.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cmdline.c). There we're in the generic kernel part which does not depend on architecture and here we use another approach. If you are reading linux kernel source code, you already note calls like this:
+이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-5.md)에서는 the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c)에서 아키텍처 특화된 초기화를 보았고 [NX bit](http://en.wikipedia.org/wiki/NX_bit) 의 지원에 의존적인 `_PAGE_NX` 플래그를 설정하는 `x86_configure_nx` 함수에서 마무리 했다. 누누이 얘기 했듯이 `setup_arch` 함수와 `start_kernel` 은 매우 많은 일을 하는 함수여서, 이 파트와 다음 파트에서 아키텍처 특화된 초기화 과정을 살펴 볼 것이다. `x86_configure_nx` 함수의 다음 호출되는 함수는 `parse_early_param` 이다. 이 함수는 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 파일에 구현되어 있고 무슨 일을 하는지 이름으로 알 수 있듯이 커널 명령라인을 파싱하고 주어진 인자들과 연관된 다른 서비스를 설정한다. (모든 커널 명령 라인 인자들은 [Documentation/kernel-parameters.txt](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt) 파일에서 확인 가능하다.) 거의 초기 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-2.md) 에서 어떻게 `earlyprintk` 를 설정했는지 기억할 수 있을 것이다. 초기 단계에서 [arch/x86/boot/cmdline.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cmdline.c) 에 있는 관련 헬퍼 함수인 `cmdline_find_option`, `__cmdline_find_option`, `__cmdline_find_option_bool` 와 함께 그것들의 값과 커널 인자들을 살펴 보았다. 이제는 아키텍처 의존적이지 않은 일반적인 커널 부분으로 들어왔고 다른 방식으로 커널 인자들을 파싱할 것이다. 만약 커널 소스 코드를 보고 싶다면, 아래와 같이 호출해서 쓴다는 것을 볼 수 있다.:
 
 ```C
 early_param("gbpages", parse_direct_gbpages_on);
 ```
 
-`early_param` macro takes two parameters:
+`early_param` 매크로는 두개의 인자를 받는다.:
 
-* command line parameter name;
-* function which will be called if given parameter is passed.
+* 명령 라인 인자 이름
+* 주어진 인자가 들어오면 불러야 하는 함수
 
-and defined as:
+그리고 이 매크로는 [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h) 에 아래와 같이 구현되어 있다.:
 
 ```C
 #define early_param(str, fn) \
         __setup_param(str, fn, fn, 1)
 ```
 
-in the [include/linux/init.h](https://github.com/torvalds/linux/blob/master/include/linux/init.h). As you can see `early_param` macro just makes call of the `__setup_param` macro:
+보시다시피 `early_param` 매크로는 단지 `__setup_param` 매크로를 호출한다.:
 
 ```C
 #define __setup_param(str, unique_id, fn, early)                \
@@ -31,26 +31,26 @@ in the [include/linux/init.h](https://github.com/torvalds/linux/blob/master/incl
         static struct obs_kernel_param __setup_##unique_id      \
                 __used __section(.init.setup)                   \
                 __attribute__((aligned((sizeof(long)))))        \
-                = { __setup_str_##unique_id, fn, early }
+                = { __setup_str_##unique_id__, fn, early } // TODO id 뒤에 언더바 두개
 ```
 
-This macro defines `__setup_str_*_id` variable (where `*` depends on given function name) and assigns it to the given command line parameter name. In the next line we can see definition of the `__setup_*` variable which type is `obs_kernel_param` and its initialization. `obs_kernel_param` structure defined as:
+이 매크로는 `__setup_str_*_id` 변수(`*` 은 주어진 함수 이름에 의존적이다.)를 선언하고 그것을 주어진 명령 인자 이름을 할당한다. 다음 라인은 타입은 `obs_kernel_param` 이고, 그것의 초기화하는 `__setup_*` 변수를 선언하는 것을 볼 수 있다. `obs_kernel_param` 구조체는 아래와 같이 선언되어 있다.:
 
 ```C
 struct obs_kernel_param {
         const char *str;
-        int (*setup_func)(char *);
+        int (*setup_func)(char *)*; // TODO 마지막 별
         int early;
 };
 ```
 
-and contains three fields:
+그리고 3개의 필드들을 갖고 있다.:
 
-* name of the kernel parameter;
-* function which setups something depend on parameter;
-* field determines is parameter early (1) or not (0).
+* 커널 인자의 이름
+* 인자에 의존적으로 어떤 일을 하는 함수
+* 초기에서 사용(1) 이거나 나중에 사용되거나(0) 를 결정하는 필드
 
-Note that `__set_param` macro defines with `__section(.init.setup)` attribute. It means that all `__setup_str_*` will be placed in the `.init.setup` section, moreover, as we can see in the [include/asm-generic/vmlinux.lds.h](https://github.com/torvalds/linux/blob/master/include/asm-generic/vmlinux.lds.h), they will be placed between `__setup_start` and `__setup_end`:
+`__set_param` 매크로는 `__section(.init.setup)` 속성으로 선언된다. 그것의 의미는 모든 `__setup_str_*` 는 `.init.setup` 섹션에 위치하게 될 것이고, 그 섹션은 [include/asm-generic/vmlinux.lds.h](https://github.com/torvalds/linux/blob/master/include/asm-generic/vmlinux.lds.h) 파일에서 확인 가능하다. 그래서 그것들은 `__setup_start` 와 `__setup_end` 사이에 놓여진다는 것이다.:
 
 ```
 #define INIT_SETUP(initsetup_align)                \
@@ -60,7 +60,7 @@ Note that `__set_param` macro defines with `__section(.init.setup)` attribute. I
                 VMLINUX_SYMBOL(__setup_end) = .;
 ```
 
-Now we know how parameters are defined, let's back to the `parse_early_param` implementation: 
+이제 어떻게 인자들이 선언되는지 알았다, `parse_early_param` 구현으로 돌아가보자.:
 
 ```C
 void __init parse_early_param(void)
@@ -74,7 +74,7 @@ void __init parse_early_param(void)
         /* All fall through to do_early_param. */
         strlcpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
         parse_early_options(tmp_cmdline);
-        done = 1;
+        done = 1;__ // TODO 마지막 언더바 두개
 }
 ```
 
@@ -273,13 +273,13 @@ if (max_pfn > (1UL<<(32 - PAGE_SHIFT)))
 	max_low_pfn = e820_end_of_low_ram_pfn();
 else
 	max_low_pfn = max_pfn;
-		
+
 high_memory = (void *)__va(max_pfn * PAGE_SIZE - 1) + 1;
 ```
 
 Next we calculate `high_memory` (defines the upper bound on direct map memory) with `__va` macro which returns a virtual address by the given physical memory.
 
-DMI scanning 
+DMI scanning
 -------------------------------------------------------------------------------
 
 The next step after manipulations with different memory regions and `e820` slots is collecting information about computer. We will get all information with the [Desktop Management Interface](http://en.wikipedia.org/wiki/Desktop_Management_Interface) and following functions:

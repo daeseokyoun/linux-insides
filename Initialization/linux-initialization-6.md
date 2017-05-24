@@ -31,7 +31,7 @@ early_param("gbpages", parse_direct_gbpages_on);
         static struct obs_kernel_param __setup_##unique_id      \
                 __used __section(.init.setup)                   \
                 __attribute__((aligned((sizeof(long)))))        \
-                = { __setup_str_##unique_id__, fn, early } // TODO id 뒤에 언더바 두개
+                = { __setup_str_##unique_id, fn, early }
 ```
 
 이 매크로는 `__setup_str_*_id` 변수(`*` 은 주어진 함수 이름에 의존적이다.)를 선언하고 그것을 주어진 명령 인자 이름을 할당한다. 다음 라인은 타입은 `obs_kernel_param` 이고, 그것의 초기화하는 `__setup_*` 변수를 선언하는 것을 볼 수 있다. `obs_kernel_param` 구조체는 아래와 같이 선언되어 있다.:
@@ -39,7 +39,7 @@ early_param("gbpages", parse_direct_gbpages_on);
 ```C
 struct obs_kernel_param {
         const char *str;
-        int (*setup_func)(char *)*; // TODO 마지막 별
+        int (*setup_func)(char *);
         int early;
 };
 ```
@@ -74,7 +74,7 @@ void __init parse_early_param(void)
         /* All fall through to do_early_param. */
         strlcpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
         parse_early_options(tmp_cmdline);
-        done = 1;__ // TODO 마지막 언더바 두개
+        done = 1;
 }
 ```
 
@@ -216,7 +216,7 @@ for (bus = 0; bus < 256; bus++) {
 
 ```C
 u64 start = __pa_symbol(_text);
-u64 size = __pa_symbol(_end_) - start; // TODO end 뒤에 언더바 하나.
+u64 size = __pa_symbol(_end) - start;
 ```
 
 `e820map`에서 `.text`, `.data` 그리고 `.bss` 를 `E820RAM`으로 마킹되어 있는지 확인하고, 그렇지 않다면 경고 메세지를 출력한다. 이 다음 함수는 `e820Map` 의 첫 4096 바이트를 `E820_RESERVED` 로 업데이트 하고, 그것을 `sanitize_e820_map` 함수의 호출로 정상적으로 되었는지 확인한다. 이 다음에는 `e820_end_of_ram_pfn` 함수의 호출로 마지막 페이지 프레임의 번호를 가져온다. 모든 메모리 페이지는 `Page frame number(페이지 프레임 번호)`라는 유일한 번호를 갖고, `e820_end_of_ram_pfn` 함수에서 `e820_end_pfn` 의 호출로 최대 번호를 반환한다.:
@@ -232,7 +232,7 @@ unsigned long __init e820_end_of_ram_pfn(void)
 
 ```C
 for (i = 0; i < e820.nr_map; i++) {
-		struct e820entry *ei* = &e820.map[i]; // TODO ei 뒤에 별
+		struct e820entry *ei = &e820.map[i];
 		unsigned long start_pfn;
 		unsigned long end_pfn;
 
@@ -278,7 +278,7 @@ if (max_pfn > (1UL<<(32 - PAGE_SHIFT)))
 else
 	max_low_pfn = max_pfn;
 
-high_memory = (void *)__va(max_pfn * PAGE_SIZE* - 1) + 1; // TODO PAGE_SIZE 뒤에 별 하나
+high_memory = (void *)__va(max_pfn * PAGE_SIZE - 1) + 1;
 ```
 
 다음은 주어진 물리 메모리에서 가상 주소로 반환해주는 `__va` 매크로를 이용해서 `high_memory`(직접 맵핑된 메모리 상위에 있는 메모리)를 계산한다.
@@ -299,7 +299,7 @@ dmi_memdev_walk();
 ```C
 void __init dmi_scan_machine(void)
 {
-	char __iomem__ *p, *q*; // TODO iomem 뒤에 언더바 2개 q 뒤에 별하나
+	char __iomem *p, *q;
 	char buf[32];
 	...
 	...
@@ -416,7 +416,8 @@ struct mpf_intel {
 };
 ```
 
-As we can read in the documentation - one of the main functions of the system BIOS is to construct the MP floating pointer structure and the MP configuration table. And operating system must have access to this information about the multiprocessor configuration and `mpf_intel` stores the physical address (look at second parameter) of the multiprocessor configuration table. So, `smp_scan_config` going in a loop through the given memory range and tries to find `MP floating pointer structure` there. It checks that current byte points to the `SMP` signature, checks checksum, checks if `mpf->specification` is 1 or 4(it must be `1` or `4` by specification) in the loop:
+이 문서를 읽었다면, 시스템 BIOS 의 주요 함수중 하나는 MP 플로팅 포인터 구조체(floating pointer structure) 와 MP 구성 테이블을 만들기 위한 것이다. 그리고 운영체제는 멀티 프로세서 구성에 관련된 정보를 반드시 접근할 수 있어야 하고, `mpf_intel`는 멀티프로세서 구성 테이블의 물리 주소를 저장해야 한다. 그래서, `smp_scan_config` 는 주어진 메모리 영역내를 루프내에서 확인하여 `MP floating pointer structure` 가 있는지 찾아본다. 현재 바이트 포인트가 되는 곳에 `SMP` 사인이 있는지 확인 하고, checksum 확인, `mpf->specification`가 1 이거나 4 인지를 루프 안에서 확인한다.(그것은 반드시 `1` 또는 `4`여야 한다.):
+
 
 ```C
 while (length > 0) {
@@ -434,12 +435,12 @@ if ((*bp == SMP_MAGIC_IDENT) &&
 }
 ```
 
-reserves given memory block if search is successful with `memblock_reserve` and reserves physical address of the multiprocessor configuration table. You can find documentation about this in the - [MultiProcessor Specification](http://www.intel.com/design/pentium/datashts/24201606.pdf). You can read More details in the special part about `SMP`.
+만약 검색이 성공적이라면 주어진 메모리 블럭을 `memblock_reserve` 로 예약을 하고 멀티프로세서 구성 테이블의 물리 주소를 예약한다. 이와 관련해서 조금 더 자세한 [문서- MultiProcessor Specification](http://www.intel.com/design/pentium/datashts/24201606.pdf) 를 볼 수 있다. 특히 이 문서의 `SMP` 파트는 이와 관련해서 더 알아볼 수 있다.
 
-Additional early memory initialization routines
+추가적인 초기 메모리 초기화 과정들
 --------------------------------------------------------------------------------
 
-In the next step of the `setup_arch` we can see the call of the `early_alloc_pgt_buf` function which allocates the page table buffer for early stage. The page table buffer will be placed in the `brk` area. Let's look on its implementation:
+`setup_arch` 의 다음 단계는 초기 단계를 위한 페이지 테이블 버퍼를 할당해주는 `early_alloc_pgt_buf` 함수의 호출이다. 페이지 테이블 버퍼는 `brk` 섹션에 위치 할 것이다. 그것의 구현을 살펴보자.:
 
 ```C
 void  __init early_alloc_pgt_buf(void)
@@ -455,7 +456,7 @@ void  __init early_alloc_pgt_buf(void)
 }
 ```
 
-First of all it get the size of the page table buffer, it will be `INIT_PGT_BUF_SIZE` which is `(6 * PAGE_SIZE)` in the current linux kernel 4.0. As we got the size of the page table buffer, we call `extend_brk` function with two parameters: size and align. As you can understand from its name, this function extends the `brk` area. As we can see in the linux kernel linker script `brk` is in memory right after the [BSS](http://en.wikipedia.org/wiki/.bss):
+먼저, 페이지 테이블 버퍼의 크기를 얻는데, 그것의 값은 현재 리눅스 커널 4.0 기준으로 `(6 * PAGE_SIZE)`인 `INIT_PGT_BUF_SIZE` 가 될 것이다. 페이지 테이블 버퍼 크기를 얻었다면, 크기와 정렬(align)값과 함께 `extend_brk` 함수를 호출한다. 이 함수의 이름에서도 알수 있듯이, `brk` 영역을 확장하는 함수이다. 리눅스 링커 스크립트를 보면, `brk` 영역은 메모리 레이아웃에서 [BSS](http://en.wikipedia.org/wiki/.bss) 영역 바로 다음에 있다.:
 
 ```C
 	. = ALIGN(PAGE_SIZE);
@@ -467,11 +468,11 @@ First of all it get the size of the page table buffer, it will be `INIT_PGT_BUF_
 	}
 ```
 
-Or we can find it with `readelf` util:
+`readelf` 유틸로도 그 영역을 확인 할 수 있다.:
 
 ![brk area](http://oi61.tinypic.com/71lkeu.jpg)
 
-After that we got physical address of the new `brk` with the `__pa` macro, we calculate the base address and the end of the page table buffer. In the next step as we got page table buffer, we reserve memory block for the brk area with the `reserve_brk` function:
+새로운 `brk` 을 `__pa` 매크로를 이용하여 물리 주소를 얻은 다음에, 페이지 테이블 버퍼의 시작과 끝의 주소를 계산한다. 페이지 테이블 버퍼의 정보를 갖고, `reserve_brk` 함수를 통해 brk 영역을 위해 메모리 블럭을 예약한다.:
 
 ```C
 static void __init reserve_brk(void)
@@ -484,7 +485,7 @@ static void __init reserve_brk(void)
 }
 ```
 
-Note that in the end of the `reserve_brk`, we set `brk_start` to zero, because after this we will not allocate it anymore. The next step after reserving memory block for the `brk`, we need to unmap out-of-range memory areas in the kernel mapping with the `cleanup_highmap` function. Remember that kernel mapping is `__START_KERNEL_map` and `_end - _text` or `level2_kernel_pgt` maps the kernel `_text`, `data` and `bss`. In the start of the `clean_high_map` we define these parameters:
+`reserve_brk` 함수의 마지막에는 `brk_start` 를 0으로 변경한다. 그 이유는 더 이상 추가적인 할당이 없기 때문이다. `brk` 을 위한 메모리 블럭을 예약한 뒤, `cleanup_highmap` 함수 호출을 통해 커널 맵핑 영역에서 범위 밖으로 벗어나는 영역을 매핑 해제(unmap) 할 필요가 있다. 커널 맵핑은 `__START_KERNEL_map` 와 `_end - _text` 또는 `level2_kernel_pgt` 가 커널의 `_text`, `data` 그리고 `bss`를 맵핑하는 것을 기억하자. `clean_high_map` 의 시작부에는 3개의 변수를 선언하고 초기화 한다.:
 
 ```C
 unsigned long vaddr = __START_KERNEL_map;
@@ -493,7 +494,7 @@ pmd_t *pmd = level2_kernel_pgt;
 pmd_t *last_pmd = pmd + PTRS_PER_PMD;
 ```
 
-Now, as we defined start and end of the kernel mapping, we go in the loop through the all kernel page middle directory entries and clean entries which are not between `_text` and `end`:
+이제, 커널 맵핑의 시작과 끝을 선언했으니, 모든 커널 페이지 미들 디렉토리를 살펴 보며 `_text` 와 `end` 사이의 영역에 포함되지 않는 엔트리들을 정리한다.:
 
 ```C
 for (; pmd < last_pmd; pmd++, vaddr += PMD_SIZE) {
@@ -505,6 +506,7 @@ for (; pmd < last_pmd; pmd++, vaddr += PMD_SIZE) {
 ```
 
 After this we set the limit for the `memblock` allocation with the `memblock_set_current_limit` function (read more about `memblock` you can in the [Linux kernel memory management Part 2](https://github.com/0xAX/linux-insides/blob/master/mm/linux-mm-2.md)), it will be `ISA_END_ADDRESS` or `0x100000` and fill the `memblock` information according to `e820` with the call of the `memblock_x86_fill` function. You can see the result of this function in the kernel initialization time:
+이 과정이 끝나면, `memblock_set_current_limit` 함수의 호출로 `memblock` 할당의 제한값을 설정한다. (`memblock` 에 조금 더 자세한 내용은 [커널 메모리 관리 Part 2](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/mm/linux-mm-2.md) 를 읽어 보자.) `memblock_set_current_limit` 함수의 인자로 들어오는 `ISA_END_ADDRESS` 는 `0x100000` 의 값을 갖고 있고, `memblock_x86_fill` 함수의 호출로 `e820` 에 따른 `memblock` 정보를 채워준다. 커널 초기화 부분이 마무리 되면 이 함수의 결과로 다음과 같은 내용을 얻을 수 있다.:
 
 ```
 MEMBLOCK configuration:
@@ -519,18 +521,18 @@ MEMBLOCK configuration:
  reserved[0x2]	[0x0000007ec89000-0x0000007fffffff], 0x1377000 bytes flags: 0x0
 ```
 
-The rest functions after the `memblock_x86_fill` are: `early_reserve_e820_mpc_new` allocates additional slots in the `e820map` for MultiProcessor Specification table, `reserve_real_mode` - reserves low memory from `0x0` to 1 megabyte for the trampoline to the real mode (for rebooting, etc.), `trim_platform_memory_ranges` - trims certain memory regions started from `0x20050000`, `0x20110000`, etc. these regions must be excluded because [Sandy Bridge](http://en.wikipedia.org/wiki/Sandy_Bridge) has problems with these regions, `trim_low_memory_range` reserves the first 4 kilobyte page in `memblock`, `init_mem_mapping` function reconstructs direct memory mapping and setups the direct mapping of the physical memory at `PAGE_OFFSET`, `early_trap_pf_init` setups `#PF` handler (we will look on it in the chapter about interrupts) and `setup_real_mode` function setups trampoline to the [real mode](http://en.wikipedia.org/wiki/Real_mode) code.
+`memblock_x86_fill` 이후에 호출되는 나머지 함수들은: `early_reserve_e820_mpc_new` 함수는 멀티 프로세서 스펙 테이블을 위한 `e820map`에 추가적인 슬롯을 할당한다, `reserve_real_mode` 함수는 low 메모리의 시작 `0x0` 에서 1 메가 바이트까지 trampoline 을 위해 real mode 에게 제공하는 영역을 예약한다.(재부팅 등을 위해), `trim_platform_memory_ranges` 함수는 `0x20050000`, `0x20110000` 와 같은 메모리 영역을 접근에 문제가 있는 [Sandy Bridge](http://en.wikipedia.org/wiki/Sandy_Bridge) 계열의 CPU 를 위해 잘라 낸다, `trim_low_memory_range` 함수는 `memblock` 내에서 첫 4 킬로 바이트를 예약한다, `init_mem_mapping` 함수는 직접 메모리 맵핑 가능한 영역(direct memory mapping)을 재 구성하고 `PAGE_OFFSET` 에 물리 메모리를 직접 맵핑 할 수 있도록 설정한다, `early_trap_pf_init` 함수는 `#PF` 핸들러를 설정하고, `setup_real_mode` 함수는 [real mode](http://en.wikipedia.org/wiki/Real_mode) 코드를 위한 트렘폴린(trampoline) 을 설정한다.
 
-That's all. You can note that this part will not cover all functions which are in the `setup_arch` (like `early_gart_iommu_check`, [mtrr](http://en.wikipedia.org/wiki/Memory_type_range_register) initialization, etc.). As I already wrote many times, `setup_arch` is big, and linux kernel is big. That's why I can't cover every line in the linux kernel. I don't think that we missed something important, but you can say something like: each line of code is important. Yes, it's true, but I missed them anyway, because I think that it is not realistic to cover full linux kernel. Anyway we will often return to the idea that we have already seen, and if something is unfamiliar, we will cover this theme.
+`setup_arch` 에서 호출(`early_gart_iommu_check`, [mtrr](http://en.wikipedia.org/wiki/Memory_type_range_register) 초기화 등)되는 모든 함수를 확인하지는 못했다. `setup_arch`는 너무 많은 일을 한다고 여러 차례 얘길 했고, 리눅스 커널 또한 매우 크다. 그래서 리눅스 커널의 모든 라인들을 하나씩 살피지 않는 이유이다. 하지만 우리는 중요한 무언가를 놓치진 않았다고 생각한다. 하지만, 당신이 각 라인 하나하나는 중요하다고 말할 수 있다. 맞다. 사실 그렇다. 하지만, 모든 리눅스 커널을 살펴본다는 것은 현실적으로 시간과 비용이 많이 드는 것이다. 어쨌든, 우리는 종종 살펴보다가 이미 봤던 내용이라면 다시 돌아가서 확인하고, 익숙하지 않은 내용이 있다면 추가적으로 확인 할 것이다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the sixth part about linux kernel initialization process. In this part we continued to dive in the `setup_arch` function again and it was long part, but we are not finished with it. Yes, `setup_arch` is big, hope that next part will be the last part about this function.
+리눅스 커널 초기화 과정 6번째 파트의 끝이다. 이 파트에서는 다시 한번 `setup_arch` 함수를 찬찬히 살펴 보았고, 이것은 긴 파트 였지만, 모두 끝난 것은 아니다. 다음 파트에서도 계속 해서 이 함수가 하는 일에 대해 진행을 할 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

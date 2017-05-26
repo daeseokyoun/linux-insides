@@ -1,7 +1,7 @@
-Kernel initialization. Part 5.
+커널 초기화. Part 5.
 ================================================================================
 
-Continue of architecture-specific initialization
+아키텍처 의존적인 초기화 계속
 ================================================================================
 
 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-4.md) 에서, 우리는 [setup_arch](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c#L856) 함수에서 아키텍처 의존적인 것들을 초기화하는 과정에서 멈추었고 그것을 이 파트에서 계속진행하려 한다. [initrd](http://en.wikipedia.org/wiki/Initrd) 를 위해 메모리 블럭을 예약했고, 다음 단계는 [One Laptop Per Child support](http://wiki.laptop.org/go/OFW_FAQ) 를 검출하는 `olpc_ofw_detect` 이다. 이 책에서는 플랫폼과 관련된 것은 다루지 않을 것이고 그것과 관련된 함수들은 넘어갈 것이다. 계속 진행해보자. 다음 단계는 `early_trap_init` 함수이다. 이 함수는 디버그와(`#DB` rflags 의 `TF` 플래그를 셋할 때, 올라온다) `int3`(`#BP`) 인터럽트 게이트를 초기화한다. 만약 인터럽트에 대해 아무것도 모른다면, 너는 [초기 인터럽트와 Exception](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md) 을 읽어보도록 하자. `x86` 아키텍처에서 `INT`, `INTO` 그리고 `INT3` 는 명시적으로 인터럽트 핸들러를 호출하도록 허가하는 특별한 명령어이다. `INT3` 명령어는 브레이크포인트(`#BP`) 핸들러를 호출한다. 이것 또한 [이전 파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md) 에서 인터럽트와 예외 처리를 알아보았다.:

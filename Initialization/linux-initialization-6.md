@@ -1,7 +1,7 @@
-Kernel initialization. Part 6.
+커널 초기화. Part 6.
 ================================================================================
 
-Architecture-specific initialization, again...
+아키텍처 의존적인 초기화 계속
 ================================================================================
 
 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-5.md)에서는 the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c)에서 아키텍처 특화된 초기화를 보았고 [NX bit](http://en.wikipedia.org/wiki/NX_bit) 의 지원에 의존적인 `_PAGE_NX` 플래그를 설정하는 `x86_configure_nx` 함수에서 마무리 했다. 누누이 얘기 했듯이 `setup_arch` 함수와 `start_kernel` 은 매우 많은 일을 하는 함수여서, 이 파트와 다음 파트에서 아키텍처 특화된 초기화 과정을 살펴 볼 것이다. `x86_configure_nx` 함수의 다음 호출되는 함수는 `parse_early_param` 이다. 이 함수는 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 파일에 구현되어 있고 무슨 일을 하는지 이름으로 알 수 있듯이 커널 명령라인을 파싱하고 주어진 인자들과 연관된 다른 서비스를 설정한다. (모든 커널 명령 라인 인자들은 [Documentation/kernel-parameters.txt](https://github.com/torvalds/linux/blob/master/Documentation/kernel-parameters.txt) 파일에서 확인 가능하다.) 거의 초기 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-2.md) 에서 어떻게 `earlyprintk` 를 설정했는지 기억할 수 있을 것이다. 초기 단계에서 [arch/x86/boot/cmdline.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/cmdline.c) 에 있는 관련 헬퍼 함수인 `cmdline_find_option`, `__cmdline_find_option`, `__cmdline_find_option_bool` 와 함께 그것들의 값과 커널 인자들을 살펴 보았다. 이제는 아키텍처 의존적이지 않은 일반적인 커널 부분으로 들어왔고 다른 방식으로 커널 인자들을 파싱할 것이다. 만약 커널 소스 코드를 보고 싶다면, 아래와 같이 호출해서 쓴다는 것을 볼 수 있다.:

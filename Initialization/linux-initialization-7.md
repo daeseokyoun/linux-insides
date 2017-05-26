@@ -1,12 +1,12 @@
-Kernel initialization. Part 7.
+커널 초기화. Part 7.
 ================================================================================
 
-The End of the architecture-specific initialization, almost...
+아키텍처 의존적인 초기화의 거의(?) 마지막
 ================================================================================
 
-This is the seventh part of the Linux Kernel initialization process which covers insides of the `setup_arch` function from the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c#L861). As you can know from the previous [parts](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html), the `setup_arch` function does some architecture-specific (in our case it is [x86_64](http://en.wikipedia.org/wiki/X86-64)) initialization stuff like reserving memory for kernel code/data/bss, early scanning of the [Desktop Management Interface](http://en.wikipedia.org/wiki/Desktop_Management_Interface), early dump of the [PCI](http://en.wikipedia.org/wiki/PCI) device and many many more. If you have read the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/%20linux-initialization-6.html), you can remember that we've finished it at the `setup_real_mode` function. In the next step, as we set limit of the [memblock](http://0xax.gitbooks.io/linux-insides/content/mm/linux-mm-1.html) to the all mapped pages, we can see the call of the `setup_log_buf` function from the [kernel/printk/printk.c](https://github.com/torvalds/linux/blob/master/kernel/printk/printk.c).
+리눅스 커널 초기화 과정의 7번째 파트이고 [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup.c#L861) 의 `setup_arch`의 내부를 다루어 볼 것이다. 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-6.md) 에서 `setup_arch` 함수의 커널 코드/데이터/bss 영역을 위한 메모리 예약, [Desktop Management Interface](http://en.wikipedia.org/wiki/Desktop_Management_Interface) 의 초기 스캐닝, [PCI](http://en.wikipedia.org/wiki/PCI) 장치의 초기 덤프 등의 아키텍처 의존적인(우리의 경우 `x86_64` 아키텍처) 초기화를 살펴보았다. 만약 이전 파트를 읽었다면, 우리가 `setup_real_mode` 함수에서 마무리되었다는 것을 알 것이다. 다음 단계에서는 [memblock](http://0xax.gitbooks.io/linux-insides/content/mm/linux-mm-1.html)의 제한을 모든 맵핑된 모든 페이지에게 설정하고, [kernel/printk/printk.c](https://github.com/torvalds/linux/blob/master/kernel/printk/printk.c)에 있는 `setup_log_buf` 함수의 호출을 볼 것이다.
 
-The `setup_log_buf` function setups kernel cyclic buffer and its length depends on the `CONFIG_LOG_BUF_SHIFT` configuration option. As we can read from the documentation of the `CONFIG_LOG_BUF_SHIFT` it can be between `12` and `21`. In the insides, buffer defined as array of chars:
+`setup_log_buf` 함수는 커널 순환 버퍼와 `CONFIG_LOG_BUF_SHIFT` 구성 옵션에 따라 크기를 설정한다. `CONFIG_LOG_BUF_SHIFT` 관련된 문서를 읽어보면, 그것은 `12`와 `21` 사이의 값이 된다. 내부적으로, buffer 는 char 타입의 배열로 선언된다.:
 
 ```C
 #define __LOG_BUF_LEN (1 << CONFIG_LOG_BUF_SHIFT)
@@ -14,25 +14,26 @@ static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
 ```
 
-Now let's look on the implementation of the `setup_log_buf` function. It starts with check that current buffer is empty (It must be empty, because we just setup it) and another check that it is early setup. If setup of the kernel log buffer is not early, we call the `log_buf_add_cpu` function which increase size of the buffer for every CPU:
+이제 `setup_log_buf` 함수의 구현을 살펴보자. 그것은 현재 버퍼가 비어 있는지 확인하는 것부터 시작하고(버퍼는 반드시 비어 있는 상태여야 한다, 왜냐면 지금 막 설정했기 때문이다.) 초기 설정인지 아닌지 검사한다. 만얀 커널 로그 버퍼의 설정이 초기(early)가 아니라면, 모든 CPU 를 위한 버퍼의 크기를 증가시키는 `log_buf_add_cpu` 함수를 호출한다.:
 
 ```C
-if (log_buf != __log_buf)
+if (log_buf != __log_buf__) // TODO 마지막 언더바 두개
     return;
- 
+
 if (!early && !new_log_buf_len)
     log_buf_add_cpu();
 ```
 
-We will not research `log_buf_add_cpu` function, because as you can see in the `setup_arch`, we call `setup_log_buf` as:
+`log_buf_add_cpu` 함수에 대해서는 더 조사 하지는 않는다. 이유는 `setup_arch`내에서는 아래와 같이 `setup_log_buf`를 호출하여 사용하기 때문이다.:
 
 ```C
 setup_log_buf(1);
 ```
 
-where `1` means that it is early setup. In the next step we check `new_log_buf_len` variable which is updated length of the kernel log buffer and allocate new space for the buffer with the `memblock_virt_alloc` function for it, or just return.
+`1` 은 초기 설정이라는 의미이다. 다음 단계는 `new_log_buf_len` 변수의 값이 커널 로그 버퍼의 길이를 업데이트 했는지 확인하고 버퍼를 위한 새로운 공간을 할당하기 위해 `memblock_virt_alloc` 함수를 사용한다. 업데이트 안되었다면 함수를 그냥 종료한다.
 
 As kernel log buffer is ready, the next function is `reserve_initrd`. You can remember that we already called the `early_reserve_initrd` function in the fourth part of the [Kernel initialization](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html). Now, as we reconstructed direct memory mapping in the `init_mem_mapping` function, we need to move [initrd](http://en.wikipedia.org/wiki/Initrd) into directly mapped memory. The `reserve_initrd` function starts from the definition of the base address and end address of the `initrd` and check that `initrd` is provided by a bootloader. All the same as what we saw in the `early_reserve_initrd`. But instead of the reserving place in the `memblock` area with the call of the `memblock_reserve` function, we get the mapped size of the direct memory area and check that the size of the `initrd` is not greater than this area with:
+커널 로그 버퍼가 준비되면, 다음 호출 함수는 `reserve_initrd` 이다. 우리는 이미 [커널 초기화 part 4](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-4.md)에서 `early_reserve_initrd` 의 호출에 관해 살펴 보았다. 이제, `init_mem_mapping` 함수에서 직접 메모리 맵핑 영역(direct memeory mapping)을 재구성하고, [initrd](http://en.wikipedia.org/wiki/Initrd)를 직접적으로 맵핑된 메모리 영역으로 옮길 필요가 있다. `reserve_initrd` 함수는 `initrd` 의 시작과 끝 주소를 정의하는 것부터 시작하고 부트로더에서 제공된 `initrd` 인지 확인한다. `early_reserve_initrd` 함수에서 봤던 내용과 똑같다. 하지만
 
 ```C
 mapped_size = memblock_mem_size(max_pfn_mapped);
@@ -41,7 +42,7 @@ if (ramdisk_size >= (mapped_size>>1))
 	      "disabling initrd (%lld needed, %lld available)\n",
 	      ramdisk_size, mapped_size>>1);
 ```
-          
+
 You can see here that we call `memblock_mem_size` function and pass the `max_pfn_mapped` to it, where `max_pfn_mapped` contains the highest direct mapped page frame number. If you do not remember what is `page frame number`, explanation is simple: First `12` bits of the virtual address represent offset in the physical page or page frame. If we right-shift out `12` bits of the virtual address, we'll discard offset part and will get `Page Frame Number`. In the `memblock_mem_size` we go through the all memblock `mem` (not reserved) regions and calculates size of the mapped pages and return it to the `mapped_size` variable (see code above). As we got amount of the direct mapped memory, we check that size of the `initrd` is not greater than mapped pages. If it is greater we just call `panic` which halts the system and prints famous [Kernel panic](http://en.wikipedia.org/wiki/Kernel_panic) message. In the next step we print information about the `initrd` size. We can see the result of this in the `dmesg` output:
 
 ```C
@@ -209,7 +210,7 @@ As you can see there is call of the `sparse_memory_present_with_active_regions` 
 
 Again, this part and next parts do not cover this theme in full details. There will be special part about `NUMA`.
 
-vsyscall mapping 
+vsyscall mapping
 --------------------------------------------------------------------------------
 
 The next step after `SparseMem` initialization is setting of the `trampoline_cr4_features` which must contain content of the `cr4` [Control register](http://en.wikipedia.org/wiki/Control_register). First of all we need to check that current CPU has support of the `cr4` register and if it has, we save its content to the `trampoline_cr4_features` which is storage for `cr4` in the real mode:
@@ -315,7 +316,7 @@ struct mpf_intel *mpf = mpf_found;
 
 if (!mpf)
     return;
- 
+
 if (acpi_lapic && early)
    return;
 ```

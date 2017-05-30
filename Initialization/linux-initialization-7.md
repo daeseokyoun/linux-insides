@@ -17,7 +17,7 @@ static char *log_buf = __log_buf;
 이제 `setup_log_buf` 함수의 구현을 살펴보자. 그것은 현재 버퍼가 비어 있는지 확인하는 것부터 시작하고(버퍼는 반드시 비어 있는 상태여야 한다, 왜냐면 지금 막 설정했기 때문이다.) 초기 설정인지 아닌지 검사한다. 만얀 커널 로그 버퍼의 설정이 초기(early)가 아니라면, 모든 CPU 를 위한 버퍼의 크기를 증가시키는 `log_buf_add_cpu` 함수를 호출한다.:
 
 ```C
-if (log_buf != __log_buf__) // TODO 마지막 언더바 두개
+if (log_buf != __log_buf)
     return;
 
 if (!early && !new_log_buf_len)
@@ -222,7 +222,7 @@ vsyscall 맵핑
 if (boot_cpu_data.cpuid_level >= 0) {
     mmu_cr4_features = __read_cr4();
 	if (trampoline_cr4_features)
-	    *trampoline_cr4_features* = mmu_cr4_features; // TODO feature 뒤에 별 하나
+	    *trampoline_cr4_features = mmu_cr4_features;
 }
 ```
 
@@ -240,7 +240,7 @@ void __init map_vsyscall(void)
                              ? PAGE_KERNEL_VSYSCALL
                              : PAGE_KERNEL_VVAR);
 
-        BUILD_BUG_ON((unsigned long)__fix_to_virt__(VSYSCALL_PAGE) != // TODO virt 뒤에 언더바 두개
+        BUILD_BUG_ON((unsigned long)__fix_to_virt(VSYSCALL_PAGE) !=
                      (unsigned long)VSYSCALL_ADDR);
 }
 ```
@@ -284,7 +284,7 @@ void __native_set_fixmap(enum fixed_addresses idx, pte_t pte)
 {
         unsigned long address = __fix_to_virt(idx);
 
-        if (idx >= __end_of_fixed_addresses__) { // TODO 마지막 언더바 두개
+        if (idx >= __end_of_fixed_addresses) {
                 BUG();
                 return;
         }
@@ -302,18 +302,17 @@ BUILD_BUG_ON((unsigned long)__fix_to_virt(VSYSCALL_PAGE) !=
 
 이제 `vsyscall` 영역은 `fix-mapped(고정 맵핑)` 영역에 있다. 이것이 `map_vsyscall`에 관한 모든 것이다. 만약 고정-맵핑 주소에 관해 이해가 되지 않는다면, [고정-맵핑 주소와 ioremap](https://github.com/daeseokyoun/linux-insides/blob/master/mm/linux-mm-2.md) 를 읽어보길 바란다. `vsyscalls and vdso` 파트에서 `vsyscalls` 관해 더 살펴 볼 것이다.
 
-Getting the SMP configuration
+SMP 구성 설정 가져오기
 --------------------------------------------------------------------------------
 
-You may remember how we made a search of the [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing) configuration in the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/%20linux-initialization-6.html). Now we need to get the `SMP` configuration if we found it. For this we check `smp_found_config` variable which we set in the `smp_scan_config` function (read about it the previous part) and call the `get_smp_config` function:
+이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-6.md)에서 어떻게 [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing) 설정의 검색을 하는지 기억할 것이다. 이제 우리는 만약 찾았다면, `SMP` 설정을 얻을 필요가 있다. 이것을 위해 `smp_scan_config` 함수에서 설정한 `smp_found_config` 변수를 확인하고 `get_smp_config` 함수를 호출한다.:
 
 ```C
 if (smp_found_config)
 	get_smp_config();
 ```
 
-The `get_smp_config` expands to the `x86_init.mpparse.default_get_smp_config` function which is defined in the [arch/x86/kernel/mpparse.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/mpparse.c). This function defines a pointer to the multiprocessor floating pointer structure - `mpf_intel` (you can read about it in the previous [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/%20linux-initialization-6.html)) and does some checks:
-
+`get_smp_config` 함수는 [arch/x86/kernel/mpparse.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/mpparse.c) 에 선언된 `x86_init.mpparse.default_get_smp_config` 함수를 호출한다. 이 함수는 인텔 MP 플로팅 포인터 구조체인 `mpf_intel` (이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-6.md)에서 확인했을 것이다.)을 선언하고 몇가지 확인을 한다.:
 ```C
 struct mpf_intel *mpf = mpf_found;
 
@@ -324,21 +323,21 @@ if (acpi_lapic && early)
    return;
 ```
 
-Here we can see that multiprocessor configuration was found in the `smp_scan_config` function or just return from the function if not. The next check is `acpi_lapic` and `early`. And as we did this checks, we start to read the `SMP` configuration. As we finished reading it, the next step is - `prefill_possible_map` function which makes preliminary filling of the possible CPU's `cpumask` (more about it you can read in the [Introduction to the cpumasks](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html)).
+여기서 멀리프로세서 구성을 `smp_scan_config` 함수내에서 찾을 수 있거나 만약 멀티프로세서가 아니라면 그냥 반환된다. 다음은 `acpi_lapic` 와 `early`을 확인하는 것이다. 그리고 이 확인이 정상적이라면, `SMP` 구성 설정을 읽을 수 있다. 다음 단계는 사용 가능한 CPU 들의 확인을 위해 `cpumask` 를 채우는 `prefill_possible_map` 함수이다. ([cpumasks 소개](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.md)에서 더 많은 내용을 확인 하자.)
 
-The rest of the setup_arch
+setup_arch 의 나머지 부분
 --------------------------------------------------------------------------------
 
-Here we are getting to the end of the `setup_arch` function. The rest of function of course is important, but details about these stuff will not will not be included in this part. We will just take a short look on these functions, because although they are important as I wrote above, but they cover non-generic kernel features related with the `NUMA`, `SMP`, `ACPI` and `APICs`, etc. First of all, the next call of the `init_apic_mappings` function. As we can understand this function sets the address of the local [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller). The next is `x86_io_apic_ops.init` and this function initializes I/O APIC. Please note that we will see all details related with `APIC` in the chapter about interrupts and exceptions handling. In the next step we reserve standard I/O resources like `DMA`, `TIMER`, `FPU`, etc., with the call of the `x86_init.resources.reserve_resources` function. Following is `mcheck_init` function initializes `Machine check Exception` and the last is `register_refined_jiffies` which registers [jiffy](http://en.wikipedia.org/wiki/Jiffy_%28time%29) (There will be separate chapter about timers in the kernel).
+이제 `setup_arch` 함수의 막바지에 다달았다. 이 나머지 함수들은 아주 중요하지만, 자세한 사항은 이 파트에서 다루지 않을 것이다. 우리는 간단히 이 함수들을 살펴 볼 것이다. 이유는 이들은 중요하긴 하지만 일반적으로 다루어지는 커널 항목들이 아닌 `NUMA`, `SMP`, `ACPI` 그리고 `APICs`등과 연관된 것들이기 때문이다. 첫 번째로 다음으로 호출되는 함수는 `init_apic_mappings` 함수이다. 이 함수는 지역(local) [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) 의 주소를 설정한다. 다음 호출은 `x86_io_apic_ops.init` 인데, 이 함수는 I/O APIC 를 초기화 한다. `APIC` 관련해서는 인터럽트와 예외 처리 챕터에서 조금 더 자세히 볼 수 있다. 다음 단계에서는 `DMA`, `TIMER`, `FPU` 등과 같이 표준 I/O 자원을 `x86_init.resources.reserve_resources` 함수를 통해 예약한다. 그 다음에는 `Machine check Exception` 을 초기화하는 `mcheck_init` 함수이고, 마지막으로는 [jiffy](http://en.wikipedia.org/wiki/Jiffy_%28time%29) 를 등록하는 `register_refined_jiffies` 함수이다. (커널의 타이머와 관련된 내용을 다루는 분리된 챕터를 만들것이다.)
 
-So that's all. Finally we have finished with the big `setup_arch` function in this part. Of course as I already wrote many times, we did not see full details about this function, but do not worry about it. We will be back more than once to this function from different chapters for understanding how different platform-dependent parts are initialized.
+마침내, 크디큰 `setup_arch` 함수를 이번 파트에서 마무리 지었다. 물론, 이 함수의 모든 내용을 다룬 것은 아니라는 점을 기억하자. 하지만 걱정말자. 이 함수에 대한 내용을 다른 챕터에서 다룰 예정이다.
 
-That's all, and now we can back to the `start_kernel` from the `setup_arch`.
+이제 `setup_arch` 에서 `start_kernel` 로 돌아가보자.
 
-Back to the main.c
+main.c 로 복귀
 ================================================================================
 
-As I wrote above, we have finished with the `setup_arch` function and now we can back to the `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c). As you may remember or saw yourself, `start_kernel` function as big as the `setup_arch`. So the couple of the next part will be dedicated to learning of this function. So, let's continue with it. After the `setup_arch` we can see the call of the `mm_init_cpumask` function. This function sets the [cpumask](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html) pointer to the memory descriptor `cpumask`. We can look on its implementation:
+이제 `setup_arch` 함수를 마무리 짓고, 이제 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에 있는 `start_kernel` 함수로 돌아가자. 기억하겠지만, `start_kernel` 또한 `setup_arch` 만큼 큰 함수이다. 다음 몇 파트에서는 이 함수에서 일어나는 일들을 알아 볼 것이다. 이제 계속 진행해보자. `setup_arch` 함수 이후에, `mm_init_cpumask` 함수의 호출을 볼 수 있다. 이 함수는 [cpumask](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.md) 포인터를 메모리 디스크립터의 `cpumask` 로 설정한다. 그것의 구현을 살펴 보자.:
 
 ```C
 static inline void mm_init_cpumask(struct mm_struct *mm)
@@ -350,23 +349,23 @@ static inline void mm_init_cpumask(struct mm_struct *mm)
 }
 ```
 
-As you can see in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c), we pass memory descriptor of the init process to the `mm_init_cpumask` and depends on `CONFIG_CPUMASK_OFFSTACK` configuration option we clear [TLB](http://en.wikipedia.org/wiki/Translation_lookaside_buffer) switch `cpumask`.
+이 함수는 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에서 볼 수 있고, init 프로세스의 메모리 디스크립터 구조체를 `mm_init_cpumask` 함수로 넘겨주고 `CONFIG_CPUMASK_OFFSTACK` 구성 옵션의 선택에 따라 [TLB](http://en.wikipedia.org/wiki/Translation_lookaside_buffer) 를 클리어 할지를 결정한다.
 
-In the next step we can see the call of the following function:
+다음 단계에서는 아래의 함수 호출을 볼 수 있다.:
 
 ```C
 setup_command_line(command_line);
 ```
 
-This function takes pointer to the kernel command line allocates a couple of buffers to store command line. We need a couple of buffers, because one buffer used for future reference and accessing to command line and one for parameter parsing. We will allocate space for the following buffers:
+이 함수는 커널 명령 라인의 포인터를 받아 명령라인을 저장 하기 위한 몇개의 버퍼들을 할당한다. 그 중 하나는 미래에 참조와 명령라인 접근을 위해 만들어지고 다른 하나는 파라미터 파싱을 위해 사용된다. 다음과 같은 버퍼들을 위해 공간을 할당한다.:
 
-* `saved_command_line` - will contain boot command line;
-* `initcall_command_line` - will contain boot command line. will be used in the `do_initcall_level`;
-* `static_command_line` - will contain command line for parameters parsing.
+* `saved_command_line` - 부트 명령 라인을 포함한다.
+* `initcall_command_line` - 부트 명령 라인을 포함한다. `do_initcall_level`에서 사용될 것이다.
+* `static_command_line` - 파라미터 파싱을 위해 명령 라인을 저장한다.
 
-We will allocate space with the `memblock_virt_alloc` function. This function calls `memblock_virt_alloc_try_nid` which allocates boot memory block with `memblock_reserve` if [slab](http://en.wikipedia.org/wiki/Slab_allocation) is not available or uses `kzalloc_node` (more about it will be in the linux memory management chapter). The `memblock_virt_alloc` uses `BOOTMEM_LOW_LIMIT` (physical address of the `(PAGE_OFFSET + 0x1000000)` value) and `BOOTMEM_ALLOC_ACCESSIBLE` (equal to the current value of the `memblock.current_limit`) as minimum address of the memory region and maximum address of the memory region.
+여기서 `memblock_virt_alloc` 함수를 통해 공간을 할당한다. 이 함수는 [slab](http://en.wikipedia.org/wiki/Slab_allocation) 을 사용 가능하지 않다면, `memblock_reserve` 함수를 통해 부트 메모리 블럭을 할당하는 `memblock_virt_alloc_try_nid` 함수를 호출하고, `slab` 이 사용 가능하다면, `kzalloc_node` 를 호출한다.(리눅스 메모리 관리 챕터에서 더 살펴보자.) `memblock_virt_alloc` 함수는 `BOOTMEM_LOW_LIMIT`(`(PAGE_OFFSET + 0x1000000)` 값의 물리주소) 와  `BOOTMEM_ALLOC_ACCESSIBLE`(`memblock.current_limit` 의 현재 값과 동일) 을 사용하여 메모리 영역의 최소 주소값과 최대값으로 사용한다.
 
-Let's look on the implementation of the `setup_command_line`:
+`setup_command_line` 함수의 구현을 살펴보자.:
 
 ```C
 static void __init setup_command_line(char *command_line)
@@ -381,9 +380,9 @@ static void __init setup_command_line(char *command_line)
  }
  ```
 
-Here we can see that we allocate space for the three buffers which will contain kernel command line for the different purposes (read above). And as we allocated space, we store `boot_command_line` in the `saved_command_line` and `command_line` (kernel command line from the `setup_arch`) to the `static_command_line`.
+여기서 우리는 서로 다른 목적으로 사용될 커널 명령 라인을 저장하는 3 개의 버퍼를 위한 공간 할당을 볼 수 있다. 공간을 할당하고 나서는, `boot_command_line` 를 `saved_command_line` 에 저장하고 `command_line` 을 `static_command_line` 에 저장한다.
 
-The next function after the `setup_command_line` is the `setup_nr_cpu_ids`. This function setting `nr_cpu_ids` (number of CPUs) according to the last bit in the `cpu_possible_mask` (more about it you can read in the chapter describes [cpumasks](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html) concept). Let's look on its implementation:
+`setup_command_line` 함수 다음으로 호출되는 함수는 `setup_nr_cpu_ids` 이다. 이 함수는 `cpu_possible_mask` 의 마지막 비트에 따라 `nr_cpu_ids`(CPU 의 수) 를 설정한다. (이것에 관해 조금 더 자세히 알고 싶다면, [cpumasks](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.md)를 살펴 보자.) 이제 그 구현을 살펴 보자.:
 
 ```C
 void __init setup_nr_cpu_ids(void)
@@ -392,22 +391,22 @@ void __init setup_nr_cpu_ids(void)
 }
 ```
 
-Here `nr_cpu_ids` represents number of CPUs, `NR_CPUS` represents the maximum number of CPUs which we can set in configuration time:
+여기서 `nr_cpu_ids` 는 CPU 의 개수를 나타내고, `NR_CPUS` 는 최대로 구성할 수 있는 CPU 의 최대 개수를 나타낸다.:
 
 ![CONFIG_NR_CPUS](http://oi59.tinypic.com/28mh45h.jpg)
 
-Actually we need to call this function, because `NR_CPUS` can be greater than actual amount of the CPUs in the your computer. Here we can see that we call `find_last_bit` function and pass two parameters to it:
+실제로, 우리는 이 함수의 호출이 필요한데, 그 이유는 `NR_CPUS` 는 당신이 가지고 있는 컴퓨터의 실제 CPU 개수 보다 더 클 수 있기 때문이다. 여기서 우리는 `find_last_bit` 함수의 호출을 볼 수 있고, 이 함수는 두 개의 인자를 가진다.:
 
-* `cpu_possible_mask` bits;
-* maximum number of CPUS.
+* `cpu_possible_mask` 비트들
+* 최대 CPU 개수
 
-In the `setup_arch` we can find the call of the `prefill_possible_map` function which calculates and writes to the `cpu_possible_mask` actual number of the CPUs. We call the `find_last_bit` function which takes the address and maximum size to search and returns bit number of the first set bit. We passed `cpu_possible_mask` bits and maximum number of the CPUs. First of all the `find_last_bit` function splits given `unsigned long` address to the [words](http://en.wikipedia.org/wiki/Word_%28computer_architecture%29):
+`setup_arch` 함수에서 우리는 `prefill_possible_map` 함수 호출을 통해 CPU 의 개수를 계산하고 `cpu_possible_mask` 에 써 놓았다. 이제 `find_last_bit` 함수를 주소와 최대 크기를 인자로 넘겨 처음으로 셋된 비트의 인덱스를 반환한다. `cpu_possible_mask` 비트들과 CPU 개수의 최대값을 넘겨주었다. `find_last_bit` 함수에서 처음으로 하는 것은 주어진 `unsigned long` 주소를 [words](http://en.wikipedia.org/wiki/Word_%28computer_architecture%29) 단위로 쪼개는 것이다.:
 
 ```C
 words = size / BITS_PER_LONG;
 ```
 
-where `BITS_PER_LONG` is `64` on the `x86_64`. As we got amount of words in the given size of the search data, we need to check is given size does not contain partial words with the following check:
+`BITS_PER_LONG` 은 `x86_64` 에서 `64` 값을 가진다. 찾아야 하는 데이터의 주어진 크기에서 word 의 개수를 얻고, 그 크기를 아래의 코드로 `0` 이 된 것이 아닌지 확인한다.:
 
 ```C
 if (size & (BITS_PER_LONG-1)) {
@@ -418,14 +417,14 @@ if (size & (BITS_PER_LONG-1)) {
 }
 ```
 
-if it contains partial word, we mask the last word and check it. If the last word is not zero, it means that current word contains at least one set bit. We go to the `found` label:
+word 단위에서 비트가 포함되어 있다면, 마지막 word 를 마스킹하고 확인한다. 만약 마지막 word가 0이 아니라면, 현재 word 가 적어도 하나의 비트를 1로 가지고 있다는 의미이다. 찾았다면 `found` 라벨로 이동하자.:
 
 ```C
 found:
     return words * BITS_PER_LONG + __fls(tmp);
 ```
 
-Here you can see `__fls` function which returns last set bit in a given word with help of the `bsr` instruction:
+여기서 `bsr` 명령어의 도움으로 주어진 word 단위에 최상위 비트를 찾아 반환한다.:
 
 ```C
 static inline unsigned long __fls(unsigned long word)
@@ -437,7 +436,7 @@ static inline unsigned long __fls(unsigned long word)
 }
 ```
 
-The `bsr` instruction which scans the given operand for first bit set. If the last word is not partial we going through the all words in the given address and trying to find first set bit:
+`bsr` 명령어는 주어진 피연산자(operand) 의 최상위 비트(Most significant bit) 를 찾아준다. 만약 마지막 word 가 비트를 포함하지 않았다면, 주어진 주소에서 모든 word 단위를 검사하여 첫 비트를 찾기위해 시도 할 것이다.:
 
 ```C
 while (words) {
@@ -449,24 +448,22 @@ found:
 }
 ```
 
-Here we put the last word to the `tmp` variable and check that `tmp` contains at least one set bit. If a set bit found, we return the number of this bit. If no one words do not contains set bit we just return given size:
+마지막 word 를 `tmp` 변수에 넣고 `tmp` 가 적어도 하나의 비트를 갖고 있는지 확인한다. 만약 설정된 비트를 찾았다면, 그 비트가 몇번째 비트인지 반환한다. 만약 어떤 비트도 설정되어 있지 않았다면, 인자로 주어진 크기를 반환한다.:
 
 ```C
 return size;
 ```
 
-After this `nr_cpu_ids` will contain the correct amount of the available CPUs.
+`nr_cpu_ids` 는 가용한 CPU 의 정확한 개수를 가질 것이다.
 
-That's all.
-
-Conclusion
+결론
 ================================================================================
 
-It is the end of the seventh part about the linux kernel initialization process. In this part, finally we have finished with the `setup_arch` function and returned to the `start_kernel` function. In the next part we will continue to learn generic kernel code from the `start_kernel` and will continue our way to the first `init` process.
+리눅스 초기화 과정의 7번째 파트가 마무리 되었다. 이 파트에서는 마침내, `setup_arch` 함수를 마무리 지었고, `start_kernel` 함수로 복귀했다. 다음 파트에서 `start_kernel` 의 일반적인 커널 코드를 계속 해서 배워 볼 것이고, 첫 프로세스인 `init`까지 가볼 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 ================================================================================

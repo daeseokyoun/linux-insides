@@ -1,10 +1,10 @@
-Kernel initialization. Part 8.
+커널 초기화. Part 8.
 ================================================================================
 
-Scheduler initialization
+스케줄러 초기화
 ================================================================================
 
-This is the eighth [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) of the Linux kernel initialization process and we stopped on the `setup_nr_cpu_ids` function in the [previous](https://github.com/0xAX/linux-insides/blob/master/Initialization/linux-initialization-7.md) part. The main point of the current part is [scheduler](http://en.wikipedia.org/wiki/Scheduling_%28computing%29) initialization. But before we will start to learn initialization process of the scheduler, we need to do some stuff. The next step in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) is the `setup_per_cpu_areas` function. This function setups areas for the `percpu` variables, more about it you can read in the special part about the [Per-CPU variables](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html). After `percpu` areas is up and running, the next step is the `smp_prepare_boot_cpu` function. This function does some preparations for the [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing):
+리눅스 커널 초기화 과정의 8 번째 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/README.md)를 시작한다. 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-7.md) 에서 `setup_nr_cpu_ids` 함수까지 하고 마무리 지었었다. 현재 파트에서 주요 쟁점은 [scheduler](http://en.wikipedia.org/wiki/Scheduling_%28computing%29)의 초기화이다. 하지만 스케줄러 초기화 과정을 배우기 전에, 몇가지 알고 넘어가야 하는 것들이 있다. [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에서 다음 단계는 `setup_per_cpu_areas` 함수이다. 이 함수는 `percpu` 변수를 위한 공간을 설정한다. 이것을 조금 더 자세히 알고 싶다면 [Per-CPU](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/per-cpu.md) 관련 챕터를 참조하자. `percpu` 공간이 설정된다면, 다음 단계는 `smp_prepare_boot_cpu` 함수 호출이다. 이 함수는 [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing) 를 위한 몇몇의 준비 작업을 한다.:
 
 ```C
 static inline void smp_prepare_boot_cpu(void)
@@ -13,7 +13,7 @@ static inline void smp_prepare_boot_cpu(void)
 }
 ```
 
-where the `smp_prepare_boot_cpu` expands to the call of the `native_smp_prepare_boot_cpu` function (more about `smp_ops` will be in the special parts about `SMP`):
+이 함수는 `smp_prepare_boot_cpu` 를 호출 하고, 이 함수는 다시 `native_smp_prepare_boot_cpu` 를 호출한다. (`smp_ops` 에 관련된 사항을 보려면 `SMP` 챕터를 확인하자.):
 
 ```C
 void __init native_smp_prepare_boot_cpu(void)
@@ -25,7 +25,7 @@ void __init native_smp_prepare_boot_cpu(void)
 }
 ```
 
-The `native_smp_prepare_boot_cpu` function gets the id of the current CPU (which is Bootstrap processor and its `id` is zero) with the `smp_processor_id` function. I will not explain how the `smp_processor_id` works, because we already saw it in the [Kernel entry point](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html) part. As we got processor `id` number we reload [Global Descriptor Table](http://en.wikipedia.org/wiki/Global_Descriptor_Table) for the given CPU with the `switch_to_new_gdt` function:
+`native_smp_prepare_boot_cpu` 함수는 먼저, `smp_processor_id` 함수로 현재 CPU id 를 얻는다.(현재 부트스트랩 프로세서의 `id`는 0 이다.) 여기서는 `smp_processor_id` 함수가 어떻게 동작하는지 설명하지 않을 것이다. 이유는 이미 [커널 엔트리 포인트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-4.md) 에서 살펴 보았기 때문이다. 프로세서 `id` 번호를 얻었다면, `switch_to_new_gdt` 함수로 주어진 CPU 를 위한 [Global Descriptor Table-GDT](http://en.wikipedia.org/wiki/Global_Descriptor_Table) 를 재 로드한다.:
 
 ```C
 void switch_to_new_gdt(int cpu)
@@ -39,13 +39,13 @@ void switch_to_new_gdt(int cpu)
 }
 ```
 
-The `gdt_descr` variable represents pointer to the `GDT` descriptor here (we already saw `desc_ptr` in the [Early interrupt and exception handling](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html)). We get the address and the size of the `GDT` descriptor where `GDT_SIZE` is `256` or:
+여기서 `gdt_descr` 변수는 `GDT` 디스크립터의 포인터를 나타낸다.(우리는 이미 [초기 인터럽트와 예외 처리](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-2.md) 에서 살펴 보았다.) 우리는 `GDT` 디스크립터의 크기와 주소를 얻는다. 여기서 `GDT_SIZE` 는 `256` 이다.:
 
 ```C
 #define GDT_SIZE (GDT_ENTRIES * 8)
 ```
 
-and the address of the descriptor we will get with the `get_cpu_gdt_table`:
+그리고 `get_cpu_gdt_table` 함수로 부터 디스크립터의 주소를 얻을 것이다.:
 
 ```C
 static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)
@@ -54,7 +54,7 @@ static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)
 }
 ```
 
-The `get_cpu_gdt_table` uses `per_cpu` macro for getting `gdt_page` percpu variable for the given CPU number (bootstrap processor with `id` - 0 in our case). You may ask the following question: so, if we can access `gdt_page` percpu variable, where it was defined? Actually we already saw it in this book. If you have read the first [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-1.html) of this chapter, you can remember that we saw definition of the `gdt_page` in the [arch/x86/kernel/head_64.S](https://github.com/0xAX/linux/blob/master/arch/x86/kernel/head_64.S):
+`get_cpu_gdt_table` 함수는 주어진 CPU 번호를 위한 `gdt_page` 인 percpu 변수를 얻기 위해 `per_cpu` 매크로를 사용한다.(우리의 경우에는, 부트스트랩 프로세서의 `id`는 0 이다.) 그렇다면 이런 질문이 생길 수 있다: 그래서 만약 `gdt_page` percpu 변수를 접근 할 수 있다면, 어디서 이 선언을 찾을 수 있을까? 실제 우리는 이미 그것을 이 책을 통해서 살펴 봤다. 만약 첫 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-1.md)를 봤다면, 당신은 [arch/x86/kernel/head_64.S](https://github.com/0xAX/linux/blob/master/arch/x86/kernel/head_64.S) 에서 `gdt_page` 의 선언을 봤었을 것이다.:
 
 ```assembly
 early_gdt_descr:
@@ -63,14 +63,14 @@ early_gdt_descr_base:
 	.quad	INIT_PER_CPU_VAR(gdt_page)
 ```
 
-and if we will look on the [linker](https://github.com/0xAX/linux/blob/master/arch/x86/kernel/vmlinux.lds.S) file we can see that it locates after the `__per_cpu_load` symbol:
+그리고 만약 우리가 [linker](https://github.com/0xAX/linux/blob/master/arch/x86/kernel/vmlinux.lds.S) 파일을 봤다면, `__per_cpu_load` 심볼 바로 뒤에 위치했다는 것도 알수 있다.:
 
 ```C
 #define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load
 INIT_PER_CPU(gdt_page);
 ```
 
-and filled `gdt_page` in the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c#L94):
+그리고 [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c#L94)에서 `gdt_page`를 채웠다.:
 
 ```C
 DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
@@ -86,7 +86,7 @@ DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
     ...
 ```
 
-more about `percpu` variables you can read in the [Per-CPU variables](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) part. As we got address and size of the `GDT` descriptor we reload `GDT` with the `load_gdt` which just execute `lgdt` instruct and load `percpu_segment` with the following function:
+`percpu` 변수에 대해 더 자세히 알고 싶다면, [Per-CPU variables](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/per-cpu.md) 파트를 살펴 보자. `GDT` 디스크립터의 크기와 주소를 얻고 나면, 단지 `lgdt` 명령어를 실행하는 `load_gdt` 를 통해 `GDT` 를 재 로드하고 다음 함수를 통해 `percpu_segment` 를 로드 한다.:
 
 ```C
 void load_percpu_segment(int cpu) {
@@ -96,29 +96,29 @@ void load_percpu_segment(int cpu) {
 }
 ```
 
-The base address of the `percpu` area must contain `gs` register (or `fs` register for `x86`), so we are using `loadsegment` macro and pass `gs`. In the next step we writes the base address if the [IRQ](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29) stack and setup stack [canary](http://en.wikipedia.org/wiki/Buffer_overflow_protection) (this is only for `x86_32`). After we load new `GDT`, we fill `cpu_callout_mask` bitmap with the current cpu and set cpu state as online with the setting `cpu_state` percpu variable for the current processor - `CPU_ONLINE`:
+`percpu` 영역의 시작 주소는 `gs` 레지스터를 반드시 포함해야 해야 하기 때문에, `gs`를 `loadsegment` 매크로에게 넘겨주어 실행한다. 다음 단계에서는 [IRQ](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29) 스택이 있다면 그 시작 주소를 써주고 스택 [canary](http://en.wikipedia.org/wiki/Buffer_overflow_protection)도 설정(이것은 `x86_32` 를 위한 것이다.)한다. 새로운 `GDT`를 로드하고 나서, 현재 CPU 의 `cpu_callout_mask` 비트맵을 채우고, 현재 프로세서를 위해 `cpu_state` percpu 변수에서 cpu 상태를 online - `CPU_ONLINE` - 으로 설정한다.:
 
 ```C
 cpumask_set_cpu(me, cpu_callout_mask);
 per_cpu(cpu_state, me) = CPU_ONLINE;
 ```
 
-So, what is `cpu_callout_mask` bitmap... As we initialized bootstrap processor (processor which is booted the first on `x86`) the other processors in a multiprocessor system are known as `secondary processors`. Linux kernel uses following two bitmasks:
+그러면, `cpu_callout_mask` 비트맵은 무엇이냐... 우리는 부트스트랩 프로세서를 초기화 했기에 멀리 프로세서 시스템에서 다른 프로세서들은 `secondary processors` 로 알려져있다. 리눅스 커널은 아래 두 비트맵 마스크를 사용한다.:
 
 * `cpu_callout_mask`
 * `cpu_callin_mask`
 
-After bootstrap processor initialized, it updates the `cpu_callout_mask` to indicate which secondary processor can be initialized next. All other or secondary processors can do some initialization stuff before and check the `cpu_callout_mask` on the boostrap processor bit. Only after the bootstrap processor filled the `cpu_callout_mask` with this secondary processor, it will continue the rest of its initialization. After that the certain processor finish its initialization process, the processor sets bit in the `cpu_callin_mask`. Once the bootstrap processor finds the bit in the `cpu_callin_mask` for the current secondary processor, this processor repeats the same procedure for initialization of one of the remaining secondary processors. In a short words it works as i described, but we will see more details in the chapter about `SMP`.
-        
-That's all. We did all `SMP` boot preparation.
+부트스트랩 프로세서가 초기화되면, 그것은 보조 프로세서들을 초기화 할 수 있도록 표시하기 위해 `cpu_callout_mask` 를 업데이트 한다. 모든 다른 보조 프로세서(secondary processors)들은 초기화 되기 전에 몇가지 일들을 해야 하고 `cpu_callout_mask` 에 부트스트랩 프로세서 비트가 설정되어 있는지 확인한다. 단지 보조 프로세서와 함께 부트스트랩 프로세서의 `cpu_callout_mask` 를 채운다면, 그것의 초기화의 나머지를 진행할 수 있다. 특정 프로세서의 초기화를 마무리 한뒤에는, 이 프로세서는 남은 보조 프로세서들 중 하나를 초기화를 위해 같은 과정으로 반복한다. 이와 관련된 세부 사항은 `SMP` 관련된 챕터를 참고 바란다.
 
-Build zonelists
+끝이다. 이제 `SMP` 부트 준비를 마쳤다.
+
+zonelists 만들기
 -----------------------------------------------------------------------
 
-In the next step we can see the call of the `build_all_zonelists` function. This function sets up the order of zones that allocations are preferred from. What are zones and what's order we will understand soon. For the start let's see how linux kernel considers physical memory. Physical memory is split into banks which are called - `nodes`. If you has no hardware support for `NUMA`, you will see only one node:
+다음 단계에서는 `build_all_zonelists` 함수의 호출을 볼 수 있다. 이 함수는 할당이 어떤 zone 으로 부터 받아야 하는지 zone 의 우선순위를 설정한다. 먼저 zone 들과 우선순위에 대해 먼저 이해를 할 필요가 있다. 리눅스 커널에서 물리적 메모리를 어떻게 처리하는지 알아보자. 물리적 메모리는 `nodes` 라는 이름으로 뱅크들로 분리되어 있다. 만약 당신이 `NUMA` 를 지원하는 하드웨어가 없다면, 단지 하나의 node 만 있다고 생각하고 보자.:
 
 ```
-$ cat /sys/devices/system/node/node0/numastat 
+$ cat /sys/devices/system/node/node0/numastat
 numa_hit 72452442
 numa_miss 0
 numa_foreign 0
@@ -127,15 +127,15 @@ local_node 72452442
 other_node 0
 ```
 
-Every `node` is presented by the `struct pglist_data` in the linux kernel. Each node is divided into a number of special blocks which are called - `zones`. Every zone is presented by the `zone struct` in the linux kernel and has one of the type:
+모든 `node` 는 리눅스 커널에서 `struct pglist_data` 로 표현이 된다. 각 node 는 `zones` 이라는 특별한 몇 개의 블럭으로 나뉘어져 있다. 모든 zone 은 리눅스 커널에서 `zone struct` 으로 표현이 되고 아래 중 하나의 타입을 가진다.:
 
 * `ZONE_DMA` - 0-16M;
-* `ZONE_DMA32` - used for 32 bit devices that can only do DMA areas below 4G;
-* `ZONE_NORMAL` - all RAM from the 4GB on the `x86_64`;
-* `ZONE_HIGHMEM` - absent on the `x86_64`;
-* `ZONE_MOVABLE` - zone which contains movable pages.
+* `ZONE_DMA32` - 4G 아래에 있는 DMA 영역 만을 접근하여 사용하는 32 비트 장치를 위해 사용
+* `ZONE_NORMAL` - `x86_64` 에서 4 GB 에서 부터 모든 메모리
+* `ZONE_HIGHMEM` - `x86_64` 에서는 필요 없음
+* `ZONE_MOVABLE` - 이동 가능한 페이지들을 포함하는 zone
 
-which are presented by the `zone_type` enum. We can get information about zones with the:
+이것들은 `zone_type` enum 타입으로 표현된다. 아래와 같이 zone에 대한 정보를 얻을 수 있다.:
 
 ```
 $ cat /proc/zoneinfo
@@ -159,12 +159,12 @@ Node 0, zone   Normal
         ...
 ```
 
-As I wrote above all nodes are described with the `pglist_data` or `pg_data_t` structure in memory. This structure is defined in the [include/linux/mmzone.h](https://github.com/torvalds/linux/blob/master/include/linux/mmzone.h). The `build_all_zonelists` function from the [mm/page_alloc.c](https://github.com/torvalds/linux/blob/master/mm/page_alloc.c) constructs an ordered `zonelist` (of different zones `DMA`, `DMA32`, `NORMAL`, `HIGH_MEMORY`, `MOVABLE`) which specifies the zones/nodes to visit when a selected `zone` or `node` cannot satisfy the allocation request. That's all. More about `NUMA` and multiprocessor systems will be in the special part.
+위에서 언급했듯이 모든 노드들은 메모리내에 `pglist_data` 나 `pg_data_t` 구조체로 기술된다. 이 구조체는 [include/linux/mmzone.h](https://github.com/torvalds/linux/blob/master/include/linux/mmzone.h) 에 선언되어 있다. [mm/page_alloc.c](https://github.com/torvalds/linux/blob/master/mm/page_alloc.c)에 있는 `build_all_zonelists` 함수는 선택된 `zone`이나 `node`에서 할당 요청을 처리하지 못했을 때 가능한 zone 이나 node 들을 지정하도록 하는 (순서가 있는) `zonelist` 를 구성한다. `NUMA`나 멀티 프로세서 시스템에 대해 더 기술 하기 위해 특별한 파트를 구성할 것이다.
 
-The rest of the stuff before scheduler initialization
+스케줄러 초기화 전에 남은 일들
 --------------------------------------------------------------------------------
 
-Before we will start to dive into linux kernel scheduler initialization process we must do a couple of things. The first thing is the `page_alloc_init` function from the [mm/page_alloc.c](https://github.com/torvalds/linux/blob/master/mm/page_alloc.c). This function looks pretty easy:
+리눅스 커널 스케줄러 초기화 과정을 살펴보기 전에 몇가지 일들을 먼저 진행해야 한다. 첫 번째로는 [mm/page_alloc.c](https://github.com/torvalds/linux/blob/master/mm/page_alloc.c) 에 구현된 `page_alloc_init` 함수이다. 이 함수는 꽤 쉬워 보인다.:
 
 ```C
 void __init page_alloc_init(void)
@@ -173,29 +173,28 @@ void __init page_alloc_init(void)
 }
 ```
 
-and initializes handler for the `CPU` [hotplug](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt). Of course the `hotcpu_notifier` depends on the 
-`CONFIG_HOTPLUG_CPU` configuration option and if this option is set, it just calls `cpu_notifier` macro which expands to the call of the `register_cpu_notifier` which adds hotplug cpu handler (`page_alloc_cpu_notify` in our case).
+이 함수는 `CPU` [hotplug](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt)를 위한 핸들러를 초기화 한다. 물론 `hotcpu_notifier` 함수는 `CONFIG_HOTPLUG_CPU` 구성 옵션에 의존적이고, 만약 이 옵션이 설정되어 있다면, hotplug cpu 핸들러 (우리의 경우에는 `page_alloc_cpu_notify` 이다.)를 초기하는 `register_cpu_notifier` 함수를 호출하는 `cpu_notifier` 함수를 호출한다.
 
-After this we can see the kernel command line in the initialization output:
+이 호출 다음에 우리는 초기화 화면 출력에서 커널 명령 라인을 아래와 같이 확인 할 수 있다.:
 
 ![kernel command line](http://oi58.tinypic.com/2m7vz10.jpg)
 
-And a couple of functions such as `parse_early_param` and `parse_args` which handles linux kernel command line. You may remember that we already saw the call of the `parse_early_param` function in the sixth [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-6.html) of the kernel initialization chapter, so why we call it again? Answer is simple: we call this function in the architecture-specific code (`x86_64` in our case), but not all architecture calls this function. And we need to call the second function `parse_args` to parse and handle non-early command line arguments.
+그리고 리눅스 커널 명령 라인을 처리하는 `parse_early_param` 와 `parse_args` 같은 함수들을 사용될 수 있다. `parse_early_param` 함수는 6 번째 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-6.md) 에서 이미 살펴 보았는데, 왜 다시 이 함수가 호출되는 것인가? 답은 간단하다.: 우리는 이 함수는 아키텍처 특화된 코드내에서 호출했지만(우리의 경우, `x86_64`) 모든 함수가 이 함수를 호출하는 것은 아니다. 그리고 우리는 파싱하기 위해 두 번째 함수인 `parse_args` 를 호출할 필요가 있고 초기 명령 라인이 아닌 인자들을 처리할 수 있다.
 
-In the next step we can see the call of the `jump_label_init` from the [kernel/jump_label.c](https://github.com/torvalds/linux/blob/master/kernel/jump_label.c). and initializes [jump label](https://lwn.net/Articles/412072/).
+다음 단계에서 [kernel/jump_label.c](https://github.com/torvalds/linux/blob/master/kernel/jump_label.c) 소스 코드에 있는 `jump_label_init` 함수의 호출을 볼 수 있다. 그리고 [jump label](https://lwn.net/Articles/412072/)을 초기화 한다.
 
-After this we can see the call of the `setup_log_buf` function which setups the [printk](http://www.makelinux.net/books/lkd2/ch18lev1sec3) log buffer. We already saw this function in the seventh [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-7.html) of the linux kernel initialization process chapter.
+이 다음에는 [printk](http://www.makelinux.net/books/lkd2/ch18lev1sec3) 로그 버퍼을 설정하는 `setup_log_buf` 함수를 볼 수 있다. 우리는 이미 이 함수를 리눅스 초기화 과정 챕터 7 번째 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-6.md)에서 보았다.
 
-PID hash initialization
+PID 해쉬 초기화
 --------------------------------------------------------------------------------
 
-The next is `pidhash_init` function. As you know each process has assigned a unique number which called - `process identification number` or `PID`. Each process generated with fork or clone is automatically assigned a new unique `PID` value by the kernel. The management of `PIDs` centered around the two special data structures: `struct pid` and `struct upid`. First structure represents information about a `PID` in the kernel. The second structure represents the information that is visible in a specific namespace. All `PID` instances stored in the special hash table:
+다음 살펴 볼 함수는 `pidhash_init` 함수이다. 아시다시피 각 프로세스는 `process identification number` 나 `PID` 라 불리는 고유한 번호를 할당 받는다. 각 fork 나 clone 으로 생성된 프로세스는 커널로 부터 자동적으로 새로운 고유의 `PID` 를 할당 받는다. `PID` 들의 관리는 두 개의 특별한 자료 구조들인 `struct pid` 와 `struct upid`로 이루진다. 첫 번째 구조체는 커널에서 `PID` 에 관련된 정보를 나타낸다. 두 번째 구조체는 특정 네임스페이스 내에서 보여지는 정보들을 나타낸다. 모든 `PID` 인스턴스는 특별한 해쉬 테이블에 저장된다.:
 
 ```C
 static struct hlist_head *pid_hash;
 ```
 
-This hash table is used to find the pid instance that belongs to a numeric `PID` value. So, `pidhash_init` initializes this hash table. In the start of the `pidhash_init` function we can see the call of the `alloc_large_system_hash`:
+이 해쉬 테이블은 숫자의 `PID` 값에 속하는 Pid 인스턴스를 찾는데 사용된다. 그래서, `pidhash_init`는 이 해쉬 테이블을 초기화 한다. `pidhash_init` 함수의 시작에서 `alloc_large_system_hash` 함수 호출을 볼 수 있다.:
 
 ```C
 pid_hash = alloc_large_system_hash("PID", sizeof(*pid_hash), 0, 18,
@@ -204,10 +203,9 @@ pid_hash = alloc_large_system_hash("PID", sizeof(*pid_hash), 0, 18,
                                    0, 4096);
 ```
 
-The number of elements of the `pid_hash` depends on the `RAM` configuration, but it can be between `2^4` and `2^12`. The `pidhash_init` computes the size
-and allocates the required storage (which is `hlist` in our case - the same as [doubly linked list](http://0xax.gitbooks.io/linux-insides/content/DataStructures/dlist.html), but contains one pointer instead on the [struct hlist_head](https://github.com/torvalds/linux/blob/master/include/linux/types.h)]. The `alloc_large_system_hash` function allocates a large system hash table with `memblock_virt_alloc_nopanic` if we pass `HASH_EARLY` flag (as it in our case) or with `__vmalloc` if we did no pass this flag.
+`pid_hash` 의 요소의 수는 `RAM` 구성에 의존적이지만, 그것은 `2^4` 개에서 `2^12` 사이의 값이다. `pidhash_init` 함수는 그 크기를 계산하여 요구되는 저장소(우리의 경우에는 `hlist` 이다. - [doubly linked list](http://0xax.gitbooks.io/linux-insides/content/DataStructures/dlist.html) 와 같지만, [struct hlist_head](https://github.com/torvalds/linux/blob/master/include/linux/types.h) 대신에 하나의 포인터를 가진다.)를 할당한다. `alloc_large_system_hash` 함수는 만약 `HASH_EARLY` 플래그를 (우리의 경우와 같음) 넘겼다면, `memblock_virt_alloc_nopanic` 함수를 사용하고 넘기지 않았다면 `__vmalloc`를 이용해 큰 시스템 해쉬 테이블을 할당한다.
 
-The result we can see in the `dmesg` output:
+우리는 `dmesg` 출력에서 아래와 같은 결과를 볼 수있다.:
 
 ```
 $ dmesg | grep hash
@@ -217,9 +215,9 @@ $ dmesg | grep hash
 ...
 ```
 
-That's all. The rest of the stuff before scheduler initialization is the following functions: `vfs_caches_init_early` does early initialization of the [virtual file system](http://en.wikipedia.org/wiki/Virtual_file_system) (more about it will be in the chapter which will describe virtual file system), `sort_main_extable` sorts the kernel's built-in exception table entries which are between `__start___ex_table` and `__stop___ex_table`, and `trap_init` initializes trap handlers (more about last two function we will know in the separate chapter about interrupts).
+이게 전부다. 스케줄러 초기화 전에 몇가지 더 남은 것들은 다음과 같은 함수들이다.: `vfs_caches_init_early` 함수는 [virtual file system](http://en.wikipedia.org/wiki/Virtual_file_system) 의 초기(early) 초기화를 한다.(이와 관련된 자세한 내용은 가상 파일 시스템 챕터에서 기술 할 것이다.), `sort_main_extable` 함수는 커널 빌트인된 `__start___ex_table` 와 `__stop___ex_table` 사이에 있는 예외 테이블 엔트리들을 정렬한다., 그리고 `trap_init` 함수는 트랩 핸들러를 초기화 한다.(마지막 두 개의 함수들은 인터럽트와 관련된 몇몇 챕터에서 다루어 볼 것이다.)
 
-The last step before the scheduler initialization is initialization of the memory manager with the `mm_init` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c). As we can see, the `mm_init` function initializes different parts of the linux kernel memory manager:
+스케줄러 초기호 전에 마지막 단계는 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 코드에 있는 `mm_init` 함수를 통해 메모리 관리자의 초기화이다. `mm_init` 함수는 리눅스 커널 메모리 관리를 위한 초기화를 진행한다.:
 
 ```C
 page_ext_init_flatmem();
@@ -230,14 +228,14 @@ pgtable_init();
 vmalloc_init();
 ```
 
-The first is `page_ext_init_flatmem` which depends on the `CONFIG_SPARSEMEM` kernel configuration option and initializes extended data per page handling. The `mem_init` releases all `bootmem`, the `kmem_cache_init` initializes kernel cache, the `percpu_init_late` - replaces `percpu` chunks with those allocated by [slub](http://en.wikipedia.org/wiki/SLUB_%28software%29), the `pgtable_init` - initializes the `page->ptl` kernel cache, the `vmalloc_init` - initializes `vmalloc`. Please, **NOTE** that we will not dive into details about all of these functions and concepts, but we will see all of they it in the [Linux kernel memory manager](http://0xax.gitbooks.io/linux-insides/content/mm/index.html) chapter.
+첫 함수는 `CONFIG_SPARSEMEM` 커널 구성 옵션에 의존적인 `page_ext_init_flatmem` 이고, 이 함수는 매 페이지 핸들링마다 확장된 데이터를 초기화 한다. `mem_init` 함수는 `bootmem` 에서 사용된 모든 메모리를 해제한다. `kmem_cache_init` 함수는 커널 캐쉬를 초기화하고, `percpu_init_late` 함수는 [slub](http://en.wikipedia.org/wiki/SLUB_%28software%29)이 사용되기 전에 할당된 것들을 교체하는 작업을 한다. `pgtable_init` 는 `page->ptl` 커널 캐쉬를 초기화한다. `vmalloc_init` 함수는 `vmalloc` 를 초기화한다. **NOTE** 우리는 방금 언급한 함수들을 더 자세히 살펴 보진 않을 것이다. 하지만 [리눅스 커널 메모리 관리](https://github.com/daeseokyoun/linux-insides/blob/master/mm/README.md) 챕터에서 진행할 것이다.
 
-That's all. Now we can look on the `scheduler`.
+이제 `scheduler` 초기화를 살펴 보자.
 
-Scheduler initialization
+스케줄러 초기화
 --------------------------------------------------------------------------------
 
-And now we come to the main purpose of this part - initialization of the task scheduler. I want to say again as I already did it many times, you will not see the full explanation of the scheduler here, there will be special chapter about this. Ok, next point is the `sched_init` function from the [kernel/sched/core.c](https://github.com/torvalds/linux/blob/master/kernel/sched/core.c) and as we can understand from the function's name, it initializes scheduler. Let's start to dive into this function and try to understand how the scheduler is initialized. At the start of the `sched_init` function we can see the following code:
+이제서야 이 파트의 주 목적 - 태스크 스케줄러의 초기화 - 으로 진입했다. 여기서는 스케줄러의 모든 내용을 다루진 않을 것이고, 스케줄러를 위한 것은 따로 특별한 챕터를 만들 것이다. 좋다. 다음 호출되는 함수는 [kernel/sched/core.c](https://github.com/torvalds/linux/blob/master/kernel/sched/core.c) 소스 파일에 구현된 `sched_init` 함수이고, 함수이름에서도 알 수 있듯이 스케줄러를 초기화한다. 어떻게 스케줄러가 초기화 되는지 이해 해보도록 하자. `sched_init` 함수는 아래의 코드에서 부터 시작한다.:
 
 ```C
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -248,19 +246,18 @@ And now we come to the main purpose of this part - initialization of the task sc
 #endif
 ```
 
-First of all we can see two configuration options here:
+처음에 아래와 같은 구성 옵션들을 볼 수 있다.:
 
 * `CONFIG_FAIR_GROUP_SCHED`
 * `CONFIG_RT_GROUP_SCHED`
 
-Both of this options provide two different planning models. As we can read from the [documentation](https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt), the current scheduler - `CFS` or `Completely Fair Scheduler` use a simple concept. It models process scheduling as if the system has an ideal multitasking processor where each process would receive `1/n` processor time, where `n` is the number of the runnable processes. The scheduler uses the special set of rules. These rules determine when and how to select a new process to run and they are called `scheduling policy`. The Completely Fair Scheduler supports following `normal` or `non-real-time` scheduling policies: `SCHED_NORMAL`, `SCHED_BATCH` and `SCHED_IDLE`. The `SCHED_NORMAL` is used for the most normal applications, the amount of cpu each process consumes is mostly determined by the [nice](http://en.wikipedia.org/wiki/Nice_%28Unix%29) value, the `SCHED_BATCH` used for the 100% non-interactive tasks and the `SCHED_IDLE` runs tasks only when the processor has no task to run besides this task. The `real-time` policies are also supported for the time-critical applications: `SCHED_FIFO` and `SCHED_RR`. If you've read something about the Linux kernel scheduler, you can know that it is modular. It means that it supports different algorithms to schedule different types of processes. Usually this modularity is called `scheduler classes`. These modules encapsulate scheduling policy details and are handled by the scheduler core without knowing too much about them. 
+이 옵션 모두는 두 가지의 다른 스케줄러 모델을 제공한다. [문서](https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt) 에서 읽어 볼 수 있듯이, 현재 스케줄러 인 `CFS`(또는 `Completely Fair Scheduler`)는 간단한 개념을 사용한다. 그것은 각 프로세스가 `1/n` 만큼의 프로세서 시간을 가지는 이상적인 멀티 태스킹 프로세서 인 것처럼 처리하도록 하는 모델이다. 여기서 `n` 은 현재 수행 가능한 프로세스들의 개수이다. 스케줄러는 특별한 규칙들을 사용한다. 이 규칙들은 `scheduling policy(스케줄링 정책)` 이라 불리는 새로운 프로세스가 선택되었을 때 얼마나 실행되고 언제 실행 될지를 결정한다. CFS (Completely Faire Scheduler) 는 `normal` 혹은 `non-real-time` 스케줄링 정책들을 지원한다.: `SCHED_NORMAL`, `SCHED_BATCH` 그리고 `SCHED_IDLE`. `SCHED_NORMAL` 는 가장 일반적인 응용 프로그램을 지원하고, [nice](http://en.wikipedia.org/wiki/Nice_%28Unix%29) 값에 의해 대부분 각 프로세스가 cpu 자원을 소비하는 양(?)을 결정한다. `SCHED_BATCH` 는 100% non-interactive(인터엑티브 하지 않는) 태스크를 위해 사용된다. 그리고 `SCHED_IDLE`는 프로세서에서 더이상 실행할 태스크가 없는 경우에 수행되는 태스크를 수행한다. `real-time` 정책은 time-critical 한 응용 프로그램을 지원하기 위해 지원된다.: `SCHED_FIFO` 와 `SCHED_RR`. 리눅스 커널 스케줄러에 관련해서 읽다보면, 스케줄러는 모듈이라는 것을 알수 있을 것이다. 이것의 의미는 서로 다른 프로세스를 스케줄하기 위해 다른 알고리즘을 지원한다는 것이다. 대게는 이 모듈의 형태를 `스케줄러 클래스` 라 부른다. 이 모듈들은 스케줄러 정책의 상세를 캡슐화하고 그것들에 대해 너무 많이 알지 못해도 스케줄러 코어에 의해 처리될 수 있다는 것이다.
 
-
-Now let's back to the our code and look on the two configuration options `CONFIG_FAIR_GROUP_SCHED` and `CONFIG_RT_GROUP_SCHED`. The scheduler operates on an individual task. These options allows to schedule group tasks (more about it you can read in the [CFS group scheduling](http://lwn.net/Articles/240474/)). We can see that we assign the `alloc_size` variables which represent size based on amount of the processors to allocate for the `sched_entity` and `cfs_rq` to the `2 * nr_cpu_ids * sizeof(void **)` expression with `kzalloc`:
+이제 코드로 돌아와서 `CONFIG_FAIR_GROUP_SCHED` 와 `CONFIG_RT_GROUP_SCHED` 구성 옵션들을 살펴 보자. 스케줄러는 분리된 태스크에서 수행된다. 이 옵션들은 그룹 태스크를 스케줄하는 것을 허용한다. ([CFS group scheduling](http://lwn.net/Articles/240474/) 를 읽어보자.) 우리는 프로세서의 개수로 계산된 값을 가지는 `alloc_size` 로 `sched_entity` 구조체를 위해 메모리를 할당하고 `cfs_rq` 는 `kzalloc` 으로 `2 * nr_cpu_ids * sizeof(void **)` 의 크기 만큼 할당된 메모리의 주소를 넣는다.:
 
 ```C
 ptr = (unsigned long)kzalloc(alloc_size, GFP_NOWAIT);
- 
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
         root_task_group.se = (struct sched_entity **)ptr;
         ptr += nr_cpu_ids * sizeof(void **);
@@ -268,10 +265,10 @@ ptr = (unsigned long)kzalloc(alloc_size, GFP_NOWAIT);
         root_task_group.cfs_rq = (struct cfs_rq **)ptr;
         ptr += nr_cpu_ids * sizeof(void **);
 #endif
-        
+
 ```
 
-The `sched_entity` is a structure which is defined in the [include/linux/sched.h](https://github.com/torvalds/linux/blob/master/include/linux/sched.h) and used by the scheduler to keep track of process accounting. The `cfs_rq` presents [run queue](http://en.wikipedia.org/wiki/Run_queue). So, you can see that we allocated space with size `alloc_size` for the run queue and scheduler entity of the `root_task_group`. The `root_task_group` is an instance of the `task_group` structure from the [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h) which contains task group related information:
+`sched_entity` 는 [include/linux/sched.h](https://github.com/torvalds/linux/blob/master/include/linux/sched.h) 선언된 구조체이고 프로세스 스케줄링 관리를 위해 사용된다. `cfg_rq` 는 [run queue-수행 큐](http://en.wikipedia.org/wiki/Run_queue) 를 표현한다. 우리는 이 수행 큐(run queue)와 `root_task_group` 의 스케줄러 엔터티를 위해 `alloc_size` 크기 만큼 공간을 할당했다. `root_task_group` 는 태스크 그룹에 관련된 정보를 갖고 있는 [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h)에 선어된 `task_group` 의 인스턴스이다.:
 
 ```C
 struct task_group {
@@ -284,13 +281,13 @@ struct task_group {
 }
 ```
 
-The root task group is the task group which belongs to every task in system. As we allocated space for the root task group scheduler entity and runqueue, we go over all possible CPUs (`cpu_possible_mask` bitmap) and allocate zeroed memory from a particular memory node with the `kzalloc_node` function for the `load_balance_mask` `percpu` variable:
+루트 태스크 그룹(root task group)은 시스템에 있는 모드 태스크를 갖고 있는 태스크 그룹이다. 루트 태스크 그룹 스케줄러 엔터티와 수행큐를 위해 공간할당하였다면, 모든 가능한 CPU 들(`cpu_possible_mask` 비트맵)을 갖고 루프를 돌면서 `load_balance_mask` 와 `percpu` 변수를 위해 `kzalloc_node` 함수를 통해 특정한 메모리 노드로 부터 0으로 초기화된 메모리를 할당한다.:
 
 ```C
 DECLARE_PER_CPU(cpumask_var_t, load_balance_mask);
 ```
 
-Here `cpumask_var_t` is the `cpumask_t` with one difference: `cpumask_var_t` is allocated only `nr_cpu_ids` bits when the `cpumask_t` always has `NR_CPUS` bits (more about `cpumask` you can read in the [CPU masks](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html) part). As you can see:
+여기서 `cpumask_var_t` 는 한가지 다른 점이 있는 `cpumask_t` 이다.: `cpumask_var_t` 는 `cpumask_t` 가 항상 `NR_CPUS` 비트를 갖고 있을 때, `nr_cpu_ids` 비트만 설정된다. (`cpumask` 에 관해서는 [CPU masks](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/cpumask.md)를 보도록 하자.) 아래의 코드를 보자.:
 
 ```C
 #ifdef CONFIG_CPUMASK_OFFSTACK
@@ -301,7 +298,7 @@ Here `cpumask_var_t` is the `cpumask_t` with one difference: `cpumask_var_t` is 
 #endif
 ```
 
-this code depends on the `CONFIG_CPUMASK_OFFSTACK` configuration option. This configuration options says to use dynamic allocation for `cpumask`, instead of putting it on the stack. All groups have to be able to rely on the amount of CPU time. With the call of the two following functions:
+이 코드는 `CONFIG_CPUMASK_OFFSTACK` 구성 옵션에 의존적이다. 이 구성 옵션은 `cpumask` 을 위해 스택에 그것을 넣지 말고 동적 메모리 할당을 사용하라는 의미이다. 모든 그룹들은 CPU 시간의 양에 의존적이어야 한다. 아래 두 함수의 호출을 보자.:
 
 ```C
 init_rt_bandwidth(&def_rt_bandwidth,
@@ -310,7 +307,7 @@ init_dl_bandwidth(&def_dl_bandwidth,
                   global_rt_period(), global_rt_runtime());
 ```
 
-we initialize bandwidth management for the `SCHED_DEADLINE` real-time tasks. These functions initializes `rt_bandwidth` and `dl_bandwidth` structures which store information about maximum `deadline` bandwidth of the system. For example, let's look on the implementation of the `init_rt_bandwidth` function:
+우리는 `SCHED_DEADLINE` 으로 real-time 태스크를 위한 대역폭(bandwidth) 관리를 초기화한다. 이 함수들은 시스템의 최대 `deadline` 대역폭에 관련된 정보를 저장하는 `rt_bandwidth` 와 `dl_bandwidth`를 초기화한다. 예를 들어 `init_rt_bandwidth` 함수의 구현을 살펴보자.:
 
 ```C
 void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime)
@@ -326,13 +323,13 @@ void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime)
 }
 ```
 
-It takes three parameters:
+이 함수는 3개의 인자를 받는다.:
 
-* address of the `rt_bandwidth` structure which contains information about the allocated and consumed quota within a period;
-* `period` - period over which real-time task bandwidth enforcement is measured in `us`;
-* `runtime` - part of the period that we allow tasks to run in `us`.
+* 한 기간 내에 할당되고 사용된 양의 정보를 포함하는 `rt_bandwidth` 구조체의 주소
+* `period` - 실시간 태스크의 대역폭을 강제하는 `us` 단위의 기간
+* `runtime` - 우리가 태스크 수행을 허기하는 기간의 일부(`us`)
 
-As `period` and `runtime` we pass result of the `global_rt_period` and `global_rt_runtime` functions. Which are `1s` second and `0.95s` by default. The `rt_bandwidth` structure is defined in the [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h) and looks:
+`period` 와 `runtime` 에 따라 그 결과를 `global_rt_period` 와 `global_rt_runtime` 함수로 전달한다. 각 함수는 기본값으로 `1` 초와 `0.95` 초이다. `rt_bandwidth` 구조체는 [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h) 에 선언되어 있고 아래와 같이 되어 있다.:
 
 ```C
 struct rt_bandwidth {
@@ -343,12 +340,12 @@ struct rt_bandwidth {
 };
 ```
 
-As you can see, it contains `runtime` and `period` and also two following fields:
+보시다 시피, 그것은 `runtime` 와 `period` 를 포함할 뿐만 아니라 아래 두개의 항목을 더 갖고 있다.:
 
-* `rt_runtime_lock` - [spinlock](http://en.wikipedia.org/wiki/Spinlock) for the `rt_time` protection;
-* `rt_period_timer` - [high-resolution kernel timer](https://www.kernel.org/doc/Documentation/timers/hrtimers.txt) for unthrottled of real-time tasks.
+* `rt_runtime_lock` - `rt_time` 보호를 위한 [spinlock](http://en.wikipedia.org/wiki/Spinlock)
+* `rt_period_timer` - 실시간 태스크를 위한 [high-resolution 커널 타이머](https://www.kernel.org/doc/Documentation/timers/hrtimers.txt)
 
-So, in the `init_rt_bandwidth` we initialize `rt_bandwidth` period and runtime with the given parameters, initialize the spinlock and high-resolution time. In the next step, depends on enable of [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing), we make initialization of the root domain:
+그래서 `init_rt_bandwidth` 에서 `rt_bandwidth` 의 period 와 runtime을 주어진 인자들로 초기화하고, spinlock 과 high-resolution 타이머를 초기화 한다. 다음 단계에서는, [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing) 의 활성화에 의존적인, 루트 도메인을 초기화 한다.:
 
 ```C
 #ifdef CONFIG_SMP
@@ -356,9 +353,10 @@ So, in the `init_rt_bandwidth` we initialize `rt_bandwidth` period and runtime w
 #endif
 ```
 
-The real-time scheduler requires global resources to make scheduling decision. But unfortunately scalability bottlenecks appear as the number of CPUs increase. The concept of root domains was introduced for improving scalability. The linux kernel provides a special mechanism for assigning a set of CPUs and memory nodes to a set of tasks and it is called - `cpuset`. If a `cpuset` contains non-overlapping with other `cpuset` CPUs, it is `exclusive cpuset`. Each exclusive cpuset defines an isolated domain or `root domain` of CPUs partitioned from other cpusets or CPUs. A `root domain` is presented by the `struct root_domain` from the [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h) in the linux kernel and its main purpose is to narrow the scope of the global variables to per-domain variables and all real-time scheduling decisions are made only within the scope of a root domain. That's all about it, but we will see more details about it in the chapter about real-time scheduler.
+실시간 스케줄러는 스케줄링 결정을 위해 글로벌 자원이 요구된다. 하지만 불행하게도 CPU 개수가 증가할 수록 확장성의 병목현상이 나타난다. 루트 도메인의 개념은 확장성을 향상시키기 위해 소개 되었다. 리눅스 커널은 CPU 의 셋을 할당하기 위해 특별한 매커니즘을 제공하고 `cpuset` 이라 부른다. 만약 `cpuset` 이 다른 `cpuset` CPU 들과 겹치지 않는다면, 그것은 `exclusive(배타적) cpuset` 이다. 각 배타적 cpuset 은 다른 cpuset 들이나 CPU 들로 부터 분리된 CPU 의 `root domain`이나 고립된 도메인으로 정의된다. 하나의 `root_domain` 은 리눅스 커널의 [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h)에 선언된 `struct root_domain` 에 의해 표현되고 그것이 필요한 주된 목적은
+번역 변수의 범위를 도메인 범위로 좁히고, 루트 도메인 범위 내에서 모든 실시간 스케줄 결정을 하기 위함이다. 여기까지가 실시간 스케줄러에 관련된 내용이고, 향후 관련 챕터에서 더 자세히 살펴보자.
 
-After `root domain` initialization, we make initialization of the bandwidth for the real-time tasks of the root task group as we did it above: 
+`root domain` 초기화 이후에, 루트 태스크 그룹의 실시간 태스크들을 위한 대역폭을 초기화한다.:
 
 ```C
 #ifdef CONFIG_RT_GROUP_SCHED
@@ -367,14 +365,17 @@ After `root domain` initialization, we make initialization of the bandwidth for 
 #endif
 ```
 
-In the next step, depends on the `CONFIG_CGROUP_SCHED` kernel configuration option we initialize the `siblings` and `children` lists of the root task group. As we can read from the documentation, the `CONFIG_CGROUP_SCHED` is:
+다음 단계에서, `CONFIG_CGROUP_SCHED` 커널 구성 옵션에 의존적인 루트 태스크 그룹의 리스트인 `siblings` 와 `children` 를 초기화한다. 관련 문서에서 봤다면, `CONFIG_CGROUP_SCHED` 의 정의는 :
 
 ```
 This option allows you to create arbitrary task groups using the "cgroup" pseudo
 filesystem and control the cpu bandwidth allocated to each such task group.
+
+이 옵션은 "cgroup" 의사(pseudo) 파일 시스템을 사용하여 임시의 태스크 그룹을 만드는 것을 허용하고
+각 태스크 그룹에게 할당된 cpu 대역폭을 제어할 수 있다.
 ```
 
-As we finished with the lists initialization, we can see the call of the `autogroup_init` function:
+리스트들의 초기화가 마무리 되면, `autogroup_init` 함수의 호출을 볼 수 있다.:
 
 ```C
 #ifdef CONFIG_CGROUP_SCHED
@@ -385,9 +386,9 @@ As we finished with the lists initialization, we can see the call of the `autogr
 #endif
 ```
 
-which initializes automatic process group scheduling.
+이 함수는 자동적인 프로세스 그룹 스케줄링을 초기화한다.
 
-After this we are going through the all `possible` cpu (you can remember that `possible` CPUs store in the `cpu_possible_mask` bitmap that can ever be available in the system) and initialize a `runqueue` for each possible cpu:
+이후에는 모든 `가능한` cpu 를 방문하면서(`possible` CPU들은 시스템에서 이용가능한 `cpu_possible_mask` 비트맵에 저장되어 있다.) 각 가능한 CPU 를 위한 `runqueue(수행큐)` 를 초기화한다.:
 
 ```C
 for_each_possible_cpu(i) {
@@ -397,7 +398,7 @@ for_each_possible_cpu(i) {
     ...
 ```
 
-Each processor has its own locking and individual runqueue. All runnable tasks are stored in an active array and indexed according to its priority. When a process consumes its time slice, it is moved to an expired array. All of these arras are stored in the special structure which names is `runqueue`. As there are no global lock and runqueue, we are going through the all possible CPUs and initialize runqueue for the every cpu. The `runqueue` is presented by the `rq` structure in the linux kernel which is defined in the [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h).
+각 프로세서는 자신만의 락(locking)과 그 프로세서를 위한 runqueue를 갖고 있다. 모든 수행가능한 태스크는 active 배열에 저장되고 우선순위에 따라 인덱싱된다. 프로세스가 그 시간 슬라이스를 소진하면, 그 프로세스는 expired 배열로 이동한다. 이 모든 배열들은 `runqueue` 의 이름을 갖는 특별한 구조체에 저장된다. 글로벌 lock 과 runqueue 는 없기 때문에 모든 가능한 CPU 들을 다 방문하여 runqueue를 초기화 해야 한다. `runqueue` 는 리눅스 커널에서 [kernel/sched/sched.h](https://github.com/torvalds/linux/blob/master/kernel/sched/sched.h)에 선언된 `rq` 구조체로 표현된다.
 
 ```C
 rq = cpu_rq(i);
@@ -411,7 +412,7 @@ init_dl_rq(&rq->dl);
 rq->rt.rt_runtime = def_rt_bandwidth.rt_runtime;
 ```
 
-Here we get the runqueue for the every CPU with the `cpu_rq` macro which returns `runqueues` percpu variable and start to initialize it with runqueue lock, number of running tasks, `calc_load` relative fields (`calc_load_active` and `calc_load_update`) which are used in the reckoning of a CPU load and initialization of the completely fair, real-time and deadline related fields in a runqueue. After this we initialize `cpu_load` array with zeros and set the last load update tick to the `jiffies` variable which determines the number of time ticks (cycles), since the system boot:
+여기서 우리는 `runqueue` percpu 변수를 반환하는 `cpu_rq` 매크로를 이용하여 모든 CPU 를 위한 runqueue 를 얻고 runqueue lock, 수행 중인 태스크의 수, CPU 부하의 계산을 위해 사용되는  `calc_load` 관련 항목들(`calc_load_active` 와 `calc_load_update`) 그리고 CFS 를 위한 초기화, runqueue에서 실시간 그리고 데드라인과 관련된 항목들을 초기화한다. 이 초기화 이후에 `cpu_load` 배열을 0으로 초기화 하고 last_load_update_tick 을 시스템 부팅 이후로 지나온 시간 tick(틱-cycles) 수를 결정하는 `jiffies` 변수로 부터 업데이트 한다.:
 
 ```C
 for (j = 0; j < CPU_LOAD_IDX_MAX; j++)
@@ -420,43 +421,43 @@ for (j = 0; j < CPU_LOAD_IDX_MAX; j++)
 rq->last_load_update_tick = jiffies;
 ```
 
-where `cpu_load` keeps history of runqueue loads in the past, for now `CPU_LOAD_IDX_MAX` is 5. In the next step we fill `runqueue` fields which are related to the [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing), but we will not cover them in this part. And in the end of the loop we initialize high-resolution timer for the give `runqueue` and set the `iowait` (more about it in the separate part about scheduler) number:
+`cpu_load` 는 과거에서 runqueue 의 부하를 계속 확인한다. 현재로는 `CPU_LOAD_IDX_MAX` 의 값은 5이다. 다음 단계는 [SMP](http://en.wikipedia.org/wiki/Symmetric_multiprocessing) 와 연관된 항목인 `runqueue` 를 채운다. 하지만 이 파트에서는 다루지 않을 것이다. 그리고 이 루프의 마지막에는 주어진 `runqueue`를 위한 high-resolution 타이머 초기화를 하고 `iowait` (스케줄러와 관련된 다른 파트에서 살펴보자.) 값을 설정한다.:
 
 ```C
 init_rq_hrtick(rq);
 atomic_set(&rq->nr_iowait, 0);
 ```
 
-Now we come out from the `for_each_possible_cpu` loop and the next we need to set load weight for the `init` task with the `set_load_weight` function.  Weight of process is calculated through its dynamic priority which is static priority + scheduling class of the process. After this we increase memory usage counter of the memory descriptor of the `init` process and set scheduler class for the current process:
+이제 `for_each_possible_cpu` 루프를 빠져 나왔고, 다음으로 `init` 태스크를 위해 `set_load_weight` 함수로 load weight(부하 가중치)를 설정할 것이다. 프로세스의 `Weight`(가중치)는 프로세스의 static priority(고정 우선순위) + scheduling class(스케줄링 클래스) 의 결과값인 동적 우선순위를 통해 계산된다. 이후에 `init` 프로세스의 메모리 디스크립터의 메모리 사용 카운터를 증가시키고 current 프로세스를 위해 스케줄러 클래스를 설정한다.:
 
 ```C
 atomic_inc(&init_mm.mm_count);
 current->sched_class = &fair_sched_class;
 ```
 
-And make current process (it will be the first `init` process) `idle` and update the value of the `calc_load_update` with the 5 seconds interval:
+"current" 프로세스를 (첫 프로세스는 `init`이다) `idle`하게 만들고 `calc_load_update` 를 5 초 간격의 값으로 업데이트 한다.:
 
 ```C
 init_idle(current, smp_processor_id());
 calc_load_update = jiffies + LOAD_FREQ;
 ```
 
-So, the `init` process will be run, when there will be no other candidates (as it is the first process in the system). In the end we just set `scheduler_running` variable:
+그래서, 다른 후보 프로세스가 없으니 `init` 프로세스는 수행될 것이다.(시스템의 첫번째 프로세스이다.) 마지막에는 단지 `scheduler_running` 값을 `1`로 설정한다.:
 
 ```C
 scheduler_running = 1;
 ```
 
-That's all. Linux kernel scheduler is initialized. Of course, we have skipped many different details and explanations here, because we need to know and understand how different concepts (like process and process groups, runqueue, rcu, etc.) works in the linux kernel , but we took a short look on the scheduler initialization process. We will look all other details in the separate part which will be fully dedicated to the scheduler.
+리눅스 커널 스케줄러가 초기화 되었다. 물론, 몇가지 자세한 사항이나 설명이 그냥 넘어가긴 했지만, 다른 챕터에서 조금 더 자세히 살펴 보기로 하자.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the eighth part about the linux kernel initialization process. In this part, we looked on the initialization process of the scheduler and we will continue in the next part to dive in the linux kernel initialization process and will see initialization of the [RCU](http://en.wikipedia.org/wiki/Read-copy-update) and many other initialization stuff in the next part.
+리눅스 커널 초기화 과정의 8 번째 파트가 마무리되었다. 이 파트에서는 스케줄러의 초기화 과정을 살펴 보았고, 다음 파트에서 리눅스 커널 초기화 과정을 계속 살펴 볼 것이다. 계속 살펴 볼 내용은, [RCU](http://en.wikipedia.org/wiki/Read-copy-update) 와 많은 다른 초기화 과정이 될 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------
@@ -477,3 +478,5 @@ Links
 * [CFS Scheduler documentation](https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt)
 * [Real-Time group scheduling](https://www.kernel.org/doc/Documentation/scheduler/sched-rt-group.txt)
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-7.html)
+* [boot_cpu_init](http://jake.dothome.co.kr/boot_cpu_init/)
+* [실시간 리눅스 커널 스케줄러](http://www.linuxjournal.com/magazine/real-time-linux-kernel-scheduler?page=0,2)

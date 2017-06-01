@@ -480,3 +480,4 @@ Links
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-7.html)
 * [boot_cpu_init](http://jake.dothome.co.kr/boot_cpu_init/)
 * [실시간 리눅스 커널 스케줄러](http://www.linuxjournal.com/magazine/real-time-linux-kernel-scheduler?page=0,2)
+* [sched_init() 설명](http://jake.dothome.co.kr/sched_init/)

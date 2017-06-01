@@ -1,15 +1,15 @@
-Kernel initialization. Part 9.
+커널 초기화. Part 9.
 ================================================================================
 
-RCU initialization
+RCU 초기화
 ================================================================================
 
-This is ninth part of the [Linux Kernel initialization process](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) and in the previous part we stopped at the [scheduler initialization](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-8.html). In this part we will continue to dive to the linux kernel initialization process and the main purpose of this part will be to learn about initialization of the [RCU](http://en.wikipedia.org/wiki/Read-copy-update). We can see that the next step in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) after the `sched_init` is the call of the `preempt_disable`. There are two macros:
+리눅스 커널 초기화 과정의 9번째이고 이전 파트에서는 [스케줄러 초기화](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-8.md)를 살펴보았다. 이 파트에서는 리눅스 커널 초기화 과정을 계속 살펴볼 것이고, 주목할 것은 [RCU](http://en.wikipedia.org/wiki/Read-copy-update) 의 초기화에 관한 것이다. `sched_init` 함수 다음으로 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일에서 불리는 함수는 `preempt_disable` 함수이다. 여기에 두 개의 매크로가 있다.:
 
 * `preempt_disable`
 * `preempt_enable`
 
-for preemption disabling and enabling. First of all let's try to understand what is `preempt` in the context of an operating system kernel. In simple words, preemption is ability of the operating system kernel to preempt current task to run task with higher priority. Here we need to disable preemption because we will have only one `init` process for the early boot time and we don't need to stop it before we call `cpu_idle` function. The `preempt_disable` macro is defined in the [include/linux/preempt.h](https://github.com/torvalds/linux/blob/master/include/linux/preempt.h) and depends on the `CONFIG_PREEMPT_COUNT` kernel configuration option. This macro is implemented as:
+선점(preemption)을 활성화하고 비활성화하기 위한 것이다. 운영체제에서 `preempt`이 무엇인지 먼저 이해를 해봐야 한다. 단순하게 말하면, 선점(preemption)은 우선순위가 더 높은 태스크가 현재 수행중이 태스크를 선점할 수 있는 운영체제의 능력이라고 보면 된다. 여기서 우리는 선점을 비활성화 할 필요가 있는데, 이유는 초기 부팅 시간에는 단지 `init` 프로세스만 있고 `cpu_idle` 함수가 불리기 전에는 이 프로세스를 멈출 필요가 없기 때문이다. `preempt_disable` 매크로는 [include/linux/preempt.h](https://github.com/torvalds/linux/blob/master/include/linux/preempt.h) 에 정의되어 있으며, `CONFIG_PREEMPT_COUNT` 구성 옵션에 의존적이다. 이 매크로는 아래와 같이 구현되어 있다.:
 
 ```C
 #define preempt_disable() \
@@ -19,26 +19,26 @@ do { \
 } while (0)
 ```
 
-and if `CONFIG_PREEMPT_COUNT` is not set just:
+만약 `CONFIG_PREEMPT_COUNT` 이 설정되어 있지 않다면, 단지 barrier() 를 호출한다.:
 
 ```C
 #define preempt_disable()                       barrier()
 ```
 
-Let's look on it. First of all we can see one difference between these macro implementations. The `preempt_disable` with `CONFIG_PREEMPT_COUNT` set contains the call of the `preempt_count_inc`. There is special `percpu` variable which stores the number of held locks and `preempt_disable` calls:
+위의 두 가지 경우의 매크로 구현에 하나의 차이점을 볼 수 있다. `CONFIG_PREEMPT_COUNT` 이 설정되어 있다면, `preempt_disable` 은 `preempt_count_inc` 의 호출을 포함할 것이다. 여기서 `preempt_disable`와 lock 을 잡은 횟수를 저장하는 특별한 `percpu` 변수가 있다.:
 
 ```C
-DECLARE_PER_CPU(int, __preempt_count);
+DECLARE_PER_CPU(int, __preempt_count__); // TODO 마지막 언더바 두개
 ```
 
-In the first implementation of the `preempt_disable` we increment this `__preempt_count`. There is API for returning value of the `__preempt_count`, it is the `preempt_count` function. As we called `preempt_disable`, first of all we increment preemption counter with the `preempt_count_inc` macro which expands to the:
+`preempt_disable` 구현에서 처음으로 하는 것은 `__preempt_count` 값을 증가시키는 것이다. `__preempt_count` 의 값을 반환하는 API 가 있는데, 그것은 `preempt_count` 함수이다. `preempt_disable` 함수 호출이 되면, 제일 먼저 아래의 코드로 확장되는 `preempt_count_inc` 매크로를 통해 선점 카운더 값을 증가시킨다.:
 
-```
+```C
 #define preempt_count_inc() preempt_count_add(1)
 #define preempt_count_add(val)  __preempt_count_add(val)
 ```
 
-where `preempt_count_add` calls the `raw_cpu_add_4` macro which adds `1` to the given `percpu` variable (`__preempt_count`) in our case (more about `precpu` variables you can read in the part about [Per-CPU variables](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html)). Ok, we increased `__preempt_count` and the next step we can see the call of the `barrier` macro in the both macros. The `barrier` macro inserts an optimization barrier. In the processors with `x86_64` architecture independent memory access operations can be performed in any order. That's why we need the opportunity to point compiler and processor on compliance of order. This mechanism is memory barrier. Let's consider a simple example:
+`preempt_count_add` 는 다시 주어진 `percpu` 변수(`__preempt_count`) 에 `1` 을 더해주는 `raw_cpu_add_4` 매크로를 호출한다. (`precpu` 에 대해 조금 더 살펴보려면 [Per-CPU 변수](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/per-cpu.md) 파트를 참조하자.) 좋다, 우리는 `__preempt_count` 를 증가시켰고 그 다음으로 `barrier` 매크로를 호출하는 것을 볼 수 있다. `barrier` 매크로는 컴파일러 최적화 과정에서 `barrier`를 호출한 지점의 이전 코드와 이후 코드를 완벽하게 분리시켜주는 역할을 한다. `x86_64` 아키텍처의 프로세서들은 독립적인 메모리 접근 수행이 순서에 상관없이 일어날 수 있다. 그렇게 때문에 컴파일러에거 이런 점을 알려주어, 선점을 막고나서 불려야 하는 코드들이 먼저 불리는 일을 막아준다. 이 매커니즘이 메모리 barrier(장벽)이다. 간단한 예제를 보자.:
 
 ```C
 preempt_disable();
@@ -46,7 +46,7 @@ foo();
 preempt_enable();
 ```
 
-Compiler can rearrange it as:
+컴파일러는 아래와 같이 재배치를 할 수 있다.:
 
 ```C
 preempt_disable();
@@ -54,9 +54,9 @@ preempt_enable();
 foo();
 ```
 
-In this case non-preemptible function `foo` can be preempted. As we put `barrier` macro in the `preempt_disable` and `preempt_enable` macros, it prevents the compiler from swapping `preempt_count_inc` with other statements. More about barriers you can read [here](http://en.wikipedia.org/wiki/Memory_barrier) and [here](https://www.kernel.org/doc/Documentation/memory-barriers.txt).
+이 경우에 `foo` 라는 함수를 선점하지 못하게 의도했지만, 선점이 가능한 상태로 된다. 그래서 우리는 `barrier` 매크로를 통해 `preempt_disable` 와 `preempt_enable` 매크로 사이에 그 함수를 잘 호출할 수 있도록 한다. 즉, 컴파일러에게 다른 구문과 `preempt_count_inc`를 바꾸지 못하게 알려주는 역할을 한다. barrier에 대해 더 자세한 설명은 [여기](http://en.wikipedia.org/wiki/Memory_barrier) 와 [여기](https://www.kernel.org/doc/Documentation/memory-barriers.txt)를 보자.
 
-In the next step we can see following statement:
+다음 단계로 아래와 같은 코드를 볼 수 있다.:
 
 ```C
 if (WARN(!irqs_disabled(),
@@ -64,16 +64,16 @@ if (WARN(!irqs_disabled(),
 	local_irq_disable();
 ```
 
-which check [IRQs](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29) state, and disabling (with `cli` instruction for `x86_64`) if they are enabled.
+이것은 [IRQs](http://en.wikipedia.org/wiki/Interrupt_request_%28PC_architecture%29) 의 상태를 확인하고 만약 활성화 되어 있다면, 비활성화(`x86_64`에서는 `cli` 명령어로) 한다.
 
-That's all. Preemption is disabled and we can go ahead.
+선점은 비활성화 되었고, 계속 진행해보자.
 
-Initialization of the integer ID management
+정수형 ID 관리의 초기화
 --------------------------------------------------------------------------------
 
-In the next step we can see the call of the `idr_init_cache` function which defined in the [lib/idr.c](https://github.com/torvalds/linux/blob/master/lib/idr.c). The `idr` library is used in a various [places](http://lxr.free-electrons.com/ident?i=idr_find) in the linux kernel to manage assigning integer `IDs` to objects and looking up objects by id.
+다음 단계에서 [lib/idr.c](https://github.com/torvalds/linux/blob/master/lib/idr.c) 구현된 `idr_init_cache` 함수의 호출을 볼 수 있다. `idr` 라이브러리는 리눅스 커널내에 다양한 [곳](http://lxr.free-electrons.com/ident?i=idr_find)에서 객체로 할당된 정수형 `ID`들을 관리하고 id 로 객체를 찾아볼때 사용된다.
 
-Let's look on the implementation of the `idr_init_cache` function:
+`idr_init_cache` 함수의 구현을 살펴 보자.:
 
 ```C
 void __init idr_init_cache(void)
@@ -83,21 +83,21 @@ void __init idr_init_cache(void)
 }
 ```
 
-Here we can see the call of the `kmem_cache_create`. We already called the `kmem_cache_init` in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L485). This function create generalized caches again using the `kmem_cache_alloc` (more about caches we will see in the [Linux kernel memory management](http://0xax.gitbooks.io/linux-insides/content/mm/index.html) chapter). In our case, as we are using `kmem_cache_t` which will be used by the [slab](http://en.wikipedia.org/wiki/Slab_allocation) allocator and `kmem_cache_create` creates it. As you can see we pass five parameters to the `kmem_cache_create`:
+여기서 `kmem_cache_create` 의 호출을 볼 수 있다. 우리는 이미 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c#L485)에서 `kmem_cache_init` 호출을 보았다. 이 함수는 `kmem_cache_alloc`을 사용하여 캐쉬를 만든다. ([리눅스 메모리 관리](https://github.com/daeseokyoun/linux-insides/blob/master/mm/README.md) 에서 캐쉬에 관해 더 자세히 볼 수 있다.) 우리의 경우에, [slab](http://en.wikipedia.org/wiki/Slab_allocation) 할당자에 의해 사용되어질 `kmem_cache_t` 을 사용하고 그것은 `kmem_cache_create`로 만들어진다. `kmem_cache_create` 함수는 5개의 인자를 넘겨 받는다.:
 
-* name of the cache;
-* size of the object to store in cache;
-* offset of the first object in the page;
-* flags;
-* constructor for the objects.
+* 캐쉬의 이름
+* 캐쉬에 저장된 객체의 크기
+* 페이지 내에서 첫 객체의 오프셋
+* 플래그
+* 객체를 위한 생성자
 
-and it will create `kmem_cache` for the integer IDs. Integer `IDs` is commonly used pattern to map set of integer IDs to the set of pointers. We can see usage of the integer IDs in the [i2c](http://en.wikipedia.org/wiki/I%C2%B2C) drivers subsystem. For example [drivers/i2c/i2c-core.c](https://github.com/torvalds/linux/blob/master/drivers/i2c/i2c-core.c) which represents the core of the `i2c` subsystem defines `ID` for the `i2c` adapter with the `DEFINE_IDR` macro:
+그리고 그것은 정수형 ID들을 위한 `kmem_cache`를 만들 것이다. 정수 `ID`는 일반적으로 정수 ID 를 갖고 연결된 포인터를 관리한다. 우리는 [i2c](http://en.wikipedia.org/wiki/I%C2%B2C) 드라이버 서브시스템내에 정수 ID 의 사용을 볼 수 있다. 예를 들어, `i2c` 서브 시스템의 코어 코드가 있는 [drivers/i2c/i2c-core.c](https://github.com/torvalds/linux/blob/master/drivers/i2c/i2c-core.c) 에서 `i2c` 어뎁터를 위한 `ID`를 `DEFINE_IDR` 매크로로 선언한다.:
 
 ```C
 static DEFINE_IDR(i2c_adapter_idr);
 ```
 
-and then uses it for the declaration of the `i2c` adapter:
+그리고 나서 `i2c` 어뎁터의 선언을 아래와 같이 사용한다.:
 
 ```C
 static int __i2c_add_numbered_adapter(struct i2c_adapter *adap)
@@ -113,25 +113,26 @@ static int __i2c_add_numbered_adapter(struct i2c_adapter *adap)
 }
 ```
 
-and `id2_adapter_idr` presents dynamically calculated bus number.
+그리고 `id2_adapter_idr`는 동적으로 계산된 버스 번호를 가지게 된다.
 
-More about integer ID management you can read [here](https://lwn.net/Articles/103209/).
+정수 ID 관리를 위해 [문서](https://lwn.net/Articles/103209/)를 참조하자.
 
-RCU initialization
+RCU 초기화
 --------------------------------------------------------------------------------
 
-The next step is [RCU](http://en.wikipedia.org/wiki/Read-copy-update) initialization with the `rcu_init` function and it's implementation depends on two kernel configuration options:
+다음 단계는 `rcu_init` 함수로 [RCU](http://en.wikipedia.org/wiki/Read-copy-update)를 초기화 하는 것이고 이 구현은 아래 두 개의 커널 구성 옵션에 의존적이다.:
 
 * `CONFIG_TINY_RCU`
 * `CONFIG_TREE_RCU`
 
-In the first case `rcu_init` will be in the [kernel/rcu/tiny.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tiny.c) and in the second case it will be defined in the [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c). We will see the implementation of the `tree rcu`, but first of all about the `RCU` in general.
+첫 번째 구성옵션의 경우에는 `rcu_init` 함수는 [kernel/rcu/tiny.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tiny.c)에 있는 것으로 이용되고, 두 번째 경우에 [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c)에 있는 `rcu_init` 함수를 이용한다. 여기서 우리는 `tree rcu` 의 구현을 살펴볼 것이다. 하지만, 일반적으로 `RCU`에 관련된 내용은 대부분 첫번째 구성옵션을 쓴다.
 
-`RCU` or read-copy update is a scalable high-performance synchronization mechanism implemented in the Linux kernel. On the early stage the linux kernel provided support and environment for the concurrently running applications, but all execution was serialized in the kernel using a single global lock. In our days linux kernel has no single global lock, but provides different mechanisms including [lock-free data structures](http://en.wikipedia.org/wiki/Concurrent_data_structure), [percpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) data structures and other. One of these mechanisms is - the `read-copy update`. The `RCU` technique is designed for rarely-modified data structures. The idea of the `RCU` is simple. For example we have a rarely-modified data structure. If somebody wants to change this data structure, we make a copy of this data structure and make all changes in the copy. In the same time all other users of the data structure use old version of it. Next, we need to choose safe moment when original version of the data structure will have no users and update it with the modified copy.
+`RCU` 혹은 Read-copy-update 는 리눅스 커널에서 구현된 확장성 있는 성능이 좋은 동기화 매커니즘(scalable high-performance synchronization mechanism)이다. 리눅스 커널 초반에 동시에 응용 프로그램들을 위한 환경과 지원을 했지만, 모든 실행은 단일 글로벌 락을 사용하여 커널 내에서 동시에 실행되지 않았다. 오늘날 리눅스는 단일 글로벌 락은 없어졌고 [lock-free data structures](http://en.wikipedia.org/wiki/Concurrent_data_structure), [percpu](https://github.com/daeseokyoun/linux-insides/blob/master/Concepts/per-cpu.md) 데이터 등을 이용하여 다른 매커니즘을 제공한다. 이들 매커니즘 중에 하나가 `read-copy update` 이다. `RCU` 기술은 드물게 쓰기가 일어나는 자료구조들을 위해 설계되었다. `RCU` 의 아이디어는 간단한다. 예를 들어, 드물게 수정이 일어나는 자료 구조를 갖고 있고 누군가가 자료구조를 변경하기 원했다면, 이 자료구조의 복사본을 만들고 모든 변경이 완료되면 복사한다. 동시에 모든 다른 이 자료구조의 사용자는 그것의 예전 버전을 사용한다. 다음, 안전하게 처리하기 위해 원본의 자료 구조를 더 이상 사용하는 사용자가 없으면 그것을 수정된 복사본으로 부터 업데이트 한다.
 
-Of course this description of the `RCU` is very simplified. To understand some details about `RCU`, first of all we need to learn some terminology. Data readers in the `RCU` executed in the [critical section](http://en.wikipedia.org/wiki/Critical_section). Every time when data reader get to the critical section, it calls the `rcu_read_lock`, and `rcu_read_unlock` on exit from the critical section. If the thread is not in the critical section, it will be in state which called - `quiescent state`. The moment when every thread is in the `quiescent state` called - `grace period`. If a thread wants to remove an element from the data structure, this occurs in two steps. First step is `removal` - atomically removes element from the data structure, but does not release the physical memory. After this thread-writer announces and waits until it is finished. From this moment, the removed element is available to the thread-readers. After the `grace period` finished, the second step of the element removal will be started, it just removes the element from the physical memory.
+물론 이 `RCU`의 설명은 매우 간단하게 한 것이다. `RCU` 관해 조금 더 알기 위해, 먼저 몇몇의 용어들을 배울 필요가 있다. `RCU` 에서 데이터 리더(data reader)는 [critical section - 임계영역](http://en.wikipedia.org/wiki/Critical_section) 에서 수행된다. 데이터 리더가 임계영역에서 데이터를 얻는 모든 시점에는 `rcu_read_lock` 와 `rcu_read_unlock` 를 사용하여 임계역을 진입하고 빠지게 된다. 만약 쓰레드(Thread) 가 읽기를 위한 임계 영역에 있지 않다면, 그것의 상태는 `quiescent state` 라 불린다. 모든 쓰레드가 `quiescent state` 의 상태를 갖게 되는 순간을 `grace period` 라 불린다. 만약 하나의 쓰레드가 자료 구조에 있는 하나의 항목을 제거하기 원한다면, 두 단계로 이 단계를 지원한다. 첫 번째는 `removal(삭제)` 이다 - 자동적으로 자료구조로 부터 항목을 제거한다. 하지만 실제 메모리에는 반영하지 않는다. 그런 다음 thread-writer 는 업데이트를 알리고 마무리 될 때까지 기다린다. 이 순간에는 삭제되는 항목이 thread-reader 에게는 사용가능하다. `grace period` 기간이 끝나면, 두 번째 단계는 항목 삭제를 시작하고 실제 메모리에 반영을 한다.
 
 There a couple of implementations of the `RCU`. Old `RCU` called classic, the new implementation called `tree` RCU. As you may already understand, the `CONFIG_TREE_RCU` kernel configuration option enables tree `RCU`. Another is the `tiny` RCU which depends on `CONFIG_TINY_RCU` and `CONFIG_SMP=n`. We will see more details about the `RCU` in general in the separate chapter about synchronization primitives, but now let's look on the `rcu_init` implementation from the [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c):
+`RCU` 의 구현은 한 두가지가 있다. 예전에는 클래식 `RCU` 라 불렸고, 새로운 구현은 `tree RCU` 라 불린다. 이미 이해했겠지만, `CONFIG_TREE_RCU` 커널 구성 옵션이 활성화되면 `tree RCU` 가 선택된다. 다른 하나는 `CONFIG_TINY_RCU` 와 `CONFIG_SMP=n` 으로 설정되면 `tiny RCU` 이다. `RCU` 에 대해 더 자세히 알고 싶다면 동기화 관련 챕터에서 
 
 ```C
 void __init rcu_init(void)
@@ -428,3 +429,8 @@ Links
 * [slab](http://en.wikipedia.org/wiki/Slab_allocation)
 * [i2c](http://en.wikipedia.org/wiki/I%C2%B2C)
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-8.html)
+* [선점 비활성화](http://egloos.zum.com/nimhaplz/v/5683475)
+* [정수 ID 관리-IDR](http://egloos.zum.com/studyfoss/v/5187192)
+* [정수 ID 관리](http://jake.dothome.co.kr/idr/)
+* [rcu_init 설명](http://jake.dothome.co.kr/rcu_init/)
+* [rcu 설명](https://kukuruku.co/post/lock-free-data-structures-the-inside-rcu/)

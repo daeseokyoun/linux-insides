@@ -131,8 +131,7 @@ RCU 초기화
 
 물론 이 `RCU`의 설명은 매우 간단하게 한 것이다. `RCU` 관해 조금 더 알기 위해, 먼저 몇몇의 용어들을 배울 필요가 있다. `RCU` 에서 데이터 리더(data reader)는 [critical section - 임계영역](http://en.wikipedia.org/wiki/Critical_section) 에서 수행된다. 데이터 리더가 임계영역에서 데이터를 얻는 모든 시점에는 `rcu_read_lock` 와 `rcu_read_unlock` 를 사용하여 임계역을 진입하고 빠지게 된다. 만약 쓰레드(Thread) 가 읽기를 위한 임계 영역에 있지 않다면, 그것의 상태는 `quiescent state` 라 불린다. 모든 쓰레드가 `quiescent state` 의 상태를 갖게 되는 순간을 `grace period` 라 불린다. 만약 하나의 쓰레드가 자료 구조에 있는 하나의 항목을 제거하기 원한다면, 두 단계로 이 단계를 지원한다. 첫 번째는 `removal(삭제)` 이다 - 자동적으로 자료구조로 부터 항목을 제거한다. 하지만 실제 메모리에는 반영하지 않는다. 그런 다음 thread-writer 는 업데이트를 알리고 마무리 될 때까지 기다린다. 이 순간에는 삭제되는 항목이 thread-reader 에게는 사용가능하다. `grace period` 기간이 끝나면, 두 번째 단계는 항목 삭제를 시작하고 실제 메모리에 반영을 한다.
 
-There a couple of implementations of the `RCU`. Old `RCU` called classic, the new implementation called `tree` RCU. As you may already understand, the `CONFIG_TREE_RCU` kernel configuration option enables tree `RCU`. Another is the `tiny` RCU which depends on `CONFIG_TINY_RCU` and `CONFIG_SMP=n`. We will see more details about the `RCU` in general in the separate chapter about synchronization primitives, but now let's look on the `rcu_init` implementation from the [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c):
-`RCU` 의 구현은 한 두가지가 있다. 예전에는 클래식 `RCU` 라 불렸고, 새로운 구현은 `tree RCU` 라 불린다. 이미 이해했겠지만, `CONFIG_TREE_RCU` 커널 구성 옵션이 활성화되면 `tree RCU` 가 선택된다. 다른 하나는 `CONFIG_TINY_RCU` 와 `CONFIG_SMP=n` 으로 설정되면 `tiny RCU` 이다. `RCU` 에 대해 더 자세히 알고 싶다면 동기화 관련 챕터에서 
+`RCU` 의 구현은 한 두가지가 있다. 예전에는 클래식 `RCU` 라 불렸고, 새로운 구현은 `tree RCU` 라 불린다. 이미 이해했겠지만, `CONFIG_TREE_RCU` 커널 구성 옵션이 활성화되면 `tree RCU` 가 선택된다. 다른 하나는 `CONFIG_TINY_RCU` 와 `CONFIG_SMP=n` 으로 설정되면 `tiny RCU` 이다. `RCU` 에 대해 더 자세히 알고 싶다면 동기화 관련 챕터에서 볼 수 있다. 여기서는 [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c) 에 구현되어 잇는 `rcu_init`를 보자.:
 
 ```C
 void __init rcu_init(void)
@@ -154,13 +153,13 @@ void __init rcu_init(void)
          cpu_notifier(rcu_cpu_notify, 0);
          pm_notifier(rcu_pm_notify, 0);
          for_each_online_cpu(cpu)
-                 rcu_cpu_notify(NULL, CPU_UP_PREPARE, (void *)(long)cpu);
+                 rcu_cpu_notify(NULL, CPU_UP_PREPARE, (void *)*(long)cpu); // TODO long 앞의 별하나
 
          rcu_early_boot_tests();
 }
 ```
 
-In the beginning of the `rcu_init` function we define `cpu` variable and call `rcu_bootup_announce`. The `rcu_bootup_announce` function is pretty simple:
+`rcu_init` 함수의 초반에는 `cpu` 변수를 선언하고 `rcu_bootup_announce` 함수를 호출한다. `rcu_bootup_announce` 함수는 꽤나 단순한다.:
 
 ```C
 static void __init rcu_bootup_announce(void)
@@ -170,13 +169,13 @@ static void __init rcu_bootup_announce(void)
 }
 ```
 
-It just prints information about the `RCU` with the `pr_info` function and `rcu_bootup_announce_oddness` which uses `pr_info` too, for printing different information about the current `RCU` configuration which depends on different kernel configuration options like `CONFIG_RCU_TRACE`, `CONFIG_PROVE_RCU`, `CONFIG_RCU_FANOUT_EXACT`, etc. In the next step, we can see the call of the `rcu_init_geometry` function. This function is defined in the same source code file and computes the node tree geometry depends on the amount of CPUs. Actually `RCU` provides scalability with extremely low internal RCU lock contention. What if a data structure will be read from the different CPUs? `RCU` API provides the `rcu_state` structure which presents RCU global state including node hierarchy. Hierarchy is presented by the:
+이 함수는 단지 `RCU` 관련하여 `pr_info` 함수를 통해 정보를 출력하고, `pr_info` 함수를 이용하여 추가적인 정보를 출력하는 `rcu_bootup_announce_oddness` 함수를 호출한다. 현재 `CONFIG_RCU_TRACE`, `CONFIG_PROVE_RCU`, `CONFIG_RCU_FANOUT_EXACT` 등의 서로 다른 커널 구성 옵션에 의존적인 `RCU` 구성 옵션에 관련된 다른 정보를 출력하기 위해서 `rcu_bootup_announce_oddness` 함수를 이용한다. 다음 단계에서는, `rcu_init_geometry` 함수의 호출을 볼 수 있다. 이 함수는 같은 소스 파일에 구현되어 있고 CPU 개수에 의존적인 노드 트리를 계산한다. 실제 `RCU`는 정말 낮은 RCU lock 경쟁을 보장하기 위해 확장성을 제공한다. 만약 하나의 자료 구조가 다른 CPU 에서 읽혀진다면? `RCU` API 는 노드 계층 구조를 포함한 RCU 글로벌 상태를 표현하는 `rcu_state` 를 제공한다. 계층 구조는 아래 구조체로 표현된다.:
 
 ```
 struct rcu_node node[NUM_RCU_NODES];
 ```
 
-array of structures. As we can read in the comment of above definition:
+위의 선언의 커멘트를 아래와 같이 읽을 수 있다.:
 
 ```
 The root (first level) of the hierarchy is in ->node[0] (referenced by ->level[0]), the second
@@ -185,16 +184,22 @@ in ->node[m+1] and following (->node[m+1] referenced by ->level[2]).  The number
 determined by the number of CPUs and by CONFIG_RCU_FANOUT.
 
 Small systems will have a "hierarchy" consisting of a single rcu_node.
+
+계층 구조에서 루트(첫 레벨)는 ->node[0] 에 있다. (->level[0] 의해 참조된), 두 번째 레벨은 ->node[1]
+(->level[1] 에 의해 ->node[1] 접근) 그리고 3번째 레벨은 당연히 ->node[m+1] (->level[2] 에 참조되는 ->node[m+1]) 이다.
+레벨의 수는 CPU 의 개수와 CONFIG_RCU_FANOUT 에 의해 결정된다.
+
+작은 시스템에서 "계층"은 단일 rcu_node 로 구성된다.
 ```
 
-The `rcu_node` structure is defined in the [kernel/rcu/tree.h](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.h) and contains information about current grace period, is grace period completed or not, CPUs or groups that need to switch in order for current grace period to proceed, etc. Every `rcu_node` contains a lock for a couple of CPUs. These `rcu_node` structures are embedded into a linear array in the `rcu_state` structure and represented as a tree with the root as the first element and covers all CPUs. As you can see the number of the rcu nodes determined by the `NUM_RCU_NODES` which depends on number of available CPUs:
+`rcu_node` 구조체는 [kernel/rcu/tree.h](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.h)에 선언되어 있고 현재 grace period 에 관련된 정보, 즉 grace period 가 완료 혹은 완료상태가 아닌, 현재 grace period 를 진행하기 위한 다음 순서에 진행될 필요가 있는 CPU 들이나 그룹 같은 것을 포함한다. 모든 `rcu_node` 는 몇몇의 CPU 들을 위한 lock 을 포함한다. 이런 `rcu_node` 구조체는 `rcu_state` 구조체의 선형 배열내에 들어가 있고, 첫 요소인 루트를 트리 형태로 표현하여 모든 CPU 를 다룬다. 가용한 CPU 의 수에 의존적인 `NUM_RCU_NODES` 에 의해 rcu 노드의 개수를 결정한다.:
 
 ```C
 #define NUM_RCU_NODES (RCU_SUM - NR_CPUS)
 #define RCU_SUM (NUM_RCU_LVL_0 + NUM_RCU_LVL_1 + NUM_RCU_LVL_2 + NUM_RCU_LVL_3 + NUM_RCU_LVL_4)
 ```
 
-where levels values depend on the `CONFIG_RCU_FANOUT_LEAF` configuration option. For example for the simplest case, one `rcu_node` will cover two CPU on machine with the eight CPUs:
+`CONFIG_RCU_FANOUT_LEAF` 구성 옵션에 의존적인 레벨의 값을 결정한다. 예를 들어, 가장 단순한 경우에, 하나의 `rcu_node` 는 8 개의 코어를 가지는 두 개의 CPU 를 다룰 수 있다.:
 
 ```
 +-----------------------------------------------------------------+
@@ -231,7 +236,7 @@ where levels values depend on the `CONFIG_RCU_FANOUT_LEAF` configuration option.
 +------------------------------------------------------------------+
 ```
 
-So, in the `rcu_init_geometry` function we just need to calculate the total number of `rcu_node` structures. We start to do it with the calculation of the `jiffies` till to the first and next `fqs` which is `force-quiescent-state` (read above about it):
+그래서, `rcu_init_geometry` 함수 내에서는 단지 `rcu_node` 구조체의 총 개수를 계산을 한다. 이 함수는 `force-quiescent-state` 인 첫 번째와 그 다음의 `fqs` 의 값을 `jiffies` 로 계산하는 것으로 시작한다.:
 
 ```C
 d = RCU_JIFFIES_TILL_FORCE_QS + nr_cpu_ids / RCU_JIFFIES_FQS_DIV;
@@ -241,21 +246,21 @@ if (jiffies_till_next_fqs == ULONG_MAX)
         jiffies_till_next_fqs = d;
 ```
 
-where:
+각 선언된 값들은:
 
 ```C
 #define RCU_JIFFIES_TILL_FORCE_QS (1 + (HZ > 250) + (HZ > 500))
 #define RCU_JIFFIES_FQS_DIV     256
 ```
 
-As we calculated these [jiffies](http://en.wikipedia.org/wiki/Jiffy_%28time%29), we check that previous defined `jiffies_till_first_fqs` and `jiffies_till_next_fqs` variables are equal to the [ULONG_MAX](http://www.rowleydownload.co.uk/avr/documentation/index.htm?http://www.rowleydownload.co.uk/avr/documentation/ULONG_MAX.htm) (their default values) and set they equal to the calculated value. As we did not touch these variables before, they are equal to the `ULONG_MAX`:
+이렇게 [jiffies](http://en.wikipedia.org/wiki/Jiffy_%28time%29) 값을 계산하고 나서 `jiffies_till_first_fqs` 와 `jiffies_till_next_fqs` 변수 값이 [ULONG_MAX](http://www.rowleydownload.co.uk/avr/documentation/index.htm?http://www.rowleydownload.co.uk/avr/documentation/ULONG_MAX.htm) 와 같은지 확인하고 계산된 값을 설정한다. 사실 이 변수들은 이전에 변경한 적이 없으므로, `ULONG_MAX` 와 같았을 것이다.:
 
 ```C
 static ulong jiffies_till_first_fqs = ULONG_MAX;
 static ulong jiffies_till_next_fqs = ULONG_MAX;
 ```
 
-In the next step of the `rcu_init_geometry`, we check that `rcu_fanout_leaf` didn't change (it has the same value as `CONFIG_RCU_FANOUT_LEAF` in compile-time) and equal to the value of the `CONFIG_RCU_FANOUT_LEAF` configuration option, we just return:
+`rcu_init_geometry` 의 다음 단계는, `rcu_fanout_leaf` 값이 수정되지 않았고 `CONFIG_RCU_FANOUT_LEAF` 의 값과 같은지 확인하여, 그렇다면 그냥 반환하고 마무리한다.:
 
 ```C
 if (rcu_fanout_leaf == CONFIG_RCU_FANOUT_LEAF &&
@@ -263,7 +268,7 @@ if (rcu_fanout_leaf == CONFIG_RCU_FANOUT_LEAF &&
     return;
 ```
 
-After this we need to compute the number of nodes that an `rcu_node` tree can handle with the given number of levels:
+확인이 끝나고, 우리는 `rcu_node` 트리가 주어진 레벨의 수를 처리할 수 있도록 node 의 수를 계산한다.:
 
 ```C
 rcu_capacity[0] = 1;
@@ -272,21 +277,21 @@ for (i = 2; i <= MAX_RCU_LVLS; i++)
     rcu_capacity[i] = rcu_capacity[i - 1] * CONFIG_RCU_FANOUT;
 ```
 
-And in the last step we calculate the number of rcu_nodes at each level of the tree in the [loop](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c#L4094).
+그리고 마지막 단계로는 [루프](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c#L4094)를 통해 트리의 각 레벨에 `rcu_nodes`의 수를 계산한다.
 
-As we calculated geometry of the `rcu_node` tree, we need to go back to the `rcu_init` function and next step we need to initialize two `rcu_state` structures with the `rcu_init_one` function:
+`rcu_node` 트리의 기하를 계산하고 나서 `rcu_init` 함수로 돌아가서, 다음 단계로 `rcu_init_one` 함수와 함께 두 개의 `rcu_state` 구조체를 초기화할 필요가 있다.:
 
 ```C
 rcu_init_one(&rcu_bh_state, &rcu_bh_data);
 rcu_init_one(&rcu_sched_state, &rcu_sched_data);
 ```
 
-The `rcu_init_one` function takes two arguments:
+`rcu_init_one` 함수는 두 개의 인자를 받는다.:
 
-* Global `RCU` state;
-* Per-CPU data for `RCU`.
+* 글로벌 `RCU` 상태
+* `RCU`를 위한 Per-CPU data.
 
-Both variables defined in the [kernel/rcu/tree.h](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.h) with its `percpu` data:
+두 변수들은 그것의 `percpu` 데이터와 함께 [kernel/rcu/tree.h](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.h)에 선언되어 있다.:
 
 ```
 extern struct rcu_state rcu_bh_state;
@@ -294,6 +299,7 @@ DECLARE_PER_CPU(struct rcu_data, rcu_bh_data);
 ```
 
 About this states you can read [here](http://lwn.net/Articles/264090/). As I wrote above we need to initialize `rcu_state` structures and `rcu_init_one` function will help us with it. After the `rcu_state` initialization, we can see the call of the ` __rcu_init_preempt` which depends on the `CONFIG_PREEMPT_RCU` kernel configuration option. It does the same as previous functions - initialization of the `rcu_preempt_state` structure with the `rcu_init_one` function which has `rcu_state` type. After this, in the `rcu_init`, we can see the call of the:
+
 
 ```C
 open_softirq(RCU_SOFTIRQ, rcu_process_callbacks);

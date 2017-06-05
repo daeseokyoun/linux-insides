@@ -28,7 +28,7 @@ do { \
 위의 두 가지 경우의 매크로 구현에 하나의 차이점을 볼 수 있다. `CONFIG_PREEMPT_COUNT` 이 설정되어 있다면, `preempt_disable` 은 `preempt_count_inc` 의 호출을 포함할 것이다. 여기서 `preempt_disable`와 lock 을 잡은 횟수를 저장하는 특별한 `percpu` 변수가 있다.:
 
 ```C
-DECLARE_PER_CPU(int, __preempt_count__); // TODO 마지막 언더바 두개
+DECLARE_PER_CPU(int, __preempt_count);
 ```
 
 `preempt_disable` 구현에서 처음으로 하는 것은 `__preempt_count` 값을 증가시키는 것이다. `__preempt_count` 의 값을 반환하는 API 가 있는데, 그것은 `preempt_count` 함수이다. `preempt_disable` 함수 호출이 되면, 제일 먼저 아래의 코드로 확장되는 `preempt_count_inc` 매크로를 통해 선점 카운더 값을 증가시킨다.:
@@ -153,7 +153,7 @@ void __init rcu_init(void)
          cpu_notifier(rcu_cpu_notify, 0);
          pm_notifier(rcu_pm_notify, 0);
          for_each_online_cpu(cpu)
-                 rcu_cpu_notify(NULL, CPU_UP_PREPARE, (void *)*(long)cpu); // TODO long 앞의 별하나
+                 rcu_cpu_notify(NULL, CPU_UP_PREPARE, (void *)(long)cpu);
 
          rcu_early_boot_tests();
 }
@@ -298,14 +298,13 @@ extern struct rcu_state rcu_bh_state;
 DECLARE_PER_CPU(struct rcu_data, rcu_bh_data);
 ```
 
-About this states you can read [here](http://lwn.net/Articles/264090/). As I wrote above we need to initialize `rcu_state` structures and `rcu_init_one` function will help us with it. After the `rcu_state` initialization, we can see the call of the ` __rcu_init_preempt` which depends on the `CONFIG_PREEMPT_RCU` kernel configuration option. It does the same as previous functions - initialization of the `rcu_preempt_state` structure with the `rcu_init_one` function which has `rcu_state` type. After this, in the `rcu_init`, we can see the call of the:
-
+이 상태(state) 관련해서는 [여기](http://lwn.net/Articles/264090/)에서 확인 가능하다. 이미 언급했듯이 `rcu_state` 구조체는 초기화되어야 하고 그 일을 `rcu_init_one` 함수가 도와 줄 것이다. `rcu_state` 구조체가 초기화되고 나면, `CONFIG_PREEMPT_RCU` 커널 구성 옵션에 의존적인 ` __rcu_init_preempt` 함수의 호출을 볼 수 있다. 이전 함수와 비슷하게 `rcu_preempt_state` 구조체를 초기화 한다. `rcu_init` 에서 그 다음으로 호출되는 것은 아래의 `open_softirq` 함수이다.:
 
 ```C
 open_softirq(RCU_SOFTIRQ, rcu_process_callbacks);
 ```
 
-function. This function registers a handler of the `pending interrupt`. Pending interrupt or `softirq` supposes that part of actions can be delayed for later execution when the system is less loaded. Pending interrupts is represented by the following structure:
+이 함수는 `pending interrupt(지연된 인터럽트)` 의 핸들러를 등록한다. 지연된 인터럽트 또는 `softirq` 는 시스템의 로드가 줄어들때까지 지연될 수 있다는 것을 암시한다. 지연된 인터럽트는 아래의 구조체에 의해 표현된다.:
 
 ```C
 struct softirq_action
@@ -314,7 +313,7 @@ struct softirq_action
 };
 ```
 
-which is defined in the [include/linux/interrupt.h](https://github.com/torvalds/linux/blob/master/include/linux/interrupt.h) and contains only one field - handler of an interrupt. You can check about `softirqs` in the your system with the:
+[include/linux/interrupt.h](https://github.com/torvalds/linux/blob/master/include/linux/interrupt.h) 내에 선언되어 있고 인터럽트 핸들러만 갖고 있다. 시스템에서 `softirqs`를 확인해보면:
 
 ```
 $ cat /proc/softirqs
@@ -331,12 +330,12 @@ BLOCK_IOPOLL:          0          0          0          0          0          0 
          RCU:      81290      68062      82979      69015      68390      69385      63304      63473
 ```
 
-The `open_softirq` function takes two parameters:
+`open_softirq` 함수는 두 개의 인자를 갖는다.:
 
-* index of the interrupt;
-* interrupt handler.
+* 인터럽트의 인덱스
+* 인터럽트 핸들러
 
-and adds interrupt handler to the array of the pending interrupts:
+그리고 이 함수는 주어진 인터럽트 핸들러들 지연된 인터럽트들을 위한 배열에 추가한다.:
 
 ```C
 void open_softirq(int nr, void (*action)(struct softirq_action *))
@@ -345,7 +344,7 @@ void open_softirq(int nr, void (*action)(struct softirq_action *))
 }
 ```
 
-In our case the interrupt handler is - `rcu_process_callbacks` which is defined in the [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c) and does the `RCU` core processing for the current CPU. After we registered `softirq` interrupt for the `RCU`, we can see the following code:
+우리의 경우에 인터럽트 핸들러는 [kernel/rcu/tree.c](https://github.com/torvalds/linux/blob/master/kernel/rcu/tree.c) 에 구현된 `rcu_process_callbacks` 함수이고 현재 수행중인 CPU를 위한 `RCU` 코어 처리를 한다. `RCU` 를 위한 `softirq` 인터럽트를 등록하고 나서, 다음과 같은 코드들을 볼 수 있다.:
 
 ```C
 cpu_notifier(rcu_cpu_notify, 0);
@@ -354,7 +353,7 @@ for_each_online_cpu(cpu)
     rcu_cpu_notify(NULL, CPU_UP_PREPARE, (void *)(long)cpu);
 ```
 
-Here we can see registration of the `cpu` notifier which needs in systems which supports [CPU hotplug](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt) and we will not dive into details about this theme. The last function in the `rcu_init` is the `rcu_early_boot_tests`:
+여기서 [CPU hotplug](https://www.kernel.org/doc/Documentation/cpu-hotplug.txt) 지원을 위해 시스템에서 요구하는 `cpu` notifier의 등록을 볼 수 있다. (이 파트에서는 자세히 다루지 않을 것이다.) `rcu_init`에서 마지막 호출되는 함수는 `rcu_early_boot_tests` 함수이다.:
 
 ```C
 void rcu_early_boot_tests(void)
@@ -370,53 +369,55 @@ void rcu_early_boot_tests(void)
 }
 ```
 
-which runs self tests for the `RCU`.
+`RCU`를 위한 자가 테스트를 수행한다.
 
-That's all. We saw initialization process of the `RCU` subsystem. As I wrote above, more about the `RCU` will be in the separate chapter about synchronization primitives.
+`RCU` 서브 시스템의 초기화 과정을 보았다. 이미 언급했듯이, `RCU`는 동기화 관련 분리된 챕터에서 더 다루어 질 것이다.
 
-Rest of the initialization process
+초기화 과정의 나머지.
 --------------------------------------------------------------------------------
 
 Ok, we already passed the main theme of this part which is `RCU` initialization, but it is not the end of the linux kernel initialization process. In the last paragraph of this theme we will see a couple of functions which work in the initialization time, but we will not dive into deep details around this function for different reasons. Some reasons not to dive into details are following:
+이번 파트에서 중요한 테마인 `RCU` 초기화 부분은 마무리를 했지만, 리눅스 커널 초기화 과정이 모두 끝난 것은 아니다. 이 파트의 마지막 부분에서는 초기화에서 하는 몇몇 함수를 살펴볼 것이다. 하지만 자세히는 다루지 않을 것인데 그 이유는 다음과 같다.:
 
-* They are not very important for the generic kernel initialization process and depend on the different kernel configuration;
-* They have the character of debugging and not important for now;
-* We will see many of this stuff in the separate parts/chapters.
+* 일반적인 리눅스 커널 초기화 과정을 위해 중요하지 않은 부분이거나 커널 구성옵션에 의존적인 부분.
+* 디버깅을 위한 것이거나 지금은 중요하지 않는 부분
+* 다른 파트나 챕터에서 더 자세히 다루어질 부분
 
-After we initialized `RCU`, the next step which you can see in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) is the - `trace_init` function. As you can understand from its name, this function initialize [tracing](http://en.wikipedia.org/wiki/Tracing_%28software%29) subsystem. You can read more about linux kernel trace system - [here](http://elinux.org/Kernel_Trace_Systems).
+`RCU` 초기화가 끝나고 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 에서 다음 단계로는 `trace_init` 함수이다. 이름을 보면 알겠지만, 이 함수는
+[tracing](http://en.wikipedia.org/wiki/Tracing_%28software%29) 서브시스템을 초기화 한다. 커널 추적(trace) 시스템에 더 자세히 알고 싶다면, [여기](http://elinux.org/Kernel_Trace_Systems) 를 보자.
 
-After the `trace_init`, we can see the call of the `radix_tree_init`. If you are familiar with the different data structures, you can understand from the name of this function that it initializes kernel implementation of the [Radix tree](http://en.wikipedia.org/wiki/Radix_tree). This function is defined in the [lib/radix-tree.c](https://github.com/torvalds/linux/blob/master/lib/radix-tree.c) and you can read more about it in the part about [Radix tree](https://0xax.gitbooks.io/linux-insides/content/DataStructures/radix-tree.html).
+`trace_init` 이 끝나면, `radix_tree_init` 함수가 호출된다. 자료 구조 관련해서 익숙하다면, 이 함수의 이름만 봐도 무엇을 구현해놨는지 알 수 있을 것이다. 이 함수는 [Radix tree](http://en.wikipedia.org/wiki/Radix_tree) 의 커널 구현을 초기화한다. 이 함수는 [lib/radix-tree.c](https://github.com/torvalds/linux/blob/master/lib/radix-tree.c)에 구현되어 있고, [Radix tree](https://github.com/daeseokyoun/linux-insides/blob/master/DataStructures/radix-tree.md)에서 더 많은 내용을 볼 수 있다.
 
-In the next step we can see the functions which are related to the `interrupts handling` subsystem, they are:
+다음 단계에서는 `인터럽트 처리` 서브시스템에 관련된 함수들을 볼 수 있다. 그 함수들은:
 
 * `early_irq_init`
 * `init_IRQ`
 * `softirq_init`
 
-We will see explanation about this functions and their implementation in the special part about interrupts and exceptions handling. After this many different functions (like `init_timers`, `hrtimers_init`, `time_init`, etc.) which are related to different timing and timers stuff. We will see more about these function in the chapter about timers.
+우리는 이 함수들의 설명과 구현을 인터럽트와 예외 처리라는 특별한 파트에서 살펴 볼 것이다. 이 다음으로 타이밍과 타이머와 관련된 `init_timers`, `hrtimers_init`, `time_init` 등과 같은 함수들을 볼 수 있다. 이 함수들은 타이머와 관련된 챕터에서 살펴 보자.
 
-The next couple of functions are related with the [perf](https://perf.wiki.kernel.org/index.php/Main_Page) events - `perf_event-init` (there will be separate chapter about perf), initialization of the `profiling` with the `profile_init`. After this we enable `irq` with the call of the:
+다음 몇 몇의 함수들은 [perf](https://perf.wiki.kernel.org/index.php/Main_Page) 이벤트 - `perf_event_init`(perf 용 다른 챕터가 있음), `profile_init` 함수로 `profiling` 초기화를 하는 것이다. 그 다음에는 아래의 함수로 `irq`를 활성화 한다.:
 
 ```C
 local_irq_enable();
 ```
 
-which expands to the `sti` instruction and making post initialization of the [SLAB](http://en.wikipedia.org/wiki/Slab_allocation) with the call of the `kmem_cache_init_late` function (As I wrote above we will know about the `SLAB` in the [Linux memory management](http://0xax.gitbooks.io/linux-insides/content/mm/index.html) chapter).
+이 함수는 `sti` 명령어를 호출한다. 그리고 `kmem_cache_init_late` 함수의 호출로 [SLAB](http://en.wikipedia.org/wiki/Slab_allocation) 의 초기화를 진행한다. (`SLAB` 은 [Radix tree](https://github.com/daeseokyoun/linux-insides/blob/master/mm/README.md) 를 참조하자.)
 
-After the post initialization of the `SLAB`, next point is initialization of the console with the `console_init` function from the [drivers/tty/tty_io.c](https://github.com/torvalds/linux/blob/master/drivers/tty/tty_io.c).
+`SLAB` 의 초기화를 진행한 뒤에, [drivers/tty/tty_io.c](https://github.com/torvalds/linux/blob/master/drivers/tty/tty_io.c) 에 구현된 `console_init` 함수로 콘솔을 초기화한다.
 
-After the console initialization, we can see the `lockdep_info` function which prints information about the [Lock dependency validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt). After this, we can see the initialization of the dynamic allocation of the `debug objects` with the `debug_objects_mem_init`, kernel memory leak [detector](https://www.kernel.org/doc/Documentation/kmemleak.txt) initialization with the `kmemleak_init`, `percpu` pageset setup with the `setup_per_cpu_pageset`, setup of the [NUMA](http://en.wikipedia.org/wiki/Non-uniform_memory_access) policy with the `numa_policy_init`, setting time for the scheduler with the `sched_clock_init`, `pidmap` initialization with the call of the `pidmap_init` function for the initial `PID` namespace, cache creation with the `anon_vma_init` for the private virtual memory areas and early initialization of the [ACPI](http://en.wikipedia.org/wiki/Advanced_Configuration_and_Power_Interface) with the `acpi_early_init`.
+콘솔 초기화가 끝나면, [Lock dependency validator](https://www.kernel.org/doc/Documentation/locking/lockdep-design.txt) 관련하여 정보를 출력하는 `lockdep_info` 함수를 볼 수 있다. 출력이 되고 나면, `debug_objects_mem_init` 함수로 `debug objects` 의 동적 할당, `kmemleak_init` 함수로 커널 메모리 릭(leak) [검출기](https://www.kernel.org/doc/Documentation/kmemleak.txt) 를 초기화, `setup_per_cpu_pageset` 함수로 `percpu` 페이지 셋 설정, `numa_policy_init` 함수로 [NUMA](http://en.wikipedia.org/wiki/Non-uniform_memory_access) 정책 설정, `sched_clock_init` 함수로 스케줄러를 위한 시간 설정, 초기 `PID` 네임스페이스를 위한 `pidmap_init`의 호출로 `pidmap` 초기화, 익명의 가상 메모리 영역을 위해 `anon_vma_init` 함수로 캐쉬 생성, `acpi_early_init` 함수로 [ACPI](http://en.wikipedia.org/wiki/Advanced_Configuration_and_Power_Interface) 의 초기 설정등을 진행한다.
 
-This is the end of the ninth part of the [linux kernel initialization process](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) and here we saw initialization of the [RCU](http://en.wikipedia.org/wiki/Read-copy-update). In the last paragraph of this part (`Rest of the initialization process`) we will go through many functions but did not dive into details about their implementations. Do not worry if you do not know anything about these stuff or you know and do not understand anything about this. As I already wrote many times, we will see details of implementations in other parts or other chapters.
+리눅스 커널 초기화 과정의 9번째 파트를 마무리한다. 여기서 주목할 내용은 [RCU](http://en.wikipedia.org/wiki/Read-copy-update)의 초기화 과정이었다. 이 파트의 마지막 부분에는(`초기화 과정의 나머지.`) 많은 함수들을 언급했지만, 자세히 다루지 않았다. 그래도 걱정은 하지 말자. 다른 챕터에서 더 자세히 다루어 지는 것들이 많이 있다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the ninth part about the linux kernel [initialization process](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html). In this part, we looked on the initialization process of the `RCU` subsystem. In the next part we will continue to dive into linux kernel initialization process and I hope that we will finish with the `start_kernel` function and will go to the `rest_init` function from the same [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) source code file and will see the start of the first process.
+다음 파트에서도 리눅스 커널 초기화 과정을 계속해서 볼것이고, 기대컨데 `start_kernel` 함수를 마무리지을 것이고, 같은 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일에 있는 `rest_init` 함수를 살펴 볼 수 있을 것이다. 그리고 첫 프로세스가 시작되는 것을 볼 수 있을 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

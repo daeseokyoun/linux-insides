@@ -1,12 +1,12 @@
 커널 초기화. Part 2.
 ================================================================================
 
-초기 인터럽트와 Exception 핸들링
+초기 인터럽트와 예외 처리
 --------------------------------------------------------------------------------
 
 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-1.md) 에서 우리는 초기 인터럽트 핸들러의 설정 전까지 알아 보았다. 이제 압축 해제된 리눅스 커널에서 수행중에 있으며, 우리는 초기 부팅을 위한 기본 [페이징](https://en.wikipedia.org/wiki/Page_table) 구조체를 가지고, 우리의 현재 목표는 메일 커널 코드가 수행되기 전에 초기 준비 작업에 대한 내용을 마무리 하는 것이다.
 
-이에 대한 내용은 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-1.md)에서 부터 시작되었다. 현재 파트에서 계속 이어 나가 인터럽트와 exception 처리에 대해 알아보자.
+이에 대한 내용은 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/master/Initialization/linux-initialization-1.md)에서 부터 시작되었다. 현재 파트에서 계속 이어 나가 인터럽트와 예외 처리에 대해 알아보자.
 
 우리가 지난 파트에서 마지막으로 봤던 코드는 아래와 같다.:
 
@@ -26,13 +26,13 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 * 하드웨어 인터럽트 - 키보드에서 키가 눌렸을 때와 같은 하드웨어 이벤트를 말한다.
 * Exceptions - 잘못된 메모리 접근이나, 0으로 나누는 것과 같이 CPU 가 에러를 발견하여 CPU 에 생성되는 인터럽트 이다.
 
-모든 인터럽트와 exception 은 `vector number` 라 불리는 수만큼 할당이 된다. `Vector number` 는 `0` 에서 `255` 사이에 어떤 수도 될 수 있다. 여기는 일반적으로 exception 을 위해 첫 벡터 넘버로 `32`를 사용하고, 벡터 번호 `32` 부터 `255` 까지 사용자가 정의하여 사용할 수 있게 된다. 우리는 그것을 아래 `NUM_EXCEPTION_VECTORS` 정의로 부터 알 수 있다:
+모든 인터럽트와 예외들은 `vector number` 라 불리는 수만큼 할당이 된다. `Vector number` 는 `0` 에서 `255` 사이에 어떤 수도 될 수 있다. 여기는 일반적으로 예외 처리를 위해 첫 벡터 넘버로 `32`를 사용하고, 벡터 번호 `32` 부터 `255` 까지 사용자가 정의하여 사용할 수 있게 된다. 우리는 그것을 아래 `NUM_EXCEPTION_VECTORS` 정의로 부터 알 수 있다:
 
 ```C
 #define NUM_EXCEPTION_VECTORS 32
 ```
 
-CPU 는 `Interrupt Descriptor Table(인터럽트 디스크립션 테이블)`에서 벡터 넘버를 인덱스로 사용한다. CPU 는 [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) 또는 그 핀을 통해서 인터럽트를 받는다. 아래 테이블 에서 `0-31` exception 들을 볼 수 있다.:
+CPU 는 `Interrupt Descriptor Table(인터럽트 디스크립션 테이블)`에서 벡터 넘버를 인덱스로 사용한다. CPU 는 [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) 또는 그 핀을 통해서 인터럽트를 받는다. 아래 테이블 에서 `0-31` 예외들을 볼 수 있다.:
 
 ```
 ----------------------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 * `벡터 번호` 또는 인터럽트 번호
 * IDT 핸들러의 주소
 
-그리고 인터럽트 게이트를 `&idt_desc` 에 대응되는 `IDT` 테이블에 넣는다. 제일 먼저 `early_idt_handler_array` 배열을 보자. 이 배열은 [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) 헤더 파일에 정의되어 있고 첫 `32` exception 핸들러의 주소를 담고 있다.:
+그리고 인터럽트 게이트를 `&idt_desc` 에 대응되는 `IDT` 테이블에 넣는다. 제일 먼저 `early_idt_handler_array` 배열을 보자. 이 배열은 [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) 헤더 파일에 정의되어 있고 첫 `32` 예외 처리의 주소를 담고 있다.:
 
 ```C
 #define EARLY_IDT_HANDLER_SIZE   9
@@ -163,7 +163,7 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 extern const char early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
 ```
 
-`early_idt_handler_array` 는 9 바이트의 크기의 exception 엔트리 포인트의 주소들을 포함하여 총 `288` 바이트가 된다. 이 배열의 각 9 바이트의 구성을 살펴 보면, 만약 exception 이 제공되지 않는다면 dummy 에러 코드를 넣기 위해 추가적인 2 바이트가 있고, 또 다른 2 바이트 명령어로 스택에 벡터 번호를 넣는다. 마지막 5바이트는 일반적인 exception 핸들러 코드로 `jump` 하기 위한 명령어이다.
+`early_idt_handler_array` 는 9 바이트의 크기의 예외 엔트리 포인트의 주소들을 포함하여 총 `288` 바이트가 된다. 이 배열의 각 9 바이트의 구성을 살펴 보면, 만약 예외가 제공되지 않는다면 dummy 에러 코드를 넣기 위해 추가적인 2 바이트가 있고, 또 다른 2 바이트 명령어로 스택에 벡터 번호를 넣는다. 마지막 5바이트는 일반적인 예외 처리 코드로 `jump` 하기 위한 명령어이다.
 
 이미 봤듯이, 루프내에서 첫 32 개의 `IDT` 엔트리를 채웠다. 그 이유는 초기 설정하는 동안 인터럽트들이 비활성화 되어 있었고, `32` 보다 큰 벡터들을 위한 인터럽트 핸들러를 설정할 필요가 없었기 때문이다.  `early_idt_handler_array` 배열은 일반적인 IDT 핸들러로 구성되어 있고 그 정의는 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 어셈블리 파일에서 찾아 볼 수 있다. 지금은 이 부분을 건너뛰고 `set_intr_gate` 매크로를 살펴 볼 것이다.
 
@@ -273,7 +273,7 @@ early_idt_handlers:
 	.endr
 ```
 
-여기서 우리는 첫 `32` exception 을 위해 인터럽트 핸들러 생성을 볼 수 있다. 만약 exception 이 에러 코드를 가진다면 아무것도 하지 않고, exception 이 에러 코드를 반환하면, 우리는 스택에 0을 넣을 것이다. 이것은 스택을 0으로 균일한 값을 가지도록 하는 것이다. 이후에, exception 번호를 스택에 넣고 지금 사용되는 일반적인 인터럽트 핸들러인 `early_idt_handler_array`로 점프할 것이다. 위에 코드를 보면, `early_idt_handler_array` 의 매 9 바이트는
+여기서 우리는 첫 `32` 예외를 위해 인터럽트 핸들러 생성을 볼 수 있다. 만약 예외가 에러 코드를 가진다면 아무것도 하지 않고, 예외가 에러 코드를 반환하면, 우리는 스택에 0을 넣을 것이다. 이것은 스택을 0으로 균일한 값을 가지도록 하는 것이다. 이후에, 예외 번호를 스택에 넣고 지금 사용되는 일반적인 인터럽트 핸들러인 `early_idt_handler_array`로 점프할 것이다. 위에 코드를 보면, `early_idt_handler_array` 의 매 9 바이트는
 추가적인 에러 코드, `벡터 번호`와 jump 명령어를 스택에 넣는다. 우리는 `objdump` 유틸의 출력으로 확인 할 수 있다.:
 ```
 $ objdump -D vmlinux

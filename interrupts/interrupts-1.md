@@ -1,64 +1,65 @@
-Interrupts and Interrupt Handling. Part 1.
+인터럽트와 인터럽트 핸들링 Part 1.
 ================================================================================
 
-Introduction
+소개
 --------------------------------------------------------------------------------
 
-This is the first part of the new chapter of the [linux insides](http://0xax.gitbooks.io/linux-insides/content/) book. We have come a long way in the previous [chapter](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) of this book. We started from the earliest [steps](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-1.html) of kernel initialization and finished with the [launch](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-10.html) of the first `init` process. Yes, we saw several initialization steps which are related to the various kernel subsystems. But we did not dig deep into the details of these subsystems. With this chapter, we will try to understand how the various kernel subsystems work and how they are implemented. As you can already understand from the chapter's title, the first subsystem will be [interrupts](http://en.wikipedia.org/wiki/Interrupt).
+우리는 이전 챕터에서 리눅스 커널 초기화의 가장 먼저 일어나는 [단계](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/README.md)들과 첫 프로세스인 `init` 프로세스의 실행하는 과정까지 모두 살펴 보았다. 그렇다. 우리는 다양한 커널 서브 시스템과 관련된 몇몇의 초기화 단계를 보았다. 하지만, 이 서브 시스템들의 깊이 있는 세부 사항은 보질 못했다. 이 챕터에서는, 우리는 다양한 커널 서브 시스템이 어떻게 동작하고 구현되어 있는지 살펴 볼 것이다. 제목에서 벌써 알 수 있듯이, 우리가 살펴 볼 첫 서브시스템은 [인터럽트](http://en.wikipedia.org/wiki/Interrupt) 이다.
 
-What is an Interrupt?
+인터럽트?
 --------------------------------------------------------------------------------
 
-We have already heard of the word `interrupt` in several parts of this book. We even saw a couple of examples of interrupt handlers. In the current chapter we will start from the theory i.e.,
+우리는 이미 이 책에서 `인터럽트(interrupt)` 라는 단어를 많이 봐왔다. 게다가 인터럽트 핸들러들의 몇가지 샘플도 보았다. 현재 챕터에서는 아래과 같은 질문에서 시작할 것이다.
 
-* What are `interrupts` ?
-* What are `interrupt handlers`?
+* `인터럽트` 는 무엇인가?
+* `인터럽트 핸들러는 무엇을 하는가`?
 
-We will then continue to dig deeper into the details of `interrupts` and how the Linux kernel handles them.
+이 질문에 대한 내용을 먼저 보고 `인터럽트` 에 대한 상세 내용 및 리눅스 커널이 어떻게 그것들을 처리하는지 살펴 볼 것이다.
 
-The first question that arises in our mind when we come across word `interrupt` is `What is an interrupt?` An interrupt is an `event` raised by software or hardware when it needs the CPU's attention. For example, we press a button on the keyboard and what do we expect next? What should the operating system and computer do after this? To simplify matters, assume that each peripheral device has an interrupt line to the CPU. A device can use it to signal an interrupt to the CPU. However, interrupts are not signaled directly to the CPU. In the old machines there was a [PIC](http://en.wikipedia.org/wiki/Programmable_Interrupt_Controller) which is a chip responsible for sequentially processing multiple interrupt requests from multiple devices. In the new machines there is an [Advanced Programmable Interrupt Controller](https://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) commonly known as - `APIC`. An `APIC` consists of two separate devices:
+우리가 `인터럽트`라는 단어를 접할 때, 가장 먼저 떠오르는 질문은 `인터럽트가 무엇인가?` 일 것이다. 인터럽트는 소프트웨어나 하드웨어가 CPU 주목(attention)을 받을 필요가 있을 때, 알리는 `이벤트(event)` 같은 것이다. 예를 들어, 우리가 키보드의 버튼 하나를 눌렀을 때, 우리는 어떤 일이 일어나길 기대하는 것인가? 운영체제나 컴퓨터가 이 다음에는 무엇을 해야 하는 것인가? 문제를 단순화 하기 위해, 각 주변 장치들은 CPU 에 연결된 인터럽트 라인을 갖고 있다고 가정하자. 하나의 장치는 인터럽트 신호를 CPU 에게 보내기 위해 라인을 사용할 수 있다. 그렇지만, 인터럽트들은 CPU 에 직접적으로 신호를 전달하지 않는다. 예전 기기는 여러 장치로 부터 들어온 여러 개의 인터럽트 요청을 순서대로 처리하기 위한 [PIC](http://en.wikipedia.org/wiki/Programmable_Interrupt_Controller) 가 있었다. 요즈음 나오는 기기들은 `APIC` 라고 일반적으로 알려진 [Advanced Programmable Interrupt Controller](https://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) 가 있다. `APIC` 는 두개의 분리된 장치들로 구성된다.:
 
-* `Local APIC`
+* `지역 APIC`
 * `I/O APIC`
 
-The first - `Local APIC` is located on each CPU core. The local APIC is responsible for handling the CPU-specific interrupt configuration. The local APIC is usually used to manage interrupts from the APIC-timer, thermal sensor and any other such locally connected I/O devices.
+`지역(local) APIC` 는 각 CPU 코어에 위치한다. 이 지역 APIC 는 CPU 특화된 인터럽트 구성을 처리하기 위한 책임이 있다. 지역 APIC 는 대게 APIC-timer, 열 감지 센서 그리고 각 지역적으로 연결된 I/O 장치들로 부터 인터럽트를 관리하기 위해 사용된다.
 
-The second - `I/O APIC` provides multi-processor interrupt management. It is used to distribute external interrupts among the CPU cores. More about the local and I/O APICs will be covered later in this chapter. As you can understand, interrupts can occur at any time. When an interrupt occurs, the  operating system must handle it immediately. But what does it mean `to handle an interrupt`? When an interrupt occurs, the  operating system must ensure the following steps:
+두 번째 `I/O APIC` 는 멀티 프로세서 인터럽트 관리를 제공한다. 여러 CPU 코어들 중에 외부 인터럽트를 처리할 수 있도록 한다. 조금 더 자세한 내용은 이 파트의 뒷 부분에 추가적으로 살펴 볼 것이다. 당신이 이해한대로, 인터럽트는 언제든 일어날 수 있다. 인터럽트가 발생하면, 운영체는 즉시 그 인터럽트를 처리해야 한다. 그렇지만, `인터럽트를 처리한다`라는 의미는 무엇인가? 인터럽트가 발생하면 운영체제는 아래의 단계 수행을 보장한다.:
 
-* The kernel must pause execution of the current process; (preempt current task);
-* The kernel must search for the handler of the interrupt and transfer control (execute interrupt handler);
-* After the interrupt handler completes execution, the interrupted process can resume execution.
+* 커널은 반드시 현재 수행 중인 프로세스의 실행을 멈추어야 한다. (현재 태스크를 선점);
+* 커널은 인터럽트 핸들러를 찾아야 하고 제어를 넘겨줘야 한다. (인터럽트 핸들러의 실행);
+* 인터럽트 핸들러의 실행이 완료되면, 멈춰진 프로세스의 실행을 재개한다.
 
-Of course there are numerous intricacies involved in this procedure of handling interrupts. But the above 3 steps form the basic skeleton of the procedure.
+물론 인터럽트를 처리하는 과정에 많은 복잡한 것들이 있다. 하지만 위의 3 단계는 그 과정의 기본적인 틀이라고 할 수 있다.
 
-Addresses of each of the interrupt handlers are maintained in a special location referred to as the - `Interrupt Descriptor Table` or `IDT`. The processor uses a unique number for recognizing the type of interruption or exception. This number is called - `vector number`. A vector number is an index in the `IDT`. There is limited amount of the vector numbers and it can be from `0` to `255`. You can note the following range-check upon the vector number within the Linux kernel source-code:
+인터럽트 핸들러의 각 주소들은 `Interrupt Descriptor Table` 또는 `IDT` 가 가리키는 특별한 위치에서 관리되고 있다. 프로세서는 인터럽트나 예외의 타잎을 인지하기 위해 고유의 번호를 사용한다. 이 고유한 번호를 `벡터 번호(vector number)` 라고 불린다. 이 벡터 번호는 `IDT` 내에 있는 인덱스이다. 벡터 번호는 `0` 에서 `255` 까지만 사용될 수 있는 제한이 있다. 당신이 리눅스 커널 내에서 아래와 같이 범위 확인을 하는 것을 볼 수 있다.:
 
 ```C
 BUG_ON((unsigned)n > 0xFF);
 ```
 
-You can find this check within the Linux kernel source code related to interrupt setup (eg. The `set_intr_gate`, `void set_system_intr_gate` in [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h)). The first 32 vector numbers from `0` to `31` are reserved by the processor and used for the processing of architecture-defined exceptions and interrupts. You can find the table with the description of these vector numbers in the second part of the Linux kernel initialization process - [Early interrupt and exception handling](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html). Vector numbers from `32` to `255` are designated as user-defined interrupts and are not reserved by the processor. These interrupts are generally assigned to external I/O devices to enable those devices to send interrupts to the processor.
+이 확인 코드는 리눅스 커널에서 인터럽트 설정과 관련된 코드에서 쉽게 찾을 수 있다.(예를 들면, [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h)에 `set_intr_gate`, `void set_system_intr_gate`) 첫 32 개의 벡터 번호인 `0` 에서 `31`은 프로세서에 의해 예약되어 있고 아키텍처에서 정의된 예외와 인터럽트 처리를 위해 사용된다. 이 벡터 번호들을 기술한 테이블은 리눅스 초기화 과정 part 2 인 [초기 인터럽트와 예외 처리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-2.md) 에서 찾아볼 수 있다. `32` 에서 `255`까지의 벡터 번호는 사용자 정의된 인터럽트를 나타내고 프로세서에 의해 예약되어 있지 않다. 이 인터럽트들은 일반적으로 외부 I/O 장치들에게 할당되어 그 장치들을 활성화 시키고 프로세서에게 인터럽트를 보내기 위해 사용된다.
 
-Now let's talk about the types of interrupts. Broadly speaking, we can split interrupts into 2 major classes:
+이제 인터럽트의 형태에 대해 알아보자. 일반적으로, 인터럽트들은 2 개의 주요 클래스로 나뉜다.:
 
-* External or hardware generated interrupts
-* Software-generated interrupts
+* 외부 혹은 하드웨어에서 발생한 인터럽트
+* 소프트웨어에서 발생한 인터럽트 (Software-generated interrupts)
 
-The first - external interrupts are received through the `Local APIC` or pins on the processor which are connected to the `Local APIC`. The second - software-generated interrupts are caused by an exceptional condition in the processor itself (sometimes using special architecture-specific instructions). A common example for an exceptional condition is `division by zero`. Another example is exiting a program with the `syscall` instruction.
+외부 인터럽트는 `Local APIC` 로 부터 받던가 `Local APIC` 에 연결된 프로세서의 핀들로 부터 받는다. 소프트웨어에서 발생한 인터럽트는 프로세서 자체에 예외적인 상태에 의해 발생한다.(때때로 특별한 아키텍처 특화된 명령어들을 사용하여 발생시킨다.) 예외적인 상태에 대한 가장 공통의 예제는 `division by zero(0으로 나누기)` 이다. 다른 예제는 `syscall` 명령어로 프로그램을 종료하는 것이다.
 
-As mentioned earlier, an interrupt can occur at any time for a reason which the code and CPU have no control over. On the other hand, exceptions are `synchronous` with program execution and can be classified into 3 categories:
+이미 언급했지만, 인터럽트는 코드와 CPU 가 더이상 제어할 수 없는 상태를 위해 언제든지 발생할 수 있다. 다른 말로는, 예외는 프로그램 실행과 `동기적`이고 아래 3가지 분류로 나뉠 수 있다.:
+
 
 * `Faults`
 * `Traps`
 * `Aborts`
 
-A `fault` is an exception reported before the execution of a "faulty" instruction (which can then be corrected). If corrected, it allows the interrupted program to be resume.
+`fault` 는 "faulty" 명령어(고쳐질 수 있다)의 실행 전에 보고된 예외이다. 수정되었다면, 인터럽트된 프로그램은 계속 재개할 수 있다.
 
-Next a `trap` is an exception which is reported immediately following the execution of the `trap` instruction. Traps also allow the interrupted program to be continued just as a `fault` does.
+`trap` 은 `trap` 명령어어 실행 바로 다음에 보고되는 예외이다. 트랩은 `fault` 가 했던대로 인터럽트되었던 프로그램이 재개할 수도 있다.
 
-Finally an `abort` is an exception that does not always report the exact instruction which caused the exception and does not allow the interrupted program to be resumed.
+`abort` 는 예외가 발생한 정확한 명령어를 항상 보고 받을 수 없고 인터럽트된 프로그램이 재개 될 수 없는 예외이다.
 
-Also we already know from the previous [part](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html) that interrupts can be classified as `maskable` and `non-maskable`. Maskable interrupts are interrupts which can be blocked with the two following instructions for `x86_64` - `sti` and `cli`. We can find them in the Linux kernel source code:
+또한 인터럽트는 `maskable` 과 `non-maskable` 로 분류될 수 있다고 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-2.md) 에서 살펴 보았다. Maskable(마스킹 가능한) 인터럽트는 `x86_64`에서 `sti` 와 `cli` 명령어로 블락킹할 수 있는 인터럽트이다. 리눅스 커널 소스 코드에서 마스킹하는 것을 볼 수 있다.:
 
 ```C
 static inline void native_irq_disable(void)
@@ -67,7 +68,7 @@ static inline void native_irq_disable(void)
 }
 ```
 
-and
+와
 
 ```C
 static inline void native_irq_enable(void)
@@ -76,9 +77,9 @@ static inline void native_irq_enable(void)
 }
 ```
 
-These two instructions modify the `IF` flag bit within the interrupt register. The `sti` instruction sets the `IF` flag and the `cli` instruction clears this flag. Non-maskable interrupts are always reported. Usually any failure in the hardware is mapped to such non-maskable interrupts.
+이 두 명령어들은 인터럽트 레지스터 내의 `IF` 플래그를 수정한다. `sti` 명령어는 `IF` 플래그를 설정하고 `cli` 명령어는 그 플래그를 클리어 한다. 넌마스커블 인터럽트들은 이 플래그로 블락킹되지 않는다. 대게 하드웨어의 어떤 실패는 넌마스커블 인터럽트 같은 것으로 맵핑되어 있다.
 
-If multiple exceptions or interrupts occur at the same time, the processor handles them in order of their predefined priorities. We can determine the priorities from the highest to the lowest in the following table:
+만약 여러 예외와 인터럽트가 동시에 발생한다면, 프로세서는 미리 정의된 우선순위에 따라 그것들을 처리한다. 우리는 우선순위를 아래 테이블내에서 높은 것에서 부터 가장 낮은 순대로 정해진 것을 볼 수 있다.:
 
 ```
 +----------------------------------------------------------------+
@@ -135,13 +136,13 @@ If multiple exceptions or interrupts occur at the same time, the processor handl
 +--------------+-------------------------------------------------+
 ```
 
-Now that we know a little about the various types of interrupts and exceptions, it is time to move on to a more practical part. We start with the description of the `Interrupt Descriptor Table`. As mentioned earlier, the `IDT` stores entry points of the interrupts and exceptions handlers. The `IDT` is similar in structure to the `Global Descriptor Table` which we saw in the second part of the [Kernel booting process](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-2.html). But of course it has some differences. Instead of `descriptors`, the `IDT` entries are called `gates`. It can contain one of the following gates:
+이제 우리는 인터럽트와 예외의 다양한 타입에 관련해서 알아보기 위해 좀 더 실용적인 부분으로 넘어가보도록 하자. 우리는 `Interrupt Descriptor Table` 의 설명에서 부터 시작하려고 한다. 앞절에서 설명했듯이, `IDT`는 인터럽트와 예외 처리 핸들러의 엔트리 포인트를 저장한다. `IDT`는 이미 살펴본 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-2.md) 에서 `Global Descriptor Table` 와 비슷한 구조로 되어 있다. 물론 다른 점이 있다. `descriptors` 대신에, `IDT` 엔트리들은 `gates(게이트)` 라고 불린다. 그것은 `x86`에서 아래의 게이트들 중 하나로 구성된다.:
 
-* Interrupt gates
-* Task gates
-* Trap gates.
+* Interrupt gates (인터럽트 게이트)
+* Task gates (태스크 게이트)
+* Trap gates. (트랩 게이트)
 
-in the `x86` architecture. Only [long mode](http://en.wikipedia.org/wiki/Long_mode) interrupt gates and trap gates can be referenced in the `x86_64`. Like the `Global Descriptor Table`, the `Interrupt Descriptor table` is an array of 8-byte gates on `x86` and an array of 16-byte gates on `x86_64`. We can remember from the second part of the [Kernel booting process](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-2.html), that `Global Descriptor Table` must contain `NULL` descriptor as its first element. Unlike the `Global Descriptor Table`, the `Interrupt Descriptor Table` may contain a gate; it is not mandatory. For example, you may remember that we have loaded the Interrupt Descriptor table with the `NULL` gates only in the earlier [part](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html) while transitioning into [protected mode](http://en.wikipedia.org/wiki/Protected_mode):
+단지 [long mode](http://en.wikipedia.org/wiki/Long_mode) 인터럽트 게이트와 트랩 게이트는 `x86_64` 에서 찾아볼 수 있다. `Global Descriptor Table` 와 같이 `Interrupt Descriptor table`는 `x86`에서는 8 바이트 게이트의 배열이고 `x86_64` 에서는 16 바이트 게이트의 배열이다. [커널 부팅 과정 part 2](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-2.md) 의 내용 중에 `Global Descriptor Table` 의 첫번째 요소는 `NULL` 디스크립터를 포함해야 한다는 것이다. `Global Descriptor Table` 다르게 `Interrupt Descriptor Table`는 하나의 게이트를 갖고 있다.(꼭 그래야 하는 것은 아니다.) 예를 들어, [protected mode](http://en.wikipedia.org/wiki/Protected_mode) 전환과정에서 인터럽트 디스크립터 테이블을 `NULL` 게이트로 로드했다는 것을 [커널 부팅 과정 part 3](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-3.md) 에서 확인 할 수 있을 것이다.:
 
 ```C
 /*
@@ -154,12 +155,12 @@ static void setup_idt(void)
 }
 ```
 
-from the [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c). The `Interrupt Descriptor table` can be located anywhere in the linear address space and the base address of it must be aligned on an 8-byte boundary on `x86` or 16-byte boundary on `x86_64`. The base address of the `IDT` is stored in the special register - `IDTR`. There are two instructions on `x86`-compatible processors to modify the `IDTR` register:
+이 함수는 [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c)에 구현되어 있다. `Interrupt Descriptor table` 는 선형 주소 공간 어디든지 로드될 수 있고, 베이스 주소는 `x86` 의 경우에 8 바이트로 정렬되어 있어야 하고 `x86_64` 는 16 바이트로 정렬(aligned) 되어 있어야 한다. `IDT` 의 베이스 주소는 특별한 레지스터인 `IDTR`에 저장되어 있다. 여기서 `x86` 호환 프로세서에서 `IDTR` 레지스터를 수정하기 위한 두 개의 명령어들이 있다.:
 
 * `LIDT`
 * `SIDT`
 
-The first instruction `LIDT` is used to load the base-address of the `IDT` i.e., the specified operand into the `IDTR`. The second instruction `SIDT` is used to read and store the contents of the `IDTR` into the specified operand. The `IDTR` register is 48-bits on the `x86` and contains the following information:
+첫 번째 명령어인 `LIDT` 는 특정의 `IDTR` 레지스터에 `IDT`의 베이스 주소를 로드하기 위해 사용된다. 두 번째 명령어인 `SIDT`는 `IDTR`의 내용을 읽고 특정 피연산자에 저장하기 위해 사용된다. `IDTR`은 `x86`에서 48 비트이고 아래의 정보를 포함한다.:
 
 ```
 +-----------------------------------+----------------------+
@@ -170,7 +171,7 @@ The first instruction `LIDT` is used to load the base-address of the `IDT` i.e.,
 47                                16 15                    0
 ```
 
-Looking at the implementation of `setup_idt`, we have prepared a `null_idt` and loaded it to the `IDTR` register with the `lidt` instruction. Note that `null_idt` has `gdt_ptr` type which is defined as:
+`setup_idt` 의 구현을 보면, `null_idt` 를 준비했고 그것을 `lidt` 명령어로 `IDTR` 에 로드했다. `null_idt`는 아래와 같이 정의된 `gdt_ptr` 을 갖는다는 것을 기억하자.:
 
 ```C
 struct gdt_ptr {
@@ -179,7 +180,7 @@ struct gdt_ptr {
 } __attribute__((packed));
 ```
 
-Here we can see the definition of the structure with the two fields of 2-bytes and 4-bytes each (a total of 48-bits) as we can see in the diagram. Now let's look at the `IDT` entries structure. The `IDT` entries structure is an array of the 16-byte entries which are called gates in the `x86_64`. They have the following structure:
+여기서 2 바이트와 4 바이트로 된 (총 48 비트) 두개의 필드를 갖고 있는 구조체의 정의를 볼 수 있다. 이제 `IDT` 엔트리 구조체를 살펴보자. `IDT` 엔트리 구조체는 `x86_64` 에서 게이트라고 불리는 16 바이트 엔트리들의 배열이다. 그것들은 아래와 같은 구조로 되어 있다.:
 
 ```
 127                                                                             96
@@ -208,34 +209,34 @@ Here we can see the definition of the structure with the two fields of 2-bytes a
 +-------------------------------------------------------------------------------+
 ```
 
-To form an index into the IDT, the processor scales the exception or interrupt vector by sixteen. The processor handles the occurrence of exceptions and interrupts just like it handles calls of a procedure when it sees the `call` instruction. A processor uses an unique number or `vector number` of the interrupt or the exception as the index to find the necessary `Interrupt Descriptor Table` entry. Now let's take a closer look at an `IDT` entry.
+IDT에 인덱스를 형성하기 위해 프로세서는 예외 또는 인터럽트 벡터를 16 으로 확장한다. 프로세서는 `call` 명령어가 처리하는 과정처럼 예외들과 인터럽트들의 발생을 처리한다. 하나의 프로세서는 인터럽트나 예외의 고유 번호(`벡터 번호`)를 갖고 그 번호를 필요한 `Interrupt Descriptor Table` 엔트리를 찾기 위해 인덱스로 사용한다. 이제 `IDT` 엔트리 항목들을 살펴보자.
 
-As we can see, `IDT` entry on the diagram consists of the following fields:
+보시다시피, 위의 다이어그램에서 `IDT` 엔트리는 아래와 같은 항목들로 구성되어 있다.:
 
-* `0-15` bits  - offset from the segment selector which is used by the processor as the base address of the entry point of the interrupt handler;
-* `16-31` bits - base address of the segment select which contains the entry point of the interrupt handler;
-* `IST` - a new special mechanism in the `x86_64`, will see it later;
-* `DPL` - Descriptor Privilege Level;
-* `P` - Segment Present flag;
-* `48-63` bits - second part of the handler base address;
-* `64-95` bits - third part of the base address of the handler;
-* `96-127` bits - and the last bits are reserved by the CPU.
+* `0-15` 비트  - 인터럽트 핸들러 엔트리 포인트의 베이스 주소로 프로세서에 의해 사용되어지는 세그먼트 셀렉터로 부터의 오프셋
+* `16-31` 비트 - 인터럽트 핸들러의 엔트리 포인트를 갖고 있는 세그먼트 셀렉터의 베이스 주소
+* `IST` - `x86_64` 에서 새로운 특별한 메커니즘, 나중에 설명
+* `DPL` - 디스크립터 특권 레벨 (Descriptor Privilege Level)
+* `P` - 세그먼트 존재 유무 플래그 (Segment Present flag)
+* `48-63` 비트 - 핸들러 베이스 주소의 두 번째 부분
+* `64-95` 비트 - 핸들러 베이스 주소의 세 번째 부분
+* `96-127` 비트 - CPU 에 의해 예약된 마지막 비트들
 
-And the last `Type` field describes the type of the `IDT` entry. There are three different kinds of handlers for interrupts:
+그리고 마지막 `Type` 항목은 `IDT` 엔트리의 타입을 기술한다. 인터럽트를 위한 3 가지의 서로 다른 종류의 핸들러가 있다.:
 
-* Interrupt gate
-* Trap gate
-* Task gate
+* 인터럽트 게이트 Interrupt gate
+* 트랩 게이트 Trap gate
+* 태스크 게이트 Task gate
 
-The `IST` or `Interrupt Stack Table` is a new mechanism in the `x86_64`. It is used as an alternative to the legacy stack-switch mechanism. Previously the `x86` architecture provided a mechanism to automatically switch stack frames in response to an interrupt. The `IST` is a modified version of the `x86` Stack switching mode. This mechanism unconditionally switches stacks when it is enabled and can be enabled for any interrupt in the `IDT` entry related with the certain interrupt (we will soon see it). From this we can understand that `IST` is not necessary for all interrupts. Some interrupts can continue to use the legacy stack switching mode. The `IST` mechanism provides up to seven `IST` pointers in the [Task State Segment](http://en.wikipedia.org/wiki/Task_state_segment) or `TSS` which is the special structure which contains information about a process. The `TSS` is used for stack switching during the execution of an interrupt or exception handler in the Linux kernel. Each pointer is referenced by an interrupt gate from the `IDT`.
+`IST` 또는 `Interrupt Stack Table(인터럽트 스택 테이블)` 은 `x86_64` 에서 새로운 매커니즘이다. 그것은 기존 스택-스위치 매커니즘을 대체하여 사용된다. 이전에 `x86` 아키텍처는 인터럽트에 대응하여 스택 프레임을 자동으로 전환하는 메커니즘을 제공했다. `IST`는 `x86` 스택 스위칭 모드의 수정된 버전이다. 이 매커니즘은 활성화 될 때 스택을 무조건적으로 전환하고 특정 인터럽트와 연관된 `IDT` 엔트리에 있는 어떤 인터럽트를 위해 활성화 될 수 있다.(차차 알아보자.) 이것을 봤을 때, 모든 인터럽트를 위해 `IST` 가 필요하지는 않다는 것이다. 어떤 인터럽트들은 기존 스택 스위치 모드를 사용해서 진행할 수 있다는 것이다. `IST` 메커니즘은 프로세스 관련된 정보를 담고 있는 특별한 구조체인 [Task State Segment](http://en.wikipedia.org/wiki/Task_state_segment)/`TSS` 내에 7 개까지 `IST` 포인터를 제공한다. `TSS` 는 리눅스 커널에서 예외/인터럽트 처리 되는 동안 스택 전환을 위해 사용된다.
 
-The `Interrupt Descriptor Table` represented by the array of the `gate_desc` structures:
+`Interrupt Descriptor Table` 는 `gate_desc` 구조체의 배열에 의해 표현된다.:
 
 ```C
 extern gate_desc idt_table[];
 ```
 
-where `gate_desc` is:
+`gate_desc` 은:
 
 ```C
 #ifdef CONFIG_X86_64
@@ -249,7 +250,7 @@ typedef struct gate_struct64 gate_desc;
 #endif
 ```
 
-and `gate_struct64` defined as:
+그리고 `gate_struct64` 는 아래와 같이 구성되어 있다.:
 
 ```C
 struct gate_struct64 {
@@ -262,7 +263,7 @@ struct gate_struct64 {
 } __attribute__((packed));
 ```
 
-Each active thread has a large stack in the Linux kernel for the `x86_64` architecture. The stack size is defined as `THREAD_SIZE` and is equal to:
+각 활동중인 쓰레드는 `x86_64` 아키텍처를 위해 리눅스 커널에서 큰 스택을 갖고 있다. 스택의 크기는 `THREAD_SIZE` 정의되어 있고 아래의 값을 가진다.:
 
 ```C
 #define PAGE_SHIFT      12
@@ -274,7 +275,7 @@ Each active thread has a large stack in the Linux kernel for the `x86_64` archit
 #define THREAD_SIZE  (PAGE_SIZE << THREAD_SIZE_ORDER)
 ```
 
-The `PAGE_SIZE` is `4096`-bytes and the `THREAD_SIZE_ORDER` depends on the `KASAN_STACK_ORDER`. As we can see, the `KASAN_STACK` depends on the `CONFIG_KASAN` kernel configuration parameter and is defined as:
+`PAGE_SIZE` 는 `4096` 바이트이고 `THREAD_SIZE_ORDER` 는 `KASAN_STACK_ORDER` 에 의존적이다. 이미 봤듯이, `KASAN_STACK`는 `CONFIG_KASAN` 커널 구성 파라미터에 의존적이고 아래와 같이 정의되어 있다.:
 
 ```C
 #ifdef CONFIG_KASAN
@@ -284,14 +285,14 @@ The `PAGE_SIZE` is `4096`-bytes and the `THREAD_SIZE_ORDER` depends on the `KASA
 #endif
 ```
 
-`KASan` is a runtime memory [debugger](http://lwn.net/Articles/618180/). Thus, the `THREAD_SIZE` will be `16384` bytes if `CONFIG_KASAN` is disabled or `32768` if this kernel configuration option is enabled. These stacks contain useful data as long as a thread is alive or in a zombie state. While the thread is in user-space, the kernel stack is empty except for the `thread_info` structure (details about this structure are available in the fourth [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html) of the Linux kernel initialization process) at the bottom of the stack. The active or zombie threads aren't the only threads with their own stack. There also exist specialized stacks that are associated with each available CPU. These stacks are active when the kernel is executing on that CPU. When the user-space is executing on the CPU, these stacks do not contain any useful information. Each CPU has a few special per-cpu stacks as well. The first is the `interrupt stack` used for the external hardware interrupts. Its size is determined as follows:
+`KASan` 은 런타임 메모리 [디버커](http://lwn.net/Articles/618180/)이다. `CONFIG_KASAN` 구성 옵션이 비활성화 되어 있다면, `THREAD_SIZE` 는 `16384` 가 될 것이고, 활성화 되어 있다면, `32768` 이 될 것이다. 이 스택들은 쓰레드가 살아 있거나 좀비 상태인 것을 위한 유용한 정보를 포함한다. 반면에 사용자 영역에 있는 쓰레드는 커널 스택은 스택 바닥에 있는 `thread_info` 구조체를 위한 것을 제외하고는 비어 있다.(이 구조체에 자세한 정보는 [리눅스 커널 초기화 과정 part 4](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-4.md) 에서 확인 가능하다.) 활성화되어 있거나 좀비 쓰레드들은 단지 자신의 스택을 갖고 있는 쓰레드만은 아니다. 거기에는 각 가용한 CPU 와 연관된 특수한 스택들도 존재한다. 이 스택들은 커널이 CPU 에서 실행되면 활성화 된다. 사용자 영역이 CPU 에서 실행될 때, 이런 경우 스택들은 유용한 정보를 담고 있지 않다. 각 CPU 는 몇몇의 특별한 per-cpu 스택을 갖고 있다. 그 중 첫번째는 외부 하드웨어 인터럽트를 위해 사용되는 `인터럽트 스택`이 있다. 그것의 크기는 아래에 의해 결정된다.:
 
 ```C
 #define IRQ_STACK_ORDER (2 + KASAN_STACK_ORDER)
 #define IRQ_STACK_SIZE (PAGE_SIZE << IRQ_STACK_ORDER)
 ```
 
-or `16384` bytes. The per-cpu interrupt stack represented by the `irq_stack_union` union in the Linux kernel for `x86_64`:
+그것은 `16384` 바이트이다. per-cpu 인터럽트 스택은 `x86_64` 를 위한 리눅스 커널에서 `irq_stack_union` union 구조체에 의해 표현된다.:
 
 ```C
 union irq_stack_union {
@@ -304,9 +305,9 @@ union irq_stack_union {
 };
 ```
 
-The first `irq_stack` field is a 16 kilobytes array. Also you can see that `irq_stack_union` contains a structure with the two fields:
+첫 `irq_stack` 이라는 항목은 16 킬로바이트인 배열이다. 또한 당신은 `irq_stack_union` 구조체를 포함한다는 것을 볼 수 있는데, 이는 두 개의 항목들이 있다.:
 
-* `gs_base` - The `gs` register always points to the bottom of the `irqstack` union. On the `x86_64`, the `gs` register is shared by per-cpu area and stack canary (more about `per-cpu` variables you can read in the special [part](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html)).  All per-cpu symbols are zero based and the `gs` points to the base of the per-cpu area. You already know that [segmented memory model](http://en.wikipedia.org/wiki/Memory_segmentation) is abolished in the long mode, but we can set the base address for the two segment registers - `fs` and `gs` with the [Model specific registers](http://en.wikipedia.org/wiki/Model-specific_register) and these registers can be still be used as address registers. If you remember the first [part](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-1.html) of the Linux kernel initialization process, you can remember that we have set the `gs` register:
+* `gs_base` - `gs` 레지스터는 항상 `irqstack` union 의 바닥을 가리키고 있다. `x86_64` 에서는, `gs` 레지스터는 per-cpu 영역과 스택 카나리(canary)를 공유한다. (`per-cpu` 변수에 관해 더 자세히 알고 싶다면, 이를 위한 특별한 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Concepts/cpumask.md)를 확인하자.) 모든 per-cpu 심볼들은 기본적으로 0으로 채워져 있고, `gs`는 per-cpu 영역의 베이스를 가리키고 있다. 당신은 이미 롱 모드에서 사용되지 않는 [segmented memory model](http://en.wikipedia.org/wiki/Memory_segmentation) 에 대해 알고 있을 것이다. 하지만 우리는 두 개의 세그먼트 레지스터를 위한 베이스 주소를 설정해야 한다. - `fs` 와 [Model specific registers](http://en.wikipedia.org/wiki/Model-specific_register) 와 함께 `gs`이다. 그리고 이런 레지스터들은 주소 포함 레지스터로 사용될 수 있다. 만얀 당신이 리눅스 커널 초기화 과정 [part 1](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-1.md) 을 봤다면, `gs` 레지스터는 아래와 같이 설정된다는 것을 봤을 것이다.:
 
 ```assembly
 	movl	$MSR_GS_BASE,%ecx
@@ -315,17 +316,16 @@ The first `irq_stack` field is a 16 kilobytes array. Also you can see that `irq_
 	wrmsr
 ```
 
-where `initial_gs` points to the `irq_stack_union`:
+`initial_gs` 는 `irq_stack_union` 를 가리킨다.:
 
 ```assembly
 GLOBAL(initial_gs)
 .quad	INIT_PER_CPU_VAR(irq_stack_union)
 ```
 
-* `stack_canary` - [Stack canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow#Stack_canaries) for the interrupt stack is a `stack protector`
-to verify that the stack hasn't been overwritten. Note that `gs_base` is a 40 bytes array. `GCC` requires that stack canary will be on the fixed offset from the base of the `gs` and its value must be `40` for the `x86_64` and `20` for the `x86`.
+* `stack_canary` - 인터럽트 스택을 위한 [Stack canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow#Stack_canaries) 는 스택이 덮어쓰여지는지 확인하기 위한 `스택 보호자(stack protector)` 이다. `gs_base` 는 40 바이트 배열인것을 기억하자. `GCC`는 `gs` 의 베이스로 부터 고정된 오프셋에 스택 카나리(canary) 를 위치 시킬 것이다. 그 오프셋의 값은 `x86_64`에서 `40` 이고, `x86`에서는 `20` 이 될 것이다.
 
-The `irq_stack_union` is the first datum in the `percpu` area, we can see it in the `System.map`:
+`irq_stack_union` 는 `percpu` 영역에 있는 첫번째 자료이고, `System.map` 에서 그것을 볼 수 있다.:
 
 ```
 0000000000000000 D __per_cpu_start
@@ -337,20 +337,20 @@ The `irq_stack_union` is the first datum in the `percpu` area, we can see it in 
 ...
 ```
 
-We can see its definition in the code:
+코드에서 그것의 선언을 볼 수 있다.:
 
 ```C
 DECLARE_PER_CPU_FIRST(union irq_stack_union, irq_stack_union) __visible;
 ```
 
-Now, it's time to look at the initialization of the `irq_stack_union`. Besides the `irq_stack_union` definition, we can see the definition of the following per-cpu variables in the [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h):
+이제, `irq_stack_union` 의 초기화를 살펴 볼 시간이다. `irq_stack_union` 정의 외에, 우리는 [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) 에서 아래와 같은 per-cpu 변수들의 선언들을 볼 수 있다.:
 
 ```C
 DECLARE_PER_CPU(char *, irq_stack_ptr);
 DECLARE_PER_CPU(unsigned int, irq_count);
 ```
 
-The first is the `irq_stack_ptr`. From the variable's name, it is obvious that this is a pointer to the top of the stack. The second - `irq_count` is used to check if a CPU is already on an interrupt stack or not. Initialization of the `irq_stack_ptr` is located in the `setup_per_cpu_areas` function in [arch/x86/kernel/setup_percpu.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup_percpu.c):
+첫번째인 `irq_stack_ptr`는 이름에서 알 수 있듯이, 스택의 꼭대기를 가키는 포인터 변수이다. 두 번째 `irq_count`는 만약 CPU 가 이미 인터럽트 스택에 있는지 혹은 아닌지를 확인하기 위해 사용된다. `irq_stack_ptr` 의 초기화는 [arch/x86/kernel/setup_percpu.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/setup_percpu.c) 에 `setup_per_cpu_areas` 함수에 있다.:
 
 ```C
 void __init setup_per_cpu_areas(void)
@@ -374,7 +374,7 @@ for_each_possible_cpu(cpu) {
 }
 ```
 
-Here we go over all the CPUs one-by-one and setup `irq_stack_ptr`. This turns out to be equal to the top of the interrupt stack minus `64`. Why `64`?TODO  [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) source code file is following:
+여기서 모든 CPU 들을 하나씩 살펴 보면서 `irq_stack_ptr` 를 설정한다. 이것은 인터럽트 스택의 꼭대기에서 `64`를 뺀것과 같다. 왜 `64` 냐고(나중에 알아보자)? [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) 소스 코드 파일에 다음과 같은 것을 볼 수 있다.:
 
 ```C
 void load_percpu_segment(int cpu)
@@ -387,7 +387,7 @@ void load_percpu_segment(int cpu)
 }
 ```
 
-and as we already know the `gs` register points to the bottom of the interrupt stack.
+그리고 우리가 이미 알고 있는 내용인 `gs` 레지스터는 인터럽트 스택의 바닥을 가리키도록 한다.
 
 ```assembly
 	movl	$MSR_GS_BASE,%ecx
@@ -399,16 +399,16 @@ and as we already know the `gs` register points to the bottom of the interrupt s
 	.quad	INIT_PER_CPU_VAR(irq_stack_union)
 ```
 
-Here we can see the `wrmsr` instruction which loads the data from `edx:eax` into the [Model specific register](http://en.wikipedia.org/wiki/Model-specific_register) pointed by the `ecx` register. In our case the model specific register is `MSR_GS_BASE` which contains the base address of the memory segment pointed by the `gs` register. `edx:eax` points to the address of the `initial_gs` which is the base address of our `irq_stack_union`.
+여기서 우리는 `ecx` 레지스터에 의해 가리켜지는 [Model specific register](http://en.wikipedia.org/wiki/Model-specific_register) 에 `edx:eax` 로 부터 데이터를 로드하는 `wrmsr` 명령어를 볼 수 있다. 우리의 경우 모델 특화된 레지스터(Model specific register)는 `gs` 레지스터가 가리키는 메모리 세그먼트의 베이스 주소를 포함하는 `MSR_GS_BASE` 이다. `edx:eax` 는 여기서의 `irq_stack_union` 베이스 주소인 `initial_gs`의 주소를 가리킨다.
 
-We already know that `x86_64` has a feature called `Interrupt Stack Table` or `IST` and this feature provides the ability to switch to a new stack for events non-maskable interrupt, double fault etc. There can be up to seven `IST` entries per-cpu. Some of them are:
+우리는 이미 `x86_64` 이 `Interrupt Stack Table` 혹은 `IST` 라 불리는 특징을 갖고 있고 이 특징은 넌-마스커블 인터럽트, [double fault](http://blog.daum.net/tlos6733/169) 이벤트를 위한 새로운 스택으로 전환할 수 있는 기능을 제공한다. 여기에 7 개의 per-cpu `IST` 엔트리가 있다. 그 중 몇개를 살펴 보면,:
 
 * `DOUBLEFAULT_STACK`
 * `NMI_STACK`
 * `DEBUG_STACK`
 * `MCE_STACK`
 
-or
+혹은
 
 ```C
 #define DOUBLEFAULT_STACK 1
@@ -417,7 +417,7 @@ or
 #define MCE_STACK 4
 ```
 
-All interrupt-gate descriptors which switch to a new stack with the `IST` are initialized with the `set_intr_gate_ist` function. For example:
+모든 `IST`로 새로운 스택으로 전환되는 인터럽트-게이트 기술자(descriptors)들은 `set_intr_gate_ist` 함수에서 초기화 된다. 예를 들어,:
 
 ```C
 set_intr_gate_ist(X86_TRAP_NMI, &nmi, NMI_STACK);
@@ -427,14 +427,14 @@ set_intr_gate_ist(X86_TRAP_NMI, &nmi, NMI_STACK);
 set_intr_gate_ist(X86_TRAP_DF, &double_fault, DOUBLEFAULT_STACK);
 ```
 
-where `&nmi` and `&double_fault` are addresses of the entries to the given interrupt handlers:
+여기서 `&nmi` 와 `&double_fault` 는 주어진 인터럽트 핸들러들의 엔트리 주소들이다.:
 
 ```C
 asmlinkage void nmi(void);
 asmlinkage void double_fault(void);
 ```
 
-defined in the [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S)
+[arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S)에 정의되어 있다.
 
 ```assembly
 idtentry double_fault do_double_fault has_error_code=1 paranoid=2
@@ -448,7 +448,7 @@ ENTRY(nmi)
 END(nmi)
 ```
 
-When an interrupt or an exception occurs, the new `ss` selector is forced to `NULL` and the `ss` selector’s `rpl` field is set to the new `cpl`. The old `ss`, `rsp`, register flags, `cs`, `rip` are pushed onto the new stack. In 64-bit mode, the size of interrupt stack-frame pushes is fixed at 8-bytes, so we will get the following stack:
+인터럽트나 예외가 발생하면, 새로운 `ss` 선택자(selector)는 `NULL`로 강제되고 `ss` 선택자(selector)의 `rpl` 항목은 새로운 `cpl`로 설정된다. 이전 `ss`, `rsp`, 레지스터 플래그, `cs`, `rip`들은 새로운 스택에 넣어진다. 64 비트 모드에서는 인터럽트 스택 프레임 크기는 8 바이트로 고정되어 있기에 다음과 같은 스택을 가질 수 있다.:
 
 ```
 +---------------+
@@ -463,18 +463,18 @@ When an interrupt or an exception occurs, the new `ss` selector is forced to `NU
 +---------------+
 ```
 
-If the `IST` field in the interrupt gate is not `0`, we read the `IST` pointer into `rsp`. If the interrupt vector number has an error code associated with it, we then push the error code onto the stack. If the interrupt vector number has no error code, we go ahead and push the dummy error code on to the stack. We need to do this to ensure stack consistency. Next, we load the segment-selector field from the gate descriptor into the CS register and must verify that the target code-segment is a 64-bit mode code segment by the checking bit `21` i.e. the `L` bit in the `Global Descriptor Table`. Finally we load the offset field from the gate descriptor into `rip` which will be the entry-point of the interrupt handler. After this the interrupt handler begins to execute and when the interrupt handler finishes its execution, it must return control to the interrupted process with the `iret` instruction. The `iret` instruction unconditionally pops the stack pointer (`ss:rsp`) to restore the stack of the interrupted process and does not depend on the `cpl` change.
+만약 인터럽트 게이트내에 `IST` 항목이 `0`이 아니라면, 우리는 `rsp`를 통해 `IST` 포인터를 읽을 수 있다. 만약 인터럽트 벡터 번호가 그것과 연관된 에러 코드를 갖고 있다면, 우리는 스택에 그 에러 코드를 넣을 것이다. 만약 인터럽트 벡터 번호에 에러 코드가 없다면, 우리는 더미 에러 코드를 스택에 넣을 것이다. 우리는 스택 일관성을 유지하기 위해 필요한 것이다. 다음은, 세그먼트-선택자 항목을 게이트 기술자로 부터 CS 레지스터로 로드하고 타덱 코드 세그먼트가 `21` 비트를 확인하여 64 비트 모드 코드 세그먼트인지 반드시 확인해야 한다. 예를 들면, `Global Descriptor Table` 에 있는 `L` 비트다. 마지막으로 우리는 게이트 기술자로 부터 오프셋 항목을 인터럽트 핸들러의 엔트리 포인터가 될 것인 `rip`로 로드한다. 이후에는 인터럽트 핸들러가 실행을 시작할 수 있고 인터럽트 핸들러가 그것의 실행을 완료 했을 때, 그것은 `iret` 명령어로 인터럽트된 프로세스로 제어권을 반드시 넘겨줘야 한다. `iret` 명령어는 무조건적으로 스택포인터(`ss:rsp`)를 인터럽트 당한 프로세스의 스택으로 복구해주고 `cpl` 변경에 의존적이지 않다.
 
-That's all.
+끝~
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the first part of `Interrupts and Interrupt Handling` in the Linux kernel. We covered some theory and the first steps of initialization of stuffs related to interrupts and exceptions. In the next part we will continue to dive into the more practical aspects of interrupts and interrupt handling.
+리눅스 커널에서 `Interrupts and Interrupt Handling` 의 첫번째 파트가 끝이 났다. 우리는 특정 이론을 다루었고 인터럽트와 예외 처리와 연관된 것들의 초기화 첫 단계를 살펴 보았다. 다음 파트에서는 인터럽트들과 인터럽트 처리의 관련해서 더 많이 다루어 보도록 하겠다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me a PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

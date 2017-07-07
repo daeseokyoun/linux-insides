@@ -1,12 +1,13 @@
-Interrupts and Interrupt Handling. Part 2.
+인터럽트와 인터럽트 핸들링. Part 2.
 ================================================================================
 
-Start to dive into interrupt and exceptions handling in the Linux kernel
+리눅스 커널에서 인터럽트와 예외 처리의 시작
 --------------------------------------------------------------------------------
 
-We saw some theory about interrupts and exception handling in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html) and as I already wrote in that part, we will start to dive into interrupts and exceptions in the Linux kernel source code in this part. As you already can note, the previous part mostly described theoretical aspects and in this part we will start to dive directly into the Linux kernel source code. We will start to do it as we did it in other chapters, from the very early places. We will not see the Linux kernel source code from the earliest [code lines](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L292) as we saw it for example in the [Linux kernel booting process](http://0xax.gitbooks.io/linux-insides/content/Booting/index.html) chapter, but we will start from the earliest code which is related to the interrupts and exceptions. In this part we will try to go through the all interrupts and exceptions related stuff which we can find in the Linux kernel source code.
+우리는 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md) 에서 인터럽트와 예외 처리에 관해 약간의 이론을 보았고 그 파트에서 언급했듯이, 이 파트에서 리눅스 커널 소스 코드에서 인터럽트와 예외에 관련해서 더 자세히 알아보도록 하자. 이전 파트에서는 이론적인 측면에서 살펴보았고 이번 파트에서는 리눅스 커널 소스를 직접 살펴 보도록 할 것이다. 다른 챕터에서 했던 방법으로 매우 초기 부분 부터 시작해 볼 것이다. [리눅스 커널 부팅 과정](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md)에서 예제로 살펴본 초기 [코드 라인들](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L292)은 살펴 보지 않을 것이지만, 인터럽트와 예외에 관련된 초기 코드에서 시작은 할 것이다. 이 파트에서는 리눅스 커널 소스 코드에서 찾아볼 수 잇는 인터럽트외 예외에 관련된 모든 내용을 살펴 보도록 하겠다.
 
 If you've read the previous parts, you can remember that the earliest place in the Linux kernel `x86_64` architecture-specific source code which is related to the interrupt is located in the [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c) source code file and represents the first setup of the [Interrupt Descriptor Table](http://en.wikipedia.org/wiki/Interrupt_descriptor_table). It occurs right before the transition into the [protected mode](http://en.wikipedia.org/wiki/Protected_mode) in the `go_to_protected_mode` function by the call of the `setup_idt`:
+
 
 ```C
 void go_to_protected_mode(void)

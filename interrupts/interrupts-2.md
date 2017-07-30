@@ -6,7 +6,7 @@
 
 우리는 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md) 에서 인터럽트와 예외 처리에 관해 약간의 이론을 보았고 그 파트에서 언급했듯이, 이 파트에서 리눅스 커널 소스 코드에서 인터럽트와 예외에 관련해서 더 자세히 알아보도록 하자. 이전 파트에서는 이론적인 측면에서 살펴보았고 이번 파트에서는 리눅스 커널 소스를 직접 살펴 보도록 할 것이다. 다른 챕터에서 했던 방법으로 매우 초기 부분 부터 시작해 볼 것이다. [리눅스 커널 부팅 과정](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md)에서 예제로 살펴본 초기 [코드 라인들](https://github.com/torvalds/linux/blob/master/arch/x86/boot/header.S#L292)은 살펴 보지 않을 것이지만, 인터럽트와 예외에 관련된 초기 코드에서 시작은 할 것이다. 이 파트에서는 리눅스 커널 소스 코드에서 찾아볼 수 잇는 인터럽트외 예외에 관련된 모든 내용을 살펴 보도록 하겠다.
 
-If you've read the previous parts, you can remember that the earliest place in the Linux kernel `x86_64` architecture-specific source code which is related to the interrupt is located in the [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c) source code file and represents the first setup of the [Interrupt Descriptor Table](http://en.wikipedia.org/wiki/Interrupt_descriptor_table). It occurs right before the transition into the [protected mode](http://en.wikipedia.org/wiki/Protected_mode) in the `go_to_protected_mode` function by the call of the `setup_idt`:
+만약 당신이 이전 파트를 읽었다면, 리눅스 커널에서 [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c) 소스 코드에 위치하는 인터럽트와 연관된  `x86_64` 아키텍쳐 의존적인 코드가 초반에 있고, [Interrupt Descriptor Table](http://en.wikipedia.org/wiki/Interrupt_descriptor_table)를 첫 설정하는 내용이 있었다는 것을 기억할 것이다. 그것은 `setup_idt`에서 호출되는 `go_to_protected_mode` 함수에서 [protected mode](http://en.wikipedia.org/wiki/Protected_mode) 로 전환하기 바로 직전에 실행된다.:
 
 
 ```C
@@ -18,7 +18,7 @@ void go_to_protected_mode(void)
 }
 ```
 
-The `setup_idt` function is defined in the same source code file as the `go_to_protected_mode` function and just loads the address of the `NULL` interrupts descriptor table:
+`setup_idt` 함수는 `go_to_protected_mode` 함수와 같은 파일에 구현되어 있으며, `NULL` 인터럽트 디스크립터 테이블의 주소를 로드한다.:
 
 ```C
 static void setup_idt(void)
@@ -28,7 +28,7 @@ static void setup_idt(void)
 }
 ```
 
-where `gdt_ptr` represents a special 48-bit `GDTR` register which must contain the base address of the `Global Descriptor Table`:
+`gdt_ptr` 은 `Global Descriptor Table` 의 베이스 주소를 반드시 갖고 있어야하는 48 비트의 특별한 `GDTR` 을 표현한다.:
 
 ```C
 struct gdt_ptr {
@@ -37,18 +37,19 @@ struct gdt_ptr {
 } __attribute__((packed));
 ```
 
-Of course in our case the `gdt_ptr` does not represent the `GDTR` register, but `IDTR` since we set `Interrupt Descriptor Table`. You will not find an `idt_ptr` structure, because if it had been in the Linux kernel source code, it would have been the same as `gdt_ptr` but with different name. So, as you can understand there is no sense to have two similar structures which differ only by name. You can note here, that we do not fill the `Interrupt Descriptor Table` with entries, because it is too early to handle any interrupts or exceptions at this point. That's why we just fill the `IDT` with `NULL`.
+물론 우리의 경우에 `gdt_ptr` 는 `GDTR` 레지스터를 나타내지는 않지만, 우리가 `Interrupt Descriptor Table` 를 설정했기에 `IDTR`을 나내낸다. 당신은 `idt_ptr` 구조체를 찾을 수 없을 것이다. 이유는 리눅스 커널에서 갖고 있다면 `gdt_ptr` 과 동일하지만 이름만 다른 것이다. 그래서, 당신은 단지 이름만 다른 같은 두개의 구조체를 갖고 있을 필요가 없다는 것을 이해할 것이다. 당신은 엔트리를 `Interrupt Descriptor Table` 에 채우지 않는다는 것을 알 수 있다. 이유는 이 시에서는 어떤 인터럽트나 예외가 일어나지 않는 초기 시점이기 때문에 처리할 필요가 없는 것이다. 그래서 여기서 `IDT`를 `NULL`로 채워 지는 것이다.
 
-After the setup of the [Interrupt descriptor table](http://en.wikipedia.org/wiki/Interrupt_descriptor_table), [Global Descriptor Table](http://en.wikipedia.org/wiki/GDT) and other stuff we jump into [protected mode](http://en.wikipedia.org/wiki/Protected_mode) in the - [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S). You can read more about it in the [part](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-3.html) which describes the transition to protected mode.
+[Interrupt descriptor table](http://en.wikipedia.org/wiki/Interrupt_descriptor_table), [Global Descriptor Table](http://en.wikipedia.org/wiki/GDT) 그리고 다른 몇몇의 설정 이후에 [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S) 에 있는 [protected mode](http://en.wikipedia.org/wiki/Protected_mode) 로 점프한다. 보호모드로 전환에 대한 보다 자세한 내용은 [여기](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Booting/linux-bootstrap-3.md) 에서 살펴보시길 바란다.
 
-We already know from the earliest parts that entry to protected mode is located in the `boot_params.hdr.code32_start` and you can see that we pass the entry of the protected mode and `boot_params` to the `protected_mode_jump` in the end of the [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c):
+우리는 초기 보호모드로 전환하는 엔트리인 `boot_params.hdr.code32_start` 내에 있다는 것을 초기 부분에서 알아보았고 당신은 [arch/x86/boot/pm.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pm.c) 의 마지막 부분에 `protected_mode_jump` 수로 `boot_params` 와 보호 모드의 엔트리를 전달했다는 것을 볼 수 있다.:
+
 
 ```C
 protected_mode_jump(boot_params.hdr.code32_start,
 			    (u32)&boot_params + (ds() << 4));
 ```
 
-The `protected_mode_jump` is defined in the [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S) and gets these two parameters in the `ax` and `dx` registers using one of the [8086](http://en.wikipedia.org/wiki/Intel_8086) calling  [conventions](http://en.wikipedia.org/wiki/X86_calling_conventions#List_of_x86_calling_conventions):
+`protected_mode_jump` 함수는 [arch/x86/boot/pmjump.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/pmjump.S) 에 구현되어 있고 여기 두 인자는 [8086](http://en.wikipedia.org/wiki/Intel_8086) 호출  [규약](http://en.wikipedia.org/wiki/X86_calling_conventions#List_of_x86_calling_conventions)에 의해 `ax` 와 `dx` 레지스터들로 부터 을 수 있다.:
 
 ```assembly
 GLOBAL(protected_mode_jump)
@@ -64,7 +65,7 @@ GLOBAL(protected_mode_jump)
 ENDPROC(protected_mode_jump)
 ```
 
-where `in_pm32` contains a jump to the 32-bit entry point:
+`in_pm32` 는 32 비트 엔트리 포인트로 점프를 한다.:
 
 ```assembly
 GLOBAL(in_pm32)
@@ -76,12 +77,12 @@ GLOBAL(in_pm32)
 ENDPROC(in_pm32)
 ```
 
-As you can remember the 32-bit entry point is in the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) assembly file, although it contains `_64` in its name. We can see the two similar files in the `arch/x86/boot/compressed` directory:
+32 비트 엔트리 포인트는 비록 파일 이름에 `_64` 가 있지만, [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) 어셈블리 파일에 있다. 우리는 `arch/x86/boot/compressed` 디렉토리내에 비슷한 파일이 있다는 것을 볼 수 있다.:
 
 * `arch/x86/boot/compressed/head_32.S`.
 * `arch/x86/boot/compressed/head_64.S`;
 
-But the 32-bit mode entry point is the second file in our case. The first file is not even compiled for `x86_64`. Let's look at the [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile):
+하지만 32 비트 모드 엔트리 포인트는 우리의 경우 2 번째 파일에 있다. 첫번째 파일은 `x86_64` 를 위해 빌드조차 되지 않는다. [arch/x86/boot/compressed/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/Makefile) 파일을 보자.:
 
 ```
 vmlinux-objs-y := $(obj)/vmlinux.lds $(obj)/head_$(BITS).o $(obj)/misc.o \
@@ -89,7 +90,7 @@ vmlinux-objs-y := $(obj)/vmlinux.lds $(obj)/head_$(BITS).o $(obj)/misc.o \
 ...
 ```
 
-We can see here that `head_*` depends on the `$(BITS)` variable which depends on the architecture. You can find it in the [arch/x86/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/Makefile):
+우리는 여기서 `head_*` 가 아키텍처 의존적인 `$(BITS)` 변수에 의존임을 알 수 있다. 당신은 이것을 [arch/x86/Makefile](https://github.com/torvalds/linux/blob/master/arch/x86/Makefile) 에서 찾아 볼 수 있다.:
 
 ```
 ifeq ($(CONFIG_X86_32),y)
@@ -101,7 +102,7 @@ else
 endif
 ```
 
-Now as we jumped on the `startup_32` from the [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S) we will not find anything related to the interrupt handling here. The `startup_32` contains code that makes preparations before the transition into [long mode](http://en.wikipedia.org/wiki/Long_mode) and directly jumps in to it. The `long mode` entry is located in `startup_64` and it makes preparations before the [kernel decompression](http://0xax.gitbooks.io/linux-insides/content/Booting/linux-bootstrap-5.html) that occurs in the `decompress_kernel` from the [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c). After the kernel is decompressed, we jump on the `startup_64` from the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S). In the `startup_64` we start to build identity-mapped pages. After we have built identity-mapped pages, checked the [NX](http://en.wikipedia.org/wiki/NX_bit) bit, setup the `Extended Feature Enable Register` (see in links), and updated the early `Global Descriptor Table` with the `lgdt` instruction, we need to setup `gs` register with the following code:
+이제 우리는 [arch/x86/boot/compressed/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/head_64.S)로 부터 `startup_32` 로 점프 했지만 아직은 인터트와 연관된 어떤 것도 찾을 수 없을 것이다. `startup_32` 는 [long mode](http://en.wikipedia.org/wiki/Long_mode) 로 전환하기 전에 준비하는 코드를 포함하고 바로 점프한다. `long mode` 엔트리는 [arch/x86/boot/compressed/misc.c](https://github.com/torvalds/linux/blob/master/arch/x86/boot/compressed/misc.c) 에 위치한다. 커널이 압해제 된 이후에, [NX](http://en.wikipedia.org/wiki/NX_bit) 비트 확인, `Extended Feature Enable Register` 설정, 그리고 `lgdt` 명령어로 초기 `Global Descriptor Table` 업데이트와 아래의 코드로 `gs`레지스터를 설정할 필요가 있다.:
 
 ```assembly
 movl	$MSR_GS_BASE,%ecx
@@ -110,27 +111,27 @@ movl	initial_gs+4(%rip),%edx
 wrmsr
 ```
 
-We already saw this code in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html). First of all pay attention on the last `wrmsr` instruction. This instruction writes data from the `edx:eax` registers to the [model specific register](http://en.wikipedia.org/wiki/Model-specific_register) specified by the `ecx` register. We can see that `ecx` contains `$MSR_GS_BASE` which is declared in the [arch/x86/include/uapi/asm/msr-index.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/msr-index.h) and looks like:
+우리는 이미 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md) 에서 이 코드를 살펴 보았다. 우리가 이 모든것의 처음으로 초점을 맞춰야 하는 것은 마지막에 있는 `wrmsr` 명령어 이다. 이 명령어는 `edx:eax` 레지스터들로 부터 데이터를 읽어 `ecx` 레지스터에 의해 정의되는 [model specific register](http://en.wikipedia.org/wiki/Model-specific_register) 에 쓴다. 우리는 `ecx` 가 [arch/x86/include/uapi/asm/msr-index.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/msr-index.h) 에 선언되어 있는 `$MSR_GS_BASE` 를 갖고 있다.:
 
 ```C
 #define MSR_GS_BASE             0xc0000101
 ```
 
-From this we can understand that `MSR_GS_BASE` defines the number of the `model specific register`. Since registers `cs`, `ds`, `es`, and `ss` are not used in the 64-bit mode, their fields are ignored. But we can access memory over `fs` and `gs` registers. The model specific register provides a `back door` to the hidden parts of these segment registers and allows to use 64-bit base address for segment register addressed by the `fs` and `gs`. So the `MSR_GS_BASE` is the hidden part and this part is mapped on the `GS.base` field. Let's look on the `initial_gs`:
+이것으로 부터 우리는 `MSR_GS_BASE` 가 `model specific register` 의 수를 정의한다는 것을 이해 했다. `cs`, `ds`, `es`, 그리고 `ss` 레지스터들은 64 비트 모드에서는 사용되지 않기 때문에, 이런 필드은 무시된다. 하지만 우리는 `fs` 와 `gs` 레지스터들을 통해 접근할 수 있다. 이 모델 정의 레지스터(model specific register) 는 이런 세그먼트 레지스터와 같은 숨겨진 부분들을 `fs` 와 `gs` 에 의해 접근되는 세그먼트 레지스터를 위한 64 비트 베이스 주소를 사용할 수 있도록 허가하는 `back door`를 제공한다. 그래서 `MSR_GS_BASE` 는 숨겨진 파트이고 이 파트는 `GS.base` 필드에 맵핑되어 있다. `initial_gs` 를 살펴 보자.:
 
 ```assembly
 GLOBAL(initial_gs)
 	.quad	INIT_PER_CPU_VAR(irq_stack_union)
 ```
 
-We pass `irq_stack_union` symbol to the `INIT_PER_CPU_VAR` macro which just concatenates the `init_per_cpu__` prefix with the given symbol. In our case we will get the `init_per_cpu__irq_stack_union` symbol. Let's look at the [linker](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S) script. There we can see following definition:
+우리는 `irq_stack_union` 심볼을 주어진 심볼을 `init_per_cpu__` 접두사를 붙이는 `INIT_PER_CPU_VAR` 매크로의 인자로 넘겨 준다. 우리의 경우에서 `init_per_cpu__irq_stack_union` 심을 얻을 수 있다. [linker](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/vmlinux.lds.S) 스크립트를 한번 보자. 아래와 같은 정의를 볼 수 있다.:
 
 ```
 #define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load
 INIT_PER_CPU(irq_stack_union);
 ```
 
-It tells us that the address of the `init_per_cpu__irq_stack_union` will be `irq_stack_union + __per_cpu_load`. Now we need to understand where `init_per_cpu__irq_stack_union` and `__per_cpu_load` are what they mean. The first `irq_stack_union` is defined in the [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) with the `DECLARE_INIT_PER_CPU` macro which expands to call the `init_per_cpu_var` macro:
+그것은 우리에게 `init_per_cpu__irq_stack_union` 의 주소가 `irq_stack_union + __per_cpu_load` 이라는 것을 알려준다. 이제 우리는 `init_per_cpu__irq_stack_union` 와 `__per_cpu_load` 가 무엇을 의하고 어디에 있는지 알 필요가 있다. `irq_stack_union` 는 `init_per_cpu_var` 매크로를 확장한 `DECLARE_INIT_PER_CPU` 와 함께 [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) 에 선언되어 있다.:
 
 ```C
 DECLARE_INIT_PER_CPU(irq_stack_union);
@@ -546,3 +547,4 @@ Links
 * [Interrupt Stack Table](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks)
 * [Privilege level](http://en.wikipedia.org/wiki/Privilege_level)
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html)
+* [8086 호출 규약](https://ko.wikipedia.org/wiki/X86_%ED%98%B8%EC%B6%9C_%EA%B7%9C%EC%95%BD#.ED.98.B8.EC.B6.9C.EC.9E.90.2F.ED.94.BC.ED.98.B8.EC.B6.9C.EC.9E.90_.EC.A0.95.EB.A6.AC)

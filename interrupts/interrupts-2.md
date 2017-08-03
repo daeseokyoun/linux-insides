@@ -142,27 +142,27 @@ DECLARE_INIT_PER_CPU(irq_stack_union);
 #define init_per_cpu_var(var)  init_per_cpu__##var
 ```
 
-If we expand all macros we will get the same `init_per_cpu__irq_stack_union` as we got after expanding the `INIT_PER_CPU` macro, but you can note that it is not just a symbol, but a variable. Let's look at the `typeof(per_cpu_var(var))` expression. Our `var` is `irq_stack_union` and the `per_cpu_var` macro is defined in the [arch/x86/include/asm/percpu.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/percpu.h):
+만약 모든 매크로를 확장시켜 보면, 우리는 `INIT_PER_CPU` 매크로를 수행했을 때와 같은 `init_per_cpu__irq_stack_union` 를 얻을 수 있을 것이다. 하지만 이 것은 단지 심볼이 아니라, 변수임을 기억하자. `typeof(per_cpu_var(var))` 를 주목해보자. 여기서 `var` 는 `irq_stack_union` 고 `per_cpu_var` 매크로는 [arch/x86/include/asm/percpu.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/percpu.h) 에 정의되어 있다.:
 
 ```C
-#define PER_CPU_VAR(var)        %__percpu_seg:var
+#define PER_CPU_VAR(var)        %__percpu_seg:var__ // TODO 마지막 언더바 두개
 ```
 
 where:
 
 ```C
 #ifdef CONFIG_X86_64
-    #define __percpu_seg gs
+    #define __percpu_seg gs__ // TODO 마지막 언더바 두개
 endif
 ```
 
-So, we are accessing `gs:irq_stack_union` and getting its type which is `irq_union`. Ok, we defined the first variable and know its address, now let's look at the second `__per_cpu_load` symbol. There are a couple of `per-cpu` variables which are located after this symbol. The `__per_cpu_load` is defined in the [include/asm-generic/sections.h](https://github.com/torvalds/linux/blob/master/include/asm-generic-sections.h):
+그래서, 우리는 `gs:irq_stack_union` 로 접근하여 `irq_union` 의 타입을 얻을 수 있다. 좋다, 우리는 첫번째 변수를 선언하고 그것의 주소를 알고 있다. 이제 `__per_cpu_load` 심볼을 살펴보자. 이 심볼 뒤에 따르는 두어개의 `per-cpu` 변수들이 있다. `__per_cpu_load` 는 [include/asm-generic/sections.h](https://github.com/torvalds/linux/blob/master/include/asm-generic-sections.h)에 정의되어 있다.:
 
 ```C
 extern char __per_cpu_load[], __per_cpu_start[], __per_cpu_end[];
 ```
 
-and presented base address of the `per-cpu` variables from the data area. So, we know the address of the `irq_stack_union`, `__per_cpu_load` and we know that `init_per_cpu__irq_stack_union` must be placed right after `__per_cpu_load`. And we can see it in the [System.map](http://en.wikipedia.org/wiki/System.map):
+그리고 데이터 영역에 `per-cpu` 변수들의 베이스 주소들이 있다. 그래서, 우리는 `irq_stack_union`, `__per_cpu_load` 의 주소를 알고 있고 `init_per_cpu__irq_stack_union`는 반드시 `__per_cpu_load` 바로 다음에 위치해야 하는 것도 알고 있다. [System.map](http://en.wikipedia.org/wiki/System.map) 에서 관련된 사항을 볼 수 있다.:
 
 ```
 ...
@@ -176,7 +176,7 @@ ffffffff819ed000 A init_per_cpu__irq_stack_union
 ...
 ```
 
-Now we know about `initial_gs`, so let's look at the code:
+이제 우리는 `initial_gs` 에 관해 알아보았고, 아래의 코드를 한번 보자.:
 
 ```assembly
 movl	$MSR_GS_BASE,%ecx
@@ -185,7 +185,7 @@ movl	initial_gs+4(%rip),%edx
 wrmsr
 ```
 
-Here we specified a model specific register with `MSR_GS_BASE`, put the 64-bit address of the `initial_gs` to the `edx:eax` pair and execute the `wrmsr` instruction for filling the `gs` register with the base address of the `init_per_cpu__irq_stack_union` which will be at the bottom of the interrupt stack. After this we will jump to the C code on the `x86_64_start_kernel` from the [arch/x86/kernel/head64.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head64.c). In the `x86_64_start_kernel` function we do the last preparations before we jump into the generic and architecture-independent kernel code and one of these preparations is filling the early `Interrupt Descriptor Table` with the interrupts handlers entries or `early_idt_handlers`. You can remember it, if you have read the part about the [Early interrupt and exception handling](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html) and can remember following code:
+여기서 우리는 `MSR_GS_BASE` 를 `모델 정의 레지스터`로 정의하고, `initial_gs` 의 64 비트 주소를 `edx:eax` 에 넣고 `wrmsr` 명령어를 실행하여 인터럽트 스택의 밑바닥이 될 `init_per_cpu__irq_stack_union` 의 베이스 주소를 `gs` 레지스터에 채워넣는다. 이 다음에 우리는 C 코드 인 [arch/x86/kernel/head64.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head64.c) 에 있는 `x86_64_start_kernel`로 점프한다. `x86_64_start_kernel` 함수에서 우리는 일반적이고 아케텍처에 독립적인 커널 코드로 진입하기 전에 마지막 준비를 하는데, 그 준비 작업중 하나가 `early_idt_handlers` 또는 인터럽트 핸들러 엔트리들로 초기 `Interrupt Descriptor Table` 를 채우는 것을 한다. 기억하겠지만, [Early interrupt and exception handling](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-2.md) 를 읽어 봤다면, 아래의 코드를 기억할 것이다.:
 
 ```C
 for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
@@ -194,7 +194,7 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 load_idt((const struct desc_ptr *)&idt_descr);
 ```
 
-but I wrote `Early interrupt and exception handling` part when Linux kernel version was - `3.18`. For this day actual version of the Linux kernel is `4.1.0-rc6+` and ` Andy Lutomirski` sent the [patch](https://lkml.org/lkml/2015/6/2/106) and soon it will be in the mainline kernel that changes behaviour for the `early_idt_handlers`. **NOTE** While I wrote this part the [patch](https://github.com/torvalds/linux/commit/425be5679fd292a3c36cb1fe423086708a99f11a) already turned in the Linux kernel source code. Let's look on it. Now the same part looks like:
+`초기 인터럽트와 예외 처리` 파트를 작성한 시점의 리눅스 커널 버전은 `3.18`이었다. 현재 이 챕터를 쓰는 시점에서 리눅스 커널은 `4.1.0-rc6+` 버전이 되었고 `Andy Lutomirski`는 [패치](https://lkml.org/lkml/2015/6/2/106) 를 보내 `early_idt_handlers` 를 위한 행동에 변화를 주었고 메인라인 커널에 포함되었다. **Note** 현재 이 파트를 쓰는 동안에 [그 패치](https://github.com/torvalds/linux/commit/425be5679fd292a3c36cb1fe423086708a99f11a)가 리눅스 커널 소스 코드에 적용이 완료되었다. 이제 같은 부분의 코드가 어떻게 변경되었는지 보자.:
 
 ```C
 for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
@@ -203,20 +203,20 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 load_idt((const struct desc_ptr *)&idt_descr);
 ```
 
-AS you can see it has only one difference in the name of the array of the interrupts handlers entry points. Now it is `early_idt_handler_arry`:
+여기서는 단지 인터럽트 핸들의 엔트리 포인트의 배열 이름만 차이가 있다는 것을 볼 수 있다. 이제 그것은 `early_idt_handler_array` 이다.:
 
 ```C
 extern const char early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
 ```
 
-where `NUM_EXCEPTION_VECTORS` and `EARLY_IDT_HANDLER_SIZE` are defined as:
+`NUM_EXCEPTION_VECTORS` 와 `EARLY_IDT_HANDLER_SIZE`는 아래와 같이 선언되었다:
 
 ```C
 #define NUM_EXCEPTION_VECTORS 32
 #define EARLY_IDT_HANDLER_SIZE 9
 ```
 
-So, the `early_idt_handler_array` is an array of the interrupts handlers entry points and contains one entry point on every nine bytes. You can remember that previous `early_idt_handlers` was defined in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S). The `early_idt_handler_array` is defined in the same source code file too:  
+그래서, `early_idt_handler_array` 는 인터럽트 핸들러 엔트리 포인트의 배열이고 각 9 바이트 마다 하나의 엔트리 포인트를 가지게 된다. 이전 `early_idt_handlers` 는 [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 에 선언되어 있었다. `early_idt_handler_array` 도 같은 소스 파일에 선언되어 있다.:
 
 ```assembly
 ENTRY(early_idt_handler_array)
@@ -226,7 +226,7 @@ ENTRY(early_idt_handler_array)
 ENDPROC(early_idt_handler_common)
 ```
 
-It fills `early_idt_handler_arry` with the `.rept NUM_EXCEPTION_VECTORS` and contains entry of the `early_make_pgtable` interrupt handler (more about its implementation you can read in the part about [Early interrupt and exception handling](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-2.html)). For now we come to the end of the `x86_64` architecture-specific code and the next part is the generic kernel code. Of course you already can know that we will return to the architecture-specific code in the `setup_arch` function and other places, but this is the end of the `x86_64` early code.
+위의 코드는 `.rept NUM_EXCEPTION_VECTORS`로 `early_idt_handler_array` 를 채우고 `early_make_pgtable` 인터럽트 핸들러의 엔트리 구현([초기 인터럽트와 예외처리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-2.md)에서 확인 가능하다.)을 포함시킨다. 이제 `x86_64` 아키텍처 의존적인 코드의 막바지에 왔고 다음 파트에서는 일반적인 커널 코드가 소개 될 것이다. 물론, 당신은 이미 `setup_arch` 와 다른 곳에서 아키텍처 의존적인 코드로 돌아갈 것이지만 이것이 초기 `x86_64` 코드의 마지막 부분이 될 것이다.
 
 Setting stack canary for the interrupt stack
 -------------------------------------------------------------------------------

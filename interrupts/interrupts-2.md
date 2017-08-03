@@ -117,7 +117,7 @@ wrmsr
 #define MSR_GS_BASE             0xc0000101
 ```
 
-이것으로 부터 우리는 `MSR_GS_BASE` 가 `model specific register` 의 수를 정의한다는 것을 이해 했다. `cs`, `ds`, `es`, 그리고 `ss` 레지스터들은 64 비트 모드에서는 사용되지 않기 때문에, 이런 필드은 무시된다. 하지만 우리는 `fs` 와 `gs` 레지스터들을 통해 접근할 수 있다. 이 모델 정의 레지스터(model specific register) 는 이런 세그먼트 레지스터와 같은 숨겨진 부분들을 `fs` 와 `gs` 에 의해 접근되는 세그먼트 레지스터를 위한 64 비트 베이스 주소를 사용할 수 있도록 허가하는 `back door`를 제공한다. 그래서 `MSR_GS_BASE` 는 숨겨진 파트이고 이 파트는 `GS.base` 필드에 맵핑되어 있다. `initial_gs` 를 살펴 보자.:
+이것으로 부터 우리는 `MSR_GS_BASE` 가 `model specific register` 의 수를 정의한다는 것을 이해 했다. `cs`, `ds`, `es`, 그리고 `ss` 레지스터들은 64 비트 모드에서는 사용되지 않기 때문에, 이런 필드은 무시된다. 하지만 우리는 `fs` 와 `gs` 레지스터들을 통해 접근할 수 있다. 이 모델 정의 레지스터(model specific register) 는 이런 세그먼트 레지스터들과 같은 숨겨진 부분들을 위한 `back door`를 제공하고 `fs` 와 `gs` 에 의해 접근되는 세그먼트 레지스터를 위한 64 비트 베이스 주소를 사용할 수 있도록 허가한다. 그래서 `MSR_GS_BASE` 는 숨겨진 파트이고 이 파트는 `GS.base` 필드에 맵핑되어 있다. `initial_gs` 를 살펴 보자.:
 
 ```assembly
 GLOBAL(initial_gs)

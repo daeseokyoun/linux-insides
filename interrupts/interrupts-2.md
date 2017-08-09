@@ -145,14 +145,14 @@ DECLARE_INIT_PER_CPU(irq_stack_union);
 만약 모든 매크로를 확장시켜 보면, 우리는 `INIT_PER_CPU` 매크로를 수행했을 때와 같은 `init_per_cpu__irq_stack_union` 를 얻을 수 있을 것이다. 하지만 이 것은 단지 심볼이 아니라, 변수임을 기억하자. `typeof(per_cpu_var(var))` 를 주목해보자. 여기서 `var` 는 `irq_stack_union` 고 `per_cpu_var` 매크로는 [arch/x86/include/asm/percpu.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/percpu.h) 에 정의되어 있다.:
 
 ```C
-#define PER_CPU_VAR(var)        %__percpu_seg:var__ // TODO 마지막 언더바 두개
+#define PER_CPU_VAR(var)        %__percpu_seg:var
 ```
 
 where:
 
 ```C
 #ifdef CONFIG_X86_64
-    #define __percpu_seg gs__ // TODO 마지막 언더바 두개
+    #define __percpu_seg gs
 endif
 ```
 
@@ -228,12 +228,12 @@ ENDPROC(early_idt_handler_common)
 
 위의 코드는 `.rept NUM_EXCEPTION_VECTORS`로 `early_idt_handler_array` 를 채우고 `early_make_pgtable` 인터럽트 핸들러의 엔트리 구현([초기 인터럽트와 예외처리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-2.md)에서 확인 가능하다.)을 포함시킨다. 이제 `x86_64` 아키텍처 의존적인 코드의 막바지에 왔고 다음 파트에서는 일반적인 커널 코드가 소개 될 것이다. 물론, 당신은 이미 `setup_arch` 와 다른 곳에서 아키텍처 의존적인 코드로 돌아갈 것이지만 이것이 초기 `x86_64` 코드의 마지막 부분이 될 것이다.
 
-Setting stack canary for the interrupt stack
+인터럽트 스택을 위한 스택 카나리(canary) 설정
 -------------------------------------------------------------------------------
 
-The next stop after the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) is the biggest `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c). If you've read the previous [chapter](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html) about the Linux kernel initialization process, you must remember it. This function does all initialization stuff before kernel will launch first `init` process with the [pid](https://en.wikipedia.org/wiki/Process_identifier) - `1`. The first thing that is related to the interrupts and exceptions handling is the call of the `boot_init_stack_canary` function.
+[arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) 다음으로 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c)에서 가장 큰 부분인 `start_kernel` 을 살펴 보자. 만약 이미 리눅스 초기화 과정에 관련된 챕터에서 읽어보았다면, 당신은 반드시 기억해야 합니다. 이 함수는 첫 [pid](https://en.wikipedia.org/wiki/Process_identifier) 로 `1` 값을 가지는 `init` 프로세스가 수행되기 전에 커널의 거의 모든 초기화를 진행한다. 인터럽트와 예외 처리와 관련된 첫번째는 `boot_init_stack_canary` 함수 호출이다.
 
-This function sets the [canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow#Stack_canaries) value to protect interrupt stack overflow. We already saw a little some details about implementation of the `boot_init_stack_canary` in the previous part and now let's take a closer look on it. You can find implementation of this function in the [arch/x86/include/asm/stackprotector.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/stackprotector.h) and its depends on the `CONFIG_CC_STACKPROTECTOR` kernel configuration option. If this option is not set this function will not do anything:
+이 함수는 [canary](http://en.wikipedia.org/wiki/Stack_buffer_overflow#Stack_canaries) 값을 인터럽트 스택 오버플로우를 막기 위해 설정한다. 우리는 이미 이전 파트에서 `boot_init_stack_canary` 구현에 관련된 약간의 상세를 보았고 이제는 더 자세히 봐야 할 때이다. 이 함수의 구현은 [arch/x86/include/asm/stackprotector.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/stackprotector.h) 에서 찾을 수 있고 `CONFIG_CC_STACKPROTECTOR` 구성 옵션에 의존적이다. 만약 이 옵션이 설정되어 있지 않다면, 이 함수는 아무 것도 하지 않을 것이다.:
 
 ```C
 #ifdef CONFIG_CC_STACKPROTECTOR
@@ -247,7 +247,7 @@ static inline void boot_init_stack_canary(void)
 #endif
 ```
 
-If the `CONFIG_CC_STACKPROTECTOR` kernel configuration option is set, the `boot_init_stack_canary` function starts from the check stat `irq_stack_union` that represents [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) interrupt stack has offset equal to forty bytes from the `stack_canary` value:
+만약 `CONFIG_CC_STACKPROTECTOR` 커널 구성 옵션이 설정되어 있다면, `boot_init_stack_canary` 함수는 [per-cpu](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Concepts/per-cpu.md) 를 나타내는 `irq_stack_union` 내에 있는 `stack_canary` 가 40 바이트 오프셋만큼 떨어져있는지 확인하는 것부터 시작한다.:
 
 ```C
 #ifdef CONFIG_X86_64
@@ -255,7 +255,7 @@ If the `CONFIG_CC_STACKPROTECTOR` kernel configuration option is set, the `boot_
 #endif
 ```
 
-As we can read in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html) the `irq_stack_union` represented by the following union:
+이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md) 에서 보면 `irq_stack_union` 은 아래와 같은 유니온(union) 타입으로 만들어져 있다.:
 
 ```C
 union irq_stack_union {
@@ -268,9 +268,9 @@ union irq_stack_union {
 };
 ```
 
-which defined in the [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h). We know that [union](http://en.wikipedia.org/wiki/Union_type) in the [C](http://en.wikipedia.org/wiki/C_%28programming_language%29) programming language is a data structure which stores only one field in a memory. We can see here that structure has first field - `gs_base` which is 40 bytes size and represents bottom of the `irq_stack`. So, after this our check with the `BUILD_BUG_ON` macro should end successfully. (you can read the first part about Linux kernel initialization [process](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-1.html) if you're interesting about the `BUILD_BUG_ON` macro).
+이 자료구조는 [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h)에 선언되어 있다. 우리는 [C](http://en.wikipedia.org/wiki/C_%28programming_language%29) 프로그래밍 언어에서 [union](http://en.wikipedia.org/wiki/Union_type) 은 메모리 공간에 한가지의 요소만 저장 할 수 있도록 하는 자료 구조라는 것을 안다. 이 구조체의 첫번째 항목으로 `gs_base` 를 볼 수 있다. 이것은 40 바이트의 크기를 가지고 `irq_stack` 의 밑바닥을 표현한다. 그래서 `BUILD_BUG_ON` 매크로와 확인하는 내용은 성공적으로 마무리가 될 것이다. (리눅스 초기화 첫번째 [과정](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-1.md) 에서 `BUILD_BUG_ON` 매크로에 대해 더 자세히 볼 수 있을 것이다.).
 
-After this we calculate new `canary` value based on the random number and [Time Stamp Counter](http://en.wikipedia.org/wiki/Time_Stamp_Counter):
+이 확인 다음에는 새로운 `canary` 값을 랜덤 숫자와 [Time Stamp Counter](http://en.wikipedia.org/wiki/Time_Stamp_Counter) 에 기반하여 계산한다.:
 
 ```C
 get_random_bytes(&canary, sizeof(canary));
@@ -278,20 +278,20 @@ tsc = __native_read_tsc();
 canary += tsc + (tsc << 32UL);
 ```
 
-and write `canary` value to the `irq_stack_union` with the `this_cpu_write` macro:
+그리고 `canary` 값을 `this_cpu_write` 매크로를 통해 `irq_stack_union`에 써주게 된다.
 
 ```C
 this_cpu_write(irq_stack_union.stack_canary, canary);
 ```
 
-more about `this_cpu_*` operation you can read in the [Linux kernel documentation](https://github.com/torvalds/linux/blob/master/Documentation/this_cpu_ops.txt).
+`this_cpu_*` 수행 관련해서 더 많은 내용을 읽고 싶다면, [리눅스 커널 문서](https://github.com/torvalds/linux/blob/master/Documentation/this_cpu_ops.txt)를 참조하길 바란다.
 
-Disabling/Enabling local interrupts
+비활성/활성(Disabling/Enabling) 지역 인터럽트
 --------------------------------------------------------------------------------
 
-The next step in the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) which is related to the interrupts and interrupts handling after we have set the `canary` value to the interrupt stack - is the call of the `local_irq_disable` macro.
+인터럽트와 인터럽트 처리와 관련된 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 부분에서 인터럽트 스택에 `canary` 값을 설정한 후 다음 단계는 `local_irq_disable` 매크로의 호출이다.
 
-This macro defined in the [include/linux/irqflags.h](https://github.com/torvalds/linux/blob/master/include/linux/irqflags.h) header file and as you can understand, we can disable interrupts for the CPU with the call of this macro. Let's look on its implementation. First of all note that it depends on the `CONFIG_TRACE_IRQFLAGS_SUPPORT` kernel configuration option:
+이 매크로는 [include/linux/irqflags.h](https://github.com/torvalds/linux/blob/master/include/linux/irqflags.h) 헤더 파일에 선언되어 있으며, 당신이 이해 했듯이, 우리는 이 매크로의 호출로 CPU 를 위한 인터럽트를 비활성화 할 수 있다. 이것의 구현을 살펴보자. 첫번째로 `CONFIG_TRACE_IRQFLAGS_SUPPORT` 커널 구성 옵션에 의존적이라는 것을 알아두자.:
 
 ```C
 #ifdef CONFIG_TRACE_IRQFLAGS_SUPPORT
@@ -306,7 +306,7 @@ This macro defined in the [include/linux/irqflags.h](https://github.com/torvalds
 #endif
 ```
 
-They are both similar and as you can see have only one difference: the `local_irq_disable` macro contains call of the `trace_hardirqs_off` when `CONFIG_TRACE_IRQFLAGS_SUPPORT` is enabled. There is special feature in the [lockdep](http://lwn.net/Articles/321663/) subsystem - `irq-flags tracing` for tracing `hardirq` and `softirq` state. In our case `lockdep` subsystem can give us interesting information about hard/soft irqs on/off events which are occurs in the system. The `trace_hardirqs_off` function defined in the [kernel/locking/lockdep.c](https://github.com/torvalds/linux/blob/master/kernel/locking/lockdep.c):
+이 두 매크로는 비슷하지만 단지 하나의 차이가 있다: `local_irq_disable` 매크로가 `CONFIG_TRACE_IRQFLAGS_SUPPORT` 옵션이 설정되면 `trace_hardirqs_off` 의 호출을 포함한다. 여기에 [lockdep](http://lwn.net/Articles/321663/) 서브시스템의 특별한 항목이 있다. `irq-flags tracing` 는 `hardirq` 와 `softirq` 상태를 추적하기 위해 사용된다. 우리의 경우, `lockdep` 서브시스템은 시스템에서 발생하는 hard/soft irq 들의 on/off 이벤트 정보를 우리에게 제공한다. `trace_hardirqs_off` 함수는 [kernel/locking/lockdep.c](https://github.com/torvalds/linux/blob/master/kernel/locking/lockdep.c) 에 구현되어 있다.:
 
 ```C
 void trace_hardirqs_off(void)
@@ -316,7 +316,7 @@ void trace_hardirqs_off(void)
 EXPORT_SYMBOL(trace_hardirqs_off);
 ```
 
-and just calls `trace_hardirqs_off_caller` function. The `trace_hardirqs_off_caller` checks the `hardirqs_enabled` field of the current process and increases the `redundant_hardirqs_off` if call of the `local_irq_disable` was redundant or the `hardirqs_off_events` if it was not. These two fields and other `lockdep` statistic related fields are defined in the [kernel/locking/lockdep_insides.h](https://github.com/torvalds/linux/blob/master/kernel/locking/lockdep_insides.h) and located in the `lockdep_stats` structure:
+그리고 단지 `trace_hardirqs_off_caller` 함수를 호출한다. `trace_hardirqs_off_caller` 함수는 현재 프로세스틔 `hardirqs_enabled` 항목을 확인하고 `local_irq_disable` 의 호출이 불필요한 경우에는 `redundant_hardirqs_off` 만을 증가시키고 아니라면 `hardirqs_off_events` 를 증가시킨다. 여기에 [kernel/locking/lockdep_insides.h](https://github.com/torvalds/linux/blob/master/kernel/locking/lockdep_insides.h)에 정의된 `lockdep_stats` 구조체에 정의된 `lockdep` 의 두 개의 통계적 항목있다.:
 
 ```C
 struct lockdep_stats {
@@ -331,7 +331,7 @@ int     redundant_softirqs_off;
 }
 ```
 
-If you will set `CONFIG_DEBUG_LOCKDEP` kernel configuration option, the `lockdep_stats_debug_show` function will write all tracing information to the `/proc/lockdep`:
+만약 당신이 `CONFIG_DEBUG_LOCKDEP` 커널 구성 옵션을 설정했다면, `lockdep_stats_debug_show` 함수는 모든 추적 정보를 `/proc/lockdep` 에 쓸것이다.:
 
 ```C
 static void lockdep_stats_debug_show(struct seq_file *m)
@@ -350,7 +350,7 @@ static void lockdep_stats_debug_show(struct seq_file *m)
 }
 ```
 
-and you can see its result with the:
+그리고 당신은 그것의 결과를 볼 수 있다.:
 
 ```
 $ sudo cat /proc/lockdep
@@ -364,7 +364,7 @@ $ sudo cat /proc/lockdep
  redundant softirq offs:                  0
 ```
 
-Ok, now we know a little about tracing, but more info will be in the separate part about `lockdep` and `tracing`. You can see that the both `local_disable_irq` macros have the same part - `raw_local_irq_disable`. This macro defined in the [arch/x86/include/asm/irqflags.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/irqflags.h) and expands to the call of the:
+좋다, 이제 우리는 추적(tracing)에 관해 조금 알아보았다, 하지만 더 많은 정보는 `lockdep` 와 `tracing` 관련된 다른 챕터에서 볼 수 있을 것이다. 여기서 `local_disable_irq` 매크로와 같은 파트에서 `raw_local_irq_disable`도 볼 수 있을 것이다. 이 매크로는 [arch/x86/include/asm/irqflags.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/irqflags.h) 에 선언되어 있고 아래의 호출로 확장된다.:
 
 ```C
 static inline void native_irq_disable(void)
@@ -373,7 +373,7 @@ static inline void native_irq_disable(void)
 }
 ```
 
-And you already must remember that `cli` instruction clears the [IF](http://en.wikipedia.org/wiki/Interrupt_flag) flag which determines ability of a processor to handle an interrupt or an exception. Besides the `local_irq_disable`, as you already can know there is an inverse macro - `local_irq_enable`. This macro has the same tracing mechanism and very similar on the `local_irq_enable`, but as you can understand from its name, it enables interrupts with the `sti` instruction:
+그리고 당신은 인터럽트나 예외를 처리하기 위한 프로세서의 기능을 결정하는 [IF](http://en.wikipedia.org/wiki/Interrupt_flag) 플래그를 클리어하는 `cli` 명령어를 기억해야 한다. 또한 이 것과 상반되는 `local_irq_enable` 라는 매크로도 있다는 것을 알 수 있다. 이 매크로는 같은 추적 매커너즘을 가지고 있고, 이름에서도 알 수 있듯이 `sti` 명령어로 인터럽트들의 처리를 활성화 한다.:
 
 ```C
 static inline void native_irq_enable(void)
@@ -382,29 +382,29 @@ static inline void native_irq_enable(void)
 }
 ```
 
-Now we know how `local_irq_disable` and `local_irq_enable` work. It was the first call of the `local_irq_disable` macro, but we will meet these macros many times in the Linux kernel source code. But for now we are in the `start_kernel` function from the [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) and we just disabled `local` interrupts. Why local and why we did it? Previously kernel provided a method to disable interrupts on all processors and it was called `cli`. This function was [removed](https://lwn.net/Articles/291956/) and now we have `local_irq_{enabled,disable}` to disable or enable interrupts on the current processor. After we've disabled the interrupts with the `local_irq_disable` macro, we set the:
+이제 우리는 `local_irq_disable` 와 `local_irq_enable`가 어떻게 동작하는지 알아보았다. `local_irq_disable` 매크로의 첫번째 호출이었지만 우리는 리눅스 커널 소스 코드에서 이런 매크로들을 자주 만나게 될 것이다. 하지만 지금은 [init/main.c](https://github.com/torvalds/linux/blob/master/init/main.c) 소스 파일의 `start_kernel` 함수를 살펴 보고 있고 우리는 방금 `local` 인터럽트들을 비활성화 했다. 왜 지역(local) 이어야 하고 그것을 비활성화 했는가"? 이전 커널은 `cli` 명령을 사용하여 모든 프로세서들의 인터럽트를 비활성화하는 함수를 제공했다. 그 함수는 [제거](https://lwn.net/Articles/291956/) 되었고 이제는 현재 프로세서의 인터럽트를 비활성화/활성화를 하기 위해 `local_irq_{enabled,disable}`를 사용한다. `local_irq_disable` 매크로를 이용해서 인터럽트들을 비활성화 한 후에, 우리는 아래 값을 설정한다:
 
 ```C
 early_boot_irqs_disabled = true;
 ```
 
-The `early_boot_irqs_disabled` variable defined in the [include/linux/kernel.h](https://github.com/torvalds/linux/blob/master/include/linux/kernel.h):
+`early_boot_irqs_disabled` 변수는 [include/linux/kernel.h](https://github.com/torvalds/linux/blob/master/include/linux/kernel.h) 에 선언되어 있다.:
 
 ```C
 extern bool early_boot_irqs_disabled;
 ```
 
-and used in the different places. For example it used in the `smp_call_function_many` function from the [kernel/smp.c](https://github.com/torvalds/linux/blob/master/kernel/smp.c) for the checking possible deadlock when interrupts are disabled:
+그리고 다른 곳에서 사용된다. 예를 들어 이 변수는 인터럽트가 비활성화 되는 시점에 데드락에 빠지지 않는지 확인하기 위해 [kernel/smp.c](https://github.com/torvalds/linux/blob/master/kernel/smp.c)에 구현된 `smp_call_function_many` 함수에서 사용된다.:
 
 ```C
 WARN_ON_ONCE(cpu_online(this_cpu) && irqs_disabled()
                      && !oops_in_progress && !early_boot_irqs_disabled);
 ```
 
-Early trap initialization during kernel initialization
+커널 초기화 중에 초기 트랩 초기화
 --------------------------------------------------------------------------------
 
-The next functions after the `local_disable_irq` are `boot_cpu_init` and `page_address_init`, but they are not related to the interrupts and exceptions (more about this functions you can read in the chapter about Linux kernel [initialization process](http://0xax.gitbooks.io/linux-insides/content/Initialization/index.html)). The next is the `setup_arch` function. As you can remember this function located in the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel.setup.c) source code file and makes initialization of many different architecture-dependent [stuff](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-4.html). The first interrupts related function which we can see in the `setup_arch` is the - `early_trap_init` function. This function defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) and fills `Interrupt Descriptor Table` with the couple of entries:
+`local_disable_irq` 호출 이후에 볼 다음 함수는 `boot_cpu_init` 와 `page_address_init` 이다, 하지만 이것들은 인터럽트와 예외와는 연관되어 있지 않다.(이 함수들에 대해 더 알고 싶다면 리눅스 커널 초기화 과정에서 읽어보길 바란다.) 그 다음은 `setup_arch` 함수이다. 이 함수는 [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel.setup.c) 소스 코드 파일에 위치하고 다른 많은 아키텍처 의존적인 [것들](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-4.md)을 초기화 한다. 우리가 지금 보고 있는 `setup_arch` 함수에서 인터럽트와 연관된 첫번째로 함수는 `early_trap_init` 이다. 이 함수는 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) 에 구현되어 있고, 몇개의 엔트리들을 `Interrupt Descriptor Table` 에 채운다.:
 
 ```C
 void __init early_trap_init(void)
@@ -418,13 +418,13 @@ void __init early_trap_init(void)
 }
 ```
 
-Here we can see calls of three different functions:
+여기서 우리는 3 개의 다른 함수들을 볼 수 있다.
 
 * `set_intr_gate_ist`
 * `set_system_intr_gate_ist`
 * `set_intr_gate`
 
-All of these functions defined in the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h) and do the similar thing but not the same. The first `set_intr_gate_ist` function inserts new an interrupt gate in the `IDT`. Let's look on its implementation:
+이 모든 함수들은 [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h) 에 구현되어 있고 같진 않지만 비슷한 일을 한다. 첫 `set_intr_gate_ist` 함수는 새로운 인터럽트 게이트를 `IDT`에 삽입한다. 이것의 구현을 보자.:
 
 ```C
 static inline void set_intr_gate_ist(int n, void *addr, unsigned ist)
@@ -434,7 +434,7 @@ static inline void set_intr_gate_ist(int n, void *addr, unsigned ist)
 }
 ```
 
-First of all we can see the check that `n` which is [vector number](http://en.wikipedia.org/wiki/Interrupt_vector_table) of the interrupt is not greater than `0xff` or 255. We need to check it because we remember from the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html) that vector number of an interrupt must be between `0` and `255`. In the next step we can see the call of the `_set_gate` function that sets a given interrupt gate to the `IDT` table:
+이 함수에서 맨 처음 하는 것은 인터럽트 [벡터 번호](http://en.wikipedia.org/wiki/Interrupt_vector_table)가 `0xff` (255)를 넘지 않는지 확인하는 것이다. 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md) 에서 봤듯이 인터럽트 벡터 번호는 반드시 `0`와 `255` 사이에 있어야 한다. 다음 볼 함수는 `_set_gate` 이다. 이 함수는 주어진 인터럽트 게이트를 `IDT` 테이블에 설정하는 일을 한다.:
 
 ```C
 static inline void _set_gate(int gate, unsigned type, void *addr,
@@ -448,14 +448,14 @@ static inline void _set_gate(int gate, unsigned type, void *addr,
 }
 ```
 
-Here we start from the `pack_gate` function which takes clean `IDT` entry represented by the `gate_desc` structure and fills it with the base address and limit, [Interrupt Stack Table](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks), [Privilege level](http://en.wikipedia.org/wiki/Privilege_level), type of an interrupt which can be one of the following values:
+여기서 우리는 `gate_desc` 구조체의 의해 표현되는 깨끗한 `IDT` 엔트리를 가져오는 `pack_gate` 함수부터 시작하고 그것을 베이스 주소와 제한(limit), [인터럽트 스택 테이블](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks),[특권 레벨](http://en.wikipedia.org/wiki/Privilege_level), 아래의 값들중 하나가 사용될 수 있는 인텁럽트 타입으로 채운다.:
 
-* `GATE_INTERRUPT`
+* `GATE_INTERRUPT`벨
 * `GATE_TRAP`
 * `GATE_CALL`
 * `GATE_TASK`
 
-and set the present bit for the given `IDT` entry:
+그리고 주어진 `IDT` 엔트리를 위해 `present` 비트를 설정한다.:
 
 ```C
 static inline void pack_gate(gate_desc *gate, unsigned type, unsigned long func,
@@ -474,7 +474,7 @@ static inline void pack_gate(gate_desc *gate, unsigned type, unsigned long func,
 }
 ```
 
-After this we write just filled interrupt gate to the `IDT` with the `write_idt_entry` macro which expands to the `native_write_idt_entry` and just copy the interrupt gate to the `idt_table` table by the given index:
+이 다음에는 채워진 인터럽트 게이트를 `native_write_idt_entry` 호출로 확장되는 `write_idt_entry` 매크로를 사용해서 `IDT`에 채우고 인터럽트 게이트를 주어진 인덱스에 있는 `idt_table` 로 복사한다.:
 
 ```C
 #define write_idt_entry(dt, entry, g)           native_write_idt_entry(dt, entry, g)
@@ -485,13 +485,13 @@ static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_
 }
 ```
 
-where `idt_table` is just array of `gate_desc`:
+`idt_table` 은 단지 `gate_desc` 의 배열이다.:
 
 ```C
 extern gate_desc idt_table[];
 ```
 
-That's all. The second `set_system_intr_gate_ist` function has only one difference from the `set_intr_gate_ist`:
+두 번째 `set_system_intr_gate_ist` 함수는 `set_intr_gate_ist`와 단 한가지의 차이점이 있다.:
 
 ```C
 static inline void set_system_intr_gate_ist(int n, void *addr, unsigned ist)
@@ -501,29 +501,29 @@ static inline void set_system_intr_gate_ist(int n, void *addr, unsigned ist)
 }
 ```
 
-Do you see it? Look on the fourth parameter of the `_set_gate`. It is `0x3`. In the `set_intr_gate` it was `0x0`. We know that this parameter represent `DPL` or privilege level. We also know that `0` is the highest privilege level and `3` is the lowest.Now we know how `set_system_intr_gate_ist`, `set_intr_gate_ist`, `set_intr_gate` are work and we can return to the `early_trap_init` function. Let's look on it again:
+알아 보겠는가? `_set_gate` 함수 호출의 4 번째 인자를 보자. 그것은 `0x3`이다. `set_intr_gate` 에서는 `0x0`이었다. 우리는 이 인자가 `DPL` (특권 레벨) 이라는 것을 알고 있다. `0` 이라면 가장 높은 특권레벨이고 `3`이라면 가장 낮은 특권 레벨이다. 이제 어떻게 `set_system_intr_gate_ist`, `set_intr_gate_ist`, `set_intr_gate` 들이 동작하는지 알아보았고 `early_trap_init` 함수로 돌아가자. 다시 살펴보면,:
 
 ```C
 set_intr_gate_ist(X86_TRAP_DB, &debug, DEBUG_STACK);
 set_system_intr_gate_ist(X86_TRAP_BP, &int3, DEBUG_STACK);
 ```
 
-We set two `IDT` entries for the `#DB` interrupt and `int3`. These functions takes the same set of parameters:
+우리는 두개의 `#DB` 인터럽트와 `int3`를 위해 `IDT` 엔트리들을 설정했다. 이 함수들을 다음과 같은 3개의 인자들을 받는다:
 
-* vector number of an interrupt;
-* address of an interrupt handler;
-* interrupt stack table index.
+* 인터럽트의 벡터 번호
+* 인터럽트 핸들러의 주소
+* 인터럽트 스택 테이블의 인덱스
 
-That's all. More about interrupts and handlers you will know in the next parts.
+이제 이 파트가 마무리되었다. 인터럽트와 핸들러에 관해 다음 파트에서 더 자세히 알아보자.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the second part about interrupts and interrupt handling in the Linux kernel. We saw the some theory in the previous part and started to dive into interrupts and exceptions handling in the current part. We have started from the earliest parts in the Linux kernel source code which are related to the interrupts. In the next part we will continue to dive into this interesting theme and will know more about interrupt handling process.
+리눅스 커널의 인터럽트와 인터럽트 처리에 관한 두 번째 파트가 끝났다. 우리는 이전 파트에서 특정 이론을 보았고 현재 파트에서 인터럽트와 예외 처리에 관해 깊게 다루어 보기 시작했다. 우리는 리눅스 커널의 인터럽트와 연관된 극초반의 부분부터 살펴보기 시작했다. 다음 파트에서는 인터럽트 핸들리 처리 루틴에 관련해서 알아볼 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

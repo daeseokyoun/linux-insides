@@ -1,19 +1,19 @@
-Interrupts and Interrupt Handling. Part 3.
+인터럽트와 인터럽트 핸들링. Part 3.
 ================================================================================
 
-Exception Handling
+예외 처리
 --------------------------------------------------------------------------------
 
-This is the third part of the [chapter](http://0xax.gitbooks.io/linux-insides/content/interrupts/index.html) about an interrupts and an exceptions handling in the Linux kernel and in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/index.html) we stopped at the `setup_arch` function from the [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blame/master/arch/x86/kernel/setup.c) source code file.
+리눅스 커널에서 인터럽트와 예외 처리에 관련된 3 번째 파트이고 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-2.md)에서 [arch/x86/kernel/setup.c](https://github.com/torvalds/linux/blame/master/arch/x86/kernel/setup.c) 소스 코드 파일에 있는 `setup_arch` 함수에서 마무리되었다.
 
-We already know that this function executes initialization of architecture-specfic stuff. In our case the `setup_arch` function does [x86_64](https://en.wikipedia.org/wiki/X86-64) architecture related initializations. The `setup_arch` is big function, and in the previous part we stopped on the setting of the two exceptions handlers for the two following exceptions:
+우리는 이미 이 함수가 아키텍처 의존적인 것들의 초기화는 수행했다는 것을 알고 있다. 우리의 경우에 `setup_arch` 함수는 [x86_64](https://en.wikipedia.org/wiki/X86-64) 아키텍처와 관련된 초기화를 수행한다. `setup_arch` 함수는 매우 큰 함수이고, 이전 파트에서 우리는 아래에 기술되는 두개의 예외 핸들러를 위한 설정에서 마무리되었다.:
 
-* `#DB` - debug exception, transfers control from the interrupted process to the debug handler;
-* `#BP` - breakpoint exception, caused by the `int 3` instruction.
+* `#DB` - 디버깅 예외, 인터럽트된 프로세스로 부터 디버그 핸들러로 제어권을 넘김
+* `#BP` - 중단점(breakpoint) 예외, `int 3` 명령어에 의해 발생한다.
 
-These exceptions allow the `x86_64` architecture to have early exception processing for the purpose of debugging via the [kgdb](https://en.wikipedia.org/wiki/KGDB).
+이 예외들은 [kgdb](https://en.wikipedia.org/wiki/KGDB) 를 통해 디버깅의 목적을 위한 초기 예외처리를 하기 위해 `x86_64` 아키텍처에서 허용한다.
 
-As you can remember we set these exceptions handlers in the `early_trap_init` function:
+기억하겠지만, 이 예외 처리 핸들러들은 `early_trap_init` 함수에서 설정된다.:
 
 ```C
 void __init early_trap_init(void)
@@ -24,18 +24,18 @@ void __init early_trap_init(void)
 }
 ```
 
-from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c). We already saw implementation of the `set_intr_gate_ist` and `set_system_intr_gate_ist` functions in the previous part and now we will look on the implementation of these two exceptions handlers.
+이 함수는 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c) 에 구현되어 있다. 우리는 이미 이전 파트에서 `set_intr_gate_ist` 와 `set_system_intr_gate_ist` 함수의 구현을 보았고 이제 우리는 이 두 예외 처리 핸들러의 구현을 살펴 볼 것이다.
 
-Debug and Breakpoint exceptions
+디버깅과 중단점(Breakpoint) 예외들
 --------------------------------------------------------------------------------
 
-Ok, we setup exception handlers in the `early_trap_init` function for the `#DB` and `#BP` exceptions and now time is to consider their implementations. But before we will do this, first of all let's look on details of these exceptions.
+좋다, 우리는 `early_trap_init` 함수에서 `#DB` 와 `#BP` 예외처리를 위한 핸들러를 설정했고 이제는 그것들의 구현을 살펴보아야 할 시간이다. 살펴보기 앞서 이 예외 처리의 내용을 조금 더 알아보자.
 
-The first exceptions - `#DB` or `debug` exception occurs when a debug event occurs. For example - attempt to change the contents of a [debug register](http://en.wikipedia.org/wiki/X86_debug_register). Debug registers are special registers that were presented in `x86` processors starting from the [Intel 80386](http://en.wikipedia.org/wiki/Intel_80386) processor and as you can understand from name of this CPU extension, main purpose of these registers is debugging.
+첫 번째 예외는 - `#DB` 또는 `debug` 예외 - 디버깅 이벤트가 발생했을 때 발생한다. 예를 들어 [디버깅 레지스터](http://en.wikipedia.org/wiki/X86_debug_register)의 내용 변경을 시도할때 발생한다. 디버깅 레지스터 들은 [Intel 80386](http://en.wikipedia.org/wiki/Intel_80386) 에서 부터 `x86` 계열 프로세서들에 존재하고 이름에서 알 수 있듯이, 이 레지스터 들의 주요 목적은 디버깅이다.
 
-These registers allow to set breakpoints on the code and read or write data to trace it. Debug registers may be accessed only in the privileged mode and an attempt to read or write the debug registers when executing at any other privilege level causes a [general protection fault](https://en.wikipedia.org/wiki/General_protection_fault) exception. That's why we have used `set_intr_gate_ist` for the `#DB` exception, but not the `set_system_intr_gate_ist`.
+이런 레지스터들은 코드에 중단점을 설정하거나 특정 변수를 추적하기 위한 데이터를 읽기/쓰기를 허용한다. 디버깅 레지스터들은 특권 모드에서만 접근 가능할 것이며, 특권 레벨이 아닌 상태에서 이 디버깅 레지스터들을 읽거나 쓰기를 시도한다면 [general protection fault](https://en.wikipedia.org/wiki/General_protection_fault) 예외가 발생할 것이다. 그렇기 때문에 `#DB` 예외를 위해 `set_intr_gate_ist` 함수가 사용된다, 하지만 `set_system_intr_gate_ist` 함수는 그럴 필요가 없다.
 
-The verctor number of the `#DB` exceptions is `1` (we pass it as `X86_TRAP_DB`) and as we may read in specification, this exception has no error code:
+`#DB` 예외의 벡터 번호는 `1` 이다.(우리는 그것을 `X86_TRAP_DB`로 넘겨준다) 그리고 스펙을 읽어본다면, 이 예외는 에러코드를 가지지 않는다는 것을 알수 있다.:
 
 ```
 +-----------------------------------------------------+
@@ -45,7 +45,7 @@ The verctor number of the `#DB` exceptions is `1` (we pass it as `X86_TRAP_DB`) 
 +-----------------------------------------------------+
 ```
 
-The second exception is `#BP` or `breakpoint` exception occurs when processor executes the [int 3](http://en.wikipedia.org/wiki/INT_%28x86_instruction%29#INT_3) instruction. Unlike the `DB` exception, the `#BP` exception may occur in userspace. We can add it anywhere in our code, for example let's look on the simple program:
+두 번째 예외는 `#BP` 또는 `중단점(breakpoint)` 이고 프로세서가 [int 3](http://en.wikipedia.org/wiki/INT_%28x86_instruction%29#INT_3) 명령어의 수행으로 발생하는 예외이다. `DB` 예외와는 다르게, `#BP` 예외는 사용자 영역에서 발생한다. 우리는 중단점을 우리의 코드 어디에나 추가할 수 있다. 예를 들어 간단한 프로그램을 보자.:
 
 ```C
 // breakpoint.c
@@ -61,7 +61,7 @@ int main() {
 }
 ```
 
-If we will compile and run this program, we will see following output:
+만약, 우리가 이 코드를 컴파일하고 실행한다면, 아래와 같은 출력을 볼 수 있을 것이다.:
 
 ```
 $ gcc breakpoint.c -o breakpoint
@@ -69,7 +69,7 @@ i equal to: 0
 Trace/breakpoint trap
 ```
 
-But if will run it with gdb, we will see our breakpoint and can continue execution of our program:
+하지만, 만약 이것이 `gdb`에서 실행된다면, 우리가 설정한 중단점을 볼 수 있고, 실행된 프로그램을 중단 없이 계속 진행할 수 있을 것이다.:
 
 ```
 $ gdb breakpoint
@@ -77,7 +77,7 @@ $ gdb breakpoint
 ...
 ...
 (gdb) run
-Starting program: /home/alex/breakpoints 
+Starting program: /home/alex/breakpoints
 i equal to: 0
 
 Program received signal SIGTRAP, Trace/breakpoint trap.
@@ -102,56 +102,57 @@ Program received signal SIGTRAP, Trace/breakpoint trap.
 ...
 ```
 
-From this moment we know a little about these two exceptions and we can move on to consideration of their handlers.
+이 순간 부터 우리는 이 두 예외들에 대해 조금 알게 되었고 이제 그것들의 핸들러를 살펴 보도록 할 것이다.
 
-Preparation before an exception handler
+예최 핸들러 전에 준비 과정
 --------------------------------------------------------------------------------
 
-As you may note before, the `set_intr_gate_ist` and `set_system_intr_gate_ist` functions takes an addresses of exceptions handlers in theirs second parameter. In or case our two exception handlers will be:
+알겠지만, `set_intr_gate_ist` 와 `set_system_intr_gate_ist` 함수는 예외 핸들러의 주소를 그 함수들의 2번째 인자로 받는다. 우리의 경우에, 두 개의 예외 핸들러들은 아래와 같다.:
+
 
 * `debug`;
 * `int3`.
 
-You will not find these functions in the C code. all of that could be found in the kernel's `*.c/*.h` files only definition of these functions which are located in the [arch/x86/include/asm/traps.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/traps.h) kernel header file:
+당신은 C 코드에서 이 함수들을 찾을 수 없을 것이다. 커널의 `*.c/*.h` 파일들에서는 [arch/x86/include/asm/traps.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/traps.h) 커널 헤더 파일에 위치한 그 함수들의 선언만 볼 수 있을 것이다.:
 
 ```C
 asmlinkage void debug(void);
 ```
 
-and
+그리고
 
 ```C
 asmlinkage void int3(void);
 ```
 
-You may note `asmlinkage` directive in definitions of these functions. The directive is the special specificator of the [gcc](http://en.wikipedia.org/wiki/GNU_Compiler_Collection). Actually for a `C` functions which are called from assembly, we need in explicit declaration of the function calling convention. In our case, if function maked with `asmlinkage` descriptor, then `gcc` will compile the function to retrieve parameters from stack.
+이 함수들은 `asmlinkage` 키워드와 함께 선언되어 있다. 이 선언은 [gcc](http://en.wikipedia.org/wiki/GNU_Compiler_Collection)의 특별한 선언자이다. 실제 에셈블리로 부터 불려지는  `C` 함수를 위해 우리는 함수 호출 규약에 따라 명시적인 선언이 필요하다. 우리의 경우, 만약 함수가 `asmlinkage` 와 함께 선언되어 있다면, `gcc`는 이 함수의 인자를 무조건 스택으로 부터 가져오게 할 것이다.
 
-So, both handlers are defined in the [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) assembly source code file with the `idtentry` macro:
+그래서, 이 두 핸들러들은 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 어셈블리 코드에 `idtentry` 매크로와 함께 선언되어 있다.:
 
 ```assembly
-idtentry debug do_debug has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK
+idtentry debug do_debug has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK고
 ```
 
-and
+그리고
 
 ```assembly
 idtentry int3 do_int3 has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK
 ```
 
-Each exception handler may be consists from two parts. The first part is generic part and it is the same for all exception handlers. An exception handler should to save  [general purpose registers](https://en.wikipedia.org/wiki/Processor_register) on the stack, switch to kernel stack if an exception came from userspace and transfer control to the second part of an exception handler. The second part of an exception handler does certain work depends on certain exception. For example page fault exception handler should find virtual page for given address, invalid opcode exception handler should send `SIGILL` [signal](https://en.wikipedia.org/wiki/Unix_signal) and etc.
+각 예외 핸들러는 두 개의 파트로 구성되어 있을 것이다. 첫 번째 부분은 일반적인 부분으로 모든 예외 핸들러에서 같은 부분이다. 예외 핸들러는 반드시 스택에 [범용 레지스터](https://en.wikipedia.org/wiki/Processor_register) 를 저장하고 만약 예외가 사용자 영역에서 왔다면 커널 스택으로 전환하고 예외 핸들러의 두 번째 부분으로 제어권을 넘겨야 한다. 예외 처리의 두 번째 부분은 특정 예외에 의존적인 특정 일을 하는 것이다. 예를 들어 페이지 폴트(page fault) 예외 처리 핸들러는 주어진 주소를 위한 가상 페이지를 찾고, 유효하지 않는 opcode 예외 처리 핸들러는 `SIGILL` [시그널](https://en.wikipedia.org/wiki/Unix_signal)을 보내는 것과 같은 것이다.
 
-As we just saw, an exception handler starts from definition of the `idtentry` macro from the [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S) assembly source code file, so let's look at implementation of this macro. As we may see, the `idtentry` macro takes five arguments:
+방금 우리가 본 대로, 하나의 예외 처리 핸들러는 [arch/x86/kernel/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/entry_64.S) 어셈블리 코드 파일에서 `idtentry` 매크로의 선언으로 부터 시작한다. 그럼 이 매크로의 구현을 살펴보자. 보시다 시피, `idtentry` 매크로는 5개의 인자를 받는다.:
 
-* `sym` - defines global symbol with the `.globl name` which will be an an entry of exception handler;
-* `do_sym` - symbol name which represents a secondary entry of an exception handler;
-* `has_error_code` - information about existence of an error code of exception.
+* `sym` - 예외 처리 핸들러의 엔트리가 될 것인 심볼을 `.globl name` 로 정의한다.
+* `do_sym` - 예회 처리 핸들러의 두번째 엔트리를 표현하는 심볼 이름
+* `has_error_code` - 예외의 에러코드 유무의 정보
 
-The last two parameters are optional:
+마지막 두개의 인자는 선택적인 사항이다.:
 
-* `paranoid` - shows us how we need to check current mode (will see explanation in details later);
-* `shift_ist` - shows us is an exception running at `Interrupt Stack Table`.
+* `paranoid` - 현재 모드를 확인할 필요가 있는지 보여준다.(나중에 삺펴보자.)
+* `shift_ist` - 예외가 `Interrupt Stack Table`에서 수행되는지 보여준다.
 
-Definition of the `.idtentry` macro looks:
+`.idtentry` 매크로의 정의는 아래와 같다.
 
 ```assembly
 .macro idtentry sym do_sym has_error_code:req paranoid=0 shift_ist=-1
@@ -163,7 +164,7 @@ END(\sym)
 .endm
 ```
 
-Before we will consider internals of the `idtentry` macro, we should to know state of stack when an exception occurs. As we may read in the [Intel® 64 and IA-32 Architectures Software Developer’s Manual 3A](http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html), the state of stack when an exception occurs is following:
+`idtentry` 매크로의 내부를 살펴보기 전에, 우리는 예외가 발생했을 때, 스택의 상태를 반드시 알아야 한다. [Intel® 64 and IA-32 Architectures Software Developer’s Manual 3A](http://www.intel.com/content/www/us/en/processors/architectures-software-developer-manuals.html) 를 읽어본다면, 예외가 발생했을 때, 다음과 같은 스택의 상태를 볼 수 있다.:
 
 ```
     +------------+
@@ -176,14 +177,14 @@ Before we will consider internals of the `idtentry` macro, we should to know sta
     +------------+
 ```
 
-Now we may start to consider implementation of the `idtmacro`. Both `#DB` and `BP` exception handlers are defined as:
+이제 `idtentry` 매크로의 구현을 살펴보자. `#DB` 와 `#BP` 예외 핸들러는 아래처럼 선언되어 있다.:
 
 ```assembly
 idtentry debug do_debug has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK
 idtentry int3 do_int3 has_error_code=0 paranoid=1 shift_ist=DEBUG_STACK
 ```
 
-If we will look at these definitions, we may know that compiler will generate two routines with `debug` and `int3` names and both of these exception handlers will call `do_debug` and `do_int3` secondary handlers after some preparation. The third parameter defines existence of error code and as we may see both our exception do not have them. As we may see on the diagram above, processor pushes error code on stack if an exception provides it. In our case, the `debug` and `int3` exception do not have error codes. This may bring some difficulties because stack will look differently for exceptions which provides error code and for exceptions which not. That's why implementation of the `idtentry` macro starts from putting a fake error code to the stack if an exception does not provide it:
+만약 우리가 이와 같은 선언들을 본다면, 우리는 `debug` 와 `int3` 라는 이름의 두 개의 루틴들을 생성할 것이며 이 예외 핸들러는 어떤 준비작업 이후에 `do_debug` 와 `do_int3` 두 번째 부분의 핸들러들을 호출 할 것이다. 3 번째 인자는 에러 코드의 유무를 선언하는데 보시다 시피, 우리가 살펴보는 두개의 예외는 에러코드를 가지지 않는다. 위의 다이어그램을 보면, 프로세서는 예외가 에러코드를 제공한다면 스택에 넣도록 되어 있다. 우리의 경우 `debug` 와 `int3` 예외는 에러코드들을 가지지 않는다. 이것은 스택을 에러코드가 제공되는 예외와 그렇지 않은 예외를 다르게 봐야 하기 때문에, 처리에 약간의 어려움은 있다. 그래서 `idtentry` 매크로는 에러코드를 제공하지 않는 예외들을 위해 스택에 가짜의 에러코드를 넣는다.:
 
 ```assembly
 .ifeq \has_error_code
@@ -191,11 +192,11 @@ If we will look at these definitions, we may know that compiler will generate tw
 .endif
 ```
 
-But it is not only fake error-code. Moreover the `-1` also represents invalid system call number, so that the system call restart logic will not be triggered.
+하지만, 그것은 단지 가짜의 에러 코드만은 아니다. 게다가 `-1` 은 유효하지 않는 시스템 콜 번호를 사용하는 것과 같은 에러 코드이다. 그래서 시스템 콜 재시작 로직은 진행하지 않을 것이다.
 
-The last two parameters of the `idtentry` macro `shift_ist` and `paranoid` allow to know do an exception handler runned at stack from `Interrupt Stack Table` or not. You already may know that each kernel thread in the system has own stack. In addition to these stacks, there are some specialized stacks associated with each processor in the system. One of these stacks is - exception stack. The [x86_64](https://en.wikipedia.org/wiki/X86-64) architecture provides special feature which is called - `Interrupt Stack Table`. This feature allows to switch to a new stack for designated events such as an atomic exceptions like `double fault` and etc. So the `shift_ist` parameter allows us to know do we need to switch on `IST` stack for an exception handler or not.
+`idtentry` 매크로의 마지막 2 개의 인자로 `shift_ist` 와 `paranoid`는 예외 처리가 `Interrupt Stack Table` 로 부터 온 스택에서 실행되는지를 알아 내기 위해 사용된다. 당신은 이미 시스템에서 각 커널 쓰레드는 자신만의 스택을 가진다는 것을 알고 있을 것이다. 추가적으로, 시스템에는 각 프로세서와 연관된 특별한 스택들도 있다. 이런 특별한 스택 중에 하나인 것이 예외 스택이다. [x86_64](https://en.wikipedia.org/wiki/X86-64) 아키텍처는 `Interrupt Stack Table` 라 불리는 특별한 기능을 제공한다. 이 기능은 `double fault` 와 같은 원자적(atomic) 예외 처럼 지정된 이벤트를 위해 새로운 스택으로 전환하는 것을 허용한다. 그래서 `shift_ist` 인자는 우리들에서 예외 핸들러가 `IST`로 전환할 필요가 있는지 알게 해준다.
 
-The second parameter - `paranoid` defines the method which helps us to know did we come from userspace or not to an exception handler. The easiest way to determine this is to via `CPL` or `Current Privilege Level` in `CS` segment register. If it is equal to `3`, we came from userspace, if zero we came from kernel space:
+두 번째 인자는 - `paranoid` 는 예외 처리 핸들러로 사용자 영역에서 부터 왔는지를 알게 도와 주는 방법을 정의한다. 가장 쉬운 방법은 `CS` 세그먼트 레지스터에 있는 `CPL`(`Current Privilege Level`)를 통해 이를 확인 할 수 있다. 만약 이것이 `3`과 같다면, 사용자 영역에서 온것이고, `0`이라면 커널 영역에서 온것이다.:
 
 ```
 testl $3,CS(%rsp)
@@ -206,7 +207,7 @@ jnz userspace
 // we are from the kernel space
 ```
 
-But unfortunately this method does not give a 100% guarantee. As described in the kernel documentation:
+하지만 불행하게도 이 방법은 100% 신뢰할 수 있는 방법은 아니다. 커널 문서에 기술되어 있는 내용에 따르면:
 
 > if we are in an NMI/MCE/DEBUG/whatever super-atomic entry context,
 > which might have triggered right after a normal entry wrote CS to the
@@ -403,7 +404,7 @@ as it will be passed as first parameter of secondary exception handler.
 .endif
 ```
 
-Additionally you may see that we zeroed the `%esi` register above in a case if an exception does not provide error code. 
+Additionally you may see that we zeroed the `%esi` register above in a case if an exception does not provide error code.
 
 In the end we just call secondary exception handler:
 

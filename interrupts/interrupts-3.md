@@ -213,8 +213,11 @@ jnz userspace
 > which might have triggered right after a normal entry wrote CS to the
 > stack but before we executed SWAPGS, then the only safe way to check
 > for GS is the slower method: the RDMSR.
+> 만약 우리가 NMI/MCE/DEBUG 또는 super-atomic entry context 에서 수행중이라면,
+> 일반적인 엔트리에서 CS 를 스택에 쓴 바로뒤에 그리고 SWAPGS 수행전에 트리거되었다면,
+> GS 확인을 위한 단 하나의 안전한 방법은 느리지만 RDMSR 을 사용하는 것이다.
 
-In other words for example `NMI` could happen inside the critical section of a [swapgs](http://www.felixcloutier.com/x86/SWAPGS.html) instruction. In this way we should check value of the `MSR_GS_BASE` [model specific register](https://en.wikipedia.org/wiki/Model-specific_register) which stores pointer to the start of per-cpu area. So to check did we come from userspace or not, we should to check value of the `MSR_GS_BASE` model specific register and if it is negative we came from kernel space, in other way we came from userspace:
+예를 들어 보자, [swapgs](http://www.felixcloutier.com/x86/SWAPGS.html) 명령어의 임계영역(critical section) 내에서 `NMI` 가 일어났다고 해보자. per-cpu 영역의 시작을 가리키고 있는 `MSR_GS_BASE` [model specific register](https://en.wikipedia.org/wiki/Model-specific_register)  의 값을 확인해야 한다. 그래서 사용자 영역에서 온것인지 아닌지 확인하기 위해, 우리는 `MSR_GS_BASE` 모델 정의 레지스터의 값을 확인해야 할 것이고, 만약 그것이 음수라면 커널 영역에서 온것이고 아니라면 사용자 영역에서 온 것이다.:
 
 ```assembly
 movl $MSR_GS_BASE,%ecx
@@ -223,15 +226,15 @@ testl %edx,%edx
 js 1f
 ```
 
-In first two lines of code we read value of the `MSR_GS_BASE` model specific register into `edx:eax` pair. We can't set negative value to the `gs` from userspace. But from other side we know that direct mapping of the physical memory starts from the `0xffff880000000000` virtual address. In this way, `MSR_GS_BASE` will contain an address from `0xffff880000000000` to `0xffffc7ffffffffff`. After the `rdmsr` instruction will be executed, the smallest possible value in the `%edx` register will be - `0xffff8800` which is `-30720` in unsigned 4 bytes. That's why kernel space `gs` which points to start of `per-cpu` area will contain negative value.
+첫 두 라인은 `MSR_GS_BASE` 모델 정의 레지스터를 읽어 값을 `edx:eax` 쌍에 넣는다. 우리는 사용자 영역에서 온 `gs` 의 값을 음수로 설정할 수 없다. 하지만 커널에서 왔다면, 우리는 이미 물리 메모리의 직접 맵핑은 `0xffff880000000000` 가상 주소에서 시작한다는 것을 알고 있다. 이런 식으로 `MSR_GS_BASE` 는 주소를 `0xffff880000000000` 부터 `0xffffc7ffffffffff`까지 포함할 것이다. `rdmsr` 명령가 실행되고 나면, `%edx` 레지스터에서 가장 작은 가능한 값이 `0xffff8800` 로 될 것이다.(`-30720`). 그래서 `per-cpu` 영역의 시작을 가리키고 있는 커널 영역 `gs`는 음수의 값을 포함하게 될 것이다.
 
-After we pushed fake error code on the stack, we should allocate space for general purpose registers with:
+스택에 가짜 에러 코드를 넣은 다음에, 우리는 범용 레지스터들을 위한 공간을 할당해야 한다.:
 
 ```assembly
 ALLOC_PT_GPREGS_ON_STACK
 ```
 
-macro which is defined in the [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) header file. This macro just allocates 15*8 bytes space on the stack to preserve general purpose registers:
+이 매크로는 [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) 헤터 파일에 정의되어 있다. 이 매크로는 단지 벙용 레지스터들을 보관하기 위해 스택에 15*8 바이트의 공간을 할당한다.:
 
 ```assembly
 .macro ALLOC_PT_GPREGS_ON_STACK addskip=0
@@ -239,7 +242,7 @@ macro which is defined in the [arch/x86/entry/calling.h](https://github.com/torv
 .endm
 ```
 
-So the stack will look like this after execution of the `ALLOC_PT_GPREGS_ON_STACK`:
+그래서 그 스택은 `ALLOC_PT_GPREGS_ON_STACK` 의 수행 이후에는 아래와 같이 보일 것이다.:
 
 ```
      +------------+
@@ -269,6 +272,7 @@ So the stack will look like this after execution of the `ALLOC_PT_GPREGS_ON_STAC
 ```
 
 After we allocated space for general purpose registers, we do some checks to understand did an exception come from userspace or not and if yes, we should move back to an interrupted process stack or stay on exception stack:
+범용 레지스터들을 위한 공간을 할당하고 나면, 우리는 사용자영역에서 부터 온 예외의 행동을 이해하기 위해 몇가지 확인을 해야 한다. 만약 사용자 공간에서 왔다면, 우리는 인터럽트된 프로세스 스택으로 돌아가던가 예외 스택에 머물러야 한다.:
 
 ```assembly
 .if \paranoid

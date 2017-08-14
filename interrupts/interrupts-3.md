@@ -271,7 +271,6 @@ ALLOC_PT_GPREGS_ON_STACK
      +------------+
 ```
 
-After we allocated space for general purpose registers, we do some checks to understand did an exception come from userspace or not and if yes, we should move back to an interrupted process stack or stay on exception stack:
 범용 레지스터들을 위한 공간을 할당하고 나면, 우리는 사용자영역에서 부터 온 예외의 행동을 이해하기 위해 몇가지 확인을 해야 한다. 만약 사용자 공간에서 왔다면, 우리는 인터럽트된 프로세스 스택으로 돌아가던가 예외 스택에 머물러야 한다.:
 
 ```assembly
@@ -286,27 +285,27 @@ After we allocated space for general purpose registers, we do some checks to und
 .endif
 ```
 
-Let's consider all of these there cases in course.
+위의 모든 경우에 내용을 생각해보자.
 
-An exception occured in userspace
+사용자 영역에서 발생한 예외
 --------------------------------------------------------------------------------
 
-In the first let's consider a case when an exception has `paranoid=1` like our `debug` and `int3` exceptions. In this case we check selector from `CS` segment register and jump at `1f` label if we came from userspace or the `paranoid_entry` will be called in other way.
+먼저 예외가 우리의 `debug` 와 `int3` 과 같이 `paranoid=1` 를 가질때의 경우를 보자. 이 경우는 우리가 `CS` 세그먼트 레지스터로 부터 셀렉터를 확인하고 사용자 영역에서 부터 왔거다면 `1f` 라벨로 점프한다. 아니라면 다른 방법으로 `paranoid_entry` 를 호출 할 것이다.
 
-Let's consider first case when we came from userspace to an exception handler. As described above we should jump at `1` label. The `1` label starts from the call of the
+첫번째 경우세어 사용자 영역에서 예외 처리 핸들러로 왔을때를 고려해보자. 위에서 기술했듯이, 우리는 `1` 라벨로 점프해야 한다. `1` 라벨은 아래의 호출에서 부터 시작한다.
 
 ```assembly
 call	error_entry
 ```
 
-routine which saves all general purpose registers in the previously allocated area on the stack:
+스택에 있는 이전에 할당되었던 영역에 있는 모든 범용 레지스터를 저장하는 루틴이다.:
 
 ```assembly
 SAVE_C_REGS 8
 SAVE_EXTRA_REGS 8
 ```
 
-These both macros are defined in the  [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) header file and just move values of general purpose registers to a certain place at the stack, for example:
+이 두개의 매크로는 [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) 헤더 파일에 선언되어 있고, 단지 범용 레지스터 값들을 스택의 특정 영역으로 옮기는 일을 한다, 예를 들어:
 
 ```assembly
 .macro SAVE_EXTRA_REGS offset=0
@@ -319,7 +318,7 @@ These both macros are defined in the  [arch/x86/entry/calling.h](https://github.
 .endm
 ```
 
-After execution of `SAVE_C_REGS` and `SAVE_EXTRA_REGS` the stack will look:
+`SAVE_C_REGS` 와 `SAVE_EXTRA_REGS`가 수행되고 나면, 스택은 아래와 같은 모습을 하고 있을 것이다.:
 
 ```
      +------------+
@@ -348,56 +347,56 @@ After execution of `SAVE_C_REGS` and `SAVE_EXTRA_REGS` the stack will look:
      +------------+
 ```
 
-After the kernel saved general purpose registers at the stack, we should check that we came from userspace space again with:
+스택에 범용 레지스터의 값을 저장한 후에, 우리는 사용자 영역에서 왔는지 확인을 다시 해야 한다.:
 
 ```assembly
 testb	$3, CS+8(%rsp)
 jz	.Lerror_kernelspace
 ```
 
-because we may have potentially fault if as described in documentation truncated `%RIP` was reported. Anyway, in both cases the [SWAPGS](http://www.felixcloutier.com/x86/SWAPGS.html) instruction will be executed and values from `MSR_KERNEL_GS_BASE` and `MSR_GS_BASE` will be swapped. From this moment the `%gs` register will point to the base address of kernel structures. So, the `SWAPGS` instruction is called and it was main point of the `error_entry` routing.
+왜냐하면 우리는 아마도 잘려진(truncated) `%RIP` 가 보고된다면 기술된 문서에서는 잠재적인 실패(fault)를 가질수 있다고 보기 때문이다. 어쨌든, [SWAPGS](http://www.felixcloutier.com/x86/SWAPGS.html) 명령어가 수행이 될 것이든 `MSR_KERNEL_GS_BASE` 와 `MSR_GS_BASE` 의 값이 서로 바꿔치기 되는 2 가지 경우가 있다. 이 순간부터 `%gs` 레지스터는 커널 구조체들의 베이스 주소를 가리킬 것이다. 그래서, `SWAPGS` 명령어는 호출되고 `error_entry` 루틴의 주요 기점이 된다.
 
-Now we can back to the `idtentry` macro. We may see following assembler code after the call of `error_entry`:
+이제 `idtentry` 매크로로 돌아오자. 우리는 `error_entry` 의 호출 이후에 아래와 같은 어셈블리 코드를 볼 수 있을 것이다.:
 
 ```assembly
 movq	%rsp, %rdi
 call	sync_regs
 ```
 
-Here we put base address of stack pointer `%rdi` register which will be first argument (according to [x86_64 ABI](https://www.uclibc.org/docs/psABI-x86_64.pdf)) of the `sync_regs` function and call this function which is defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) source code file:
+여기서 우리는 스택 포인터의 베이스 주소를 `sync_regs` 함수의 첫번째 인자([x86_64 ABI](https://www.uclibc.org/docs/psABI-x86_64.pdf) 에 따라)로 사용될 `%rdi` 레지스터에 넣고 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) 소스 코드 파일에 정의된 이 함수를 호출한다.:
 
 ```C
 asmlinkage __visible notrace struct pt_regs *sync_regs(struct pt_regs *eregs)
 {
 	struct pt_regs *regs = task_pt_regs(current);
-	*regs = *eregs;
+	*regs = *eregs*; // TODO 마지막 별
 	return regs;
 }
 ```
 
-This function takes the result of the `task_ptr_regs` macro which is defined in the [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) header file, stores it in the stack pointer and return it. The `task_ptr_regs` macro expands to the address of `thread.sp0` which represents pointer to the normal kernel stack:
+이 함수는 [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) 헤더 파일에 구현되어 있는 `task_ptr_regs` 매크로의 결과를 받아 스택 포인터에 그것을 저장하고 반환한다. `task_ptr_regs` 매크로는 일반 커널 스택을 가리키고 있는 `thread.sp0` 의 주소를 사용하는 매크로이다.:
 
 ```C
-#define task_pt_regs(tsk)       ((struct pt_regs *)(tsk)->thread.sp0 - 1)
+#define task_pt_regs(tsk)       ((struct pt_regs *)*(tsk)->thread.sp0 - 1) // TODO 괄호 뒤에 별하
 ```
 
-As we came from userspace, this means that exception handler will run in real process context. After we got stack pointer from the `sync_regs` we switch stack:
+사용자 영역에서 부터 왔으니, 이 것은 real 프로세스 문맥(real process context) 에서 예외 처리 핸들러가 수행된다는 것이다. `sync_regs` 로 부터 스택 포인터를 얻은 후에, 스택을 전환한다.:
 
 ```assembly
 movq	%rax, %rsp
 ```
 
-The last two steps before an exception handler will call secondary handler are:
+예외 처리내에서 두 번째 핸들러를 호출 하기 전에 마지막 두 단계는:
 
-1. Passing pointer to `pt_regs` structure which contains preserved general purpose registers to the `%rdi` register:
+1. 저장된 범용 레지스터들을 포함하는 `pt_regs` 구조체의 포인터를 `%rdi` 레지스터로 전달한다.:
 
 ```assembly
 movq	%rsp, %rdi
 ```
 
-as it will be passed as first parameter of secondary exception handler.
+이러므로 두번째 예외 핸들러의 첫번째 인자로 전달될 것이다.
 
-2. Pass error code to the `%rsi` register as it will be second argument of an exception handler and set it to `-1` on the stack for the same purpose as we did it before - to prevent restart of a system call:
+2. `%rsi` 레지스터에 에러 코드를 전달한다. 예외처리 핸들러의 두 번째 인자로 사용될 것이며, `-1` 로의 설정은 이전에 설명했던 시스템 콜 호출을 재시도 하는 것을 방지하기 위해 한다.:
 
 ```
 .if \has_error_code
@@ -408,29 +407,29 @@ as it will be passed as first parameter of secondary exception handler.
 .endif
 ```
 
-Additionally you may see that we zeroed the `%esi` register above in a case if an exception does not provide error code.
+추가적으로 에러 코드가 제공되지 않는 예외라면 `%esi` 레지스터가 0 으로 채워진다.
 
-In the end we just call secondary exception handler:
+마침내 두 번째 예외 처리 핸들러가 호출된다.:
 
 ```assembly
 call	\do_sym
 ```
 
-which:
+이것은:
 
 ```C
 dotraplinkage void do_debug(struct pt_regs *regs, long error_code);
 ```
 
-will be for `debug` exception and:
+`debug` 예외가 될 것이다.:
 
 ```C
 dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code);
 ```
 
-will be for `int 3` exception. In this part we will not see implementations of secondary handlers, because of they are very specific, but will see some of them in one of next parts.
+이것은 `int 3` 예외 처리를 위한 것이다. 이 파트에서는 두 번째 핸들러들의 구현을 살펴보지 않을 것이다. 왜냐하면 그것들은 매우 특화된 코드이다. 하지만 다음 파트에서 몇몇 부분을 보도록 하자.
 
-We just considered first case when an exception occured in userspace. Let's consider last two.
+사용자 영역에서 발생한 예외를 위해 첫번째 경우를 고려해 보았다. 마지막 2 개도 보자.
 
 An exception with paranoid > 0 occured in kernelspace
 --------------------------------------------------------------------------------

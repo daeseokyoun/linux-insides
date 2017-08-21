@@ -1,20 +1,19 @@
-Linux kernel memory management Part 1.
+리눅스 커널 메모리 관리 Part 1.
 ================================================================================
 
-Introduction
+소개
 --------------------------------------------------------------------------------
 
-Memory management is one of the most complex (and I think that it is the most complex) part of the operating system kernel. In the [last preparations before the kernel entry point](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-3.html) part we stopped right before call of the `start_kernel` function. This function initializes all the kernel features (including architecture-dependent features) before the kernel runs the first `init` process. You may remember as we built early page tables, identity page tables and fixmap page tables in the boot time. No complicated memory management is working yet. When the `start_kernel` function is called we will see the transition to more complex data structures and techniques for memory management. For a good understanding of the initialization process in the linux kernel we need to have a clear understanding of these techniques. This chapter will provide an overview of the different parts of the linux kernel memory management framework and its API, starting from the `memblock`.
+메모리 관리는 운영체제의 가장 복잡한 부분이라고 생각한다. [커널 엔트리 포인트로 진입 전 마지막 준비](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-3.md) 파트에서 `start_kernel` 함수 호출 전에 마무리했다. 이 함수는 커널이 첫 `init` 프로세스를 수행하기 전에 모든 커널 기능들을 초기화한다. 당신은 부팅 시간에 초기 페이지 테이블, 페이지 테이블 확인 그리고 fixmap 페이지 테이블을 만든다. 아직 복잡한 메모리 관리는 시작도 안했다. `start_kernel` 함수가 호출되면, 우리는 메모리 관리를 위한 더 복잡한 자료 구조와 기술들의 사용을 볼 수 있을 것이다. 리눅스 커널에서 초기화 과정을 이해하기 위해서는 이런 기술들을 명확하게 이해할 필요가 있다. 이 챕터는 리눅스 커널 메모리 관리 프레임워크와 API 의 개요를 살펴볼 텐데, 이중 `memblock` 부터 시작할 것이다.
 
 Memblock
 --------------------------------------------------------------------------------
 
-Memblock is one of the methods of managing memory regions during the early bootstrap period while the usual kernel memory allocators are not up and
-running yet. Previously it was called `Logical Memory Block`, but with the [patch](https://lkml.org/lkml/2010/7/13/68) by Yinghai Lu, it was renamed to the `memblock`. As Linux kernel for `x86_64` architecture uses this method. We already met `memblock` in the [Last preparations before the kernel entry point](http://0xax.gitbooks.io/linux-insides/content/Initialization/linux-initialization-3.html) part. And now it's time to get acquainted with it closer. We will see how it is implemented.
+초기 부트스트랩 기간중에(아직 일반적인 커널 메모리 할당자가 초기화되고 사용되기 전에) 메모리 영역을 관리하는 방법 중 하나이다. 이전에 그것은 `Logical Memory Block` 이라 불렸지만, Yinghai Lu 가 만든 [패치](https://lkml.org/lkml/2010/7/13/68)로 `memblock` 이라는 이름으로 변경되었다. `x86_64` 아키텍처를 위한 리눅스 커널에서 이 방법을 사용한다. 우리는 이미 [커널 엔트리 포인트로 진입 전 마지막 준비](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Initialization/linux-initialization-3.md) 파트에서 `memblock`을 살펴 보았다. 그리고 이제 더 자세히 살펴 볼 시간이 되었다. 우선 어떻게 구현이 되어 있는지 살펴 볼 것이다.
 
-We will start to learn `memblock` from the data structures. Definitions of the all data structures can be found in the [include/linux/memblock.h](https://github.com/torvalds/linux/blob/master/include/linux/memblock.h) header file.
+우리는 `memblock` 자료 구조를 먼저 살펴 볼 것이다. 모든 자료구조들의 정의는 [include/linux/memblock.h](https://github.com/torvalds/linux/blob/master/include/linux/memblock.h) 헤더 파일에서 찾을 수 있다.
 
-The first structure has the same name as this part and it is:
+첫 구조체는 이 파트의 이름고 같은 memblock 이다.:
 
 ```C
 struct memblock {
@@ -28,18 +27,18 @@ struct memblock {
 };
 ```
 
-This structure contains five fields. First is `bottom_up` which allows allocating memory in bottom-up mode when it is `true`. Next field is `current_limit`. This field describes the limit size of the memory block. The next three fields describe the type of the memory block. It can be: reserved, memory and physical memory if the `CONFIG_HAVE_MEMBLOCK_PHYS_MAP` configuration option is enabled. Now we see yet another data structure - `memblock_type`. Let's look at its definition:
+이 구조체는 5 개의 항목을 갖고 있다. 첫 번째는 `bottom_up` 인데, 이것이 `true` 일때 bottom-up 모드에서 메모리 할당을 허용한다. 다음 항목은 `current_limit` 이다. 이 항목은 메모리 블럭의 제한 크기를 가진다. 다음 3 개의 항목은 메모리 블럭의 타입을 기술한다. 그것은 reserved 가 될 수 있는데, `CONFIG_HAVE_MEMBLOCK_PHYS_MAP` 구성 옵션이 활성화 되어 있다면 메모리와 물리메모리를 예약한다. 이제 다른 자료 구조를 보자. `memblock_type` 은 아래와 같이 정의한다.:
 
 ```C
 struct memblock_type {
 	unsigned long cnt;
 	unsigned long max;
 	phys_addr_t total_size;
-	struct memblock_region *regions;
+	struct memblock_region *regions*; //TODO 마지막 별
 };
 ```
 
-This structure provides information about the memory type. It contains fields which describe the number of memory regions which are inside the current memory block, the size of all memory regions, the size of the allocated array of the memory regions and pointer to the array of the `memblock_region` structures. `memblock_region` is a structure which describes a memory region. Its definition is:
+이 구조체는 메모리 타입의 정보를 제공한다. 그것은 현재 메모리 블럭의 메모리 영역의 수, 모든 메모리 영역들의 크기, 메모리 영역들의 할당된 배열의 크기 그리고 `memblock_region` 배열의 포인터가 있다. `memblock_region` 은 메모리 영역을 기술하는 구조체이고, 아래와 같이 정의되어 있다.:
 
 ```C
 struct memblock_region {
@@ -52,20 +51,20 @@ struct memblock_region {
 };
 ```
 
-`memblock_region` provides the base address and size of the memory region as well as a flags field which can have the following values:
+`memblock_region`은 베이스 주소와 메모리 영역의 크기 뿐만 아니라 아래 값들중 하나를 가지는 flags 도 있다.:
 
 ```C
 enum {
     MEMBLOCK_NONE	= 0x0,	/* No special request */
     MEMBLOCK_HOTPLUG	= 0x1,	/* hotpluggable region */
     MEMBLOCK_MIRROR	= 0x2,	/* mirrored region */
-    MEMBLOCK_NOMAP	= 0x4,	/* don't add to kernel direct mapping */
+    MEMBLOCK_NOMAP	= 0x4,	/* don't add to kernel direct mapping */* // TODO 마지막 별하나
 };
 ```
 
-Also `memblock_region` provides an integer field - [numa](http://en.wikipedia.org/wiki/Non-uniform_memory_access) node selector, if the `CONFIG_HAVE_MEMBLOCK_NODE_MAP` configuration option is enabled.
+또한 `memblock_region` 은 `CONFIG_HAVE_MEMBLOCK_NODE_MAP` 구성 옵션이 활성화 되어 있다면, 정수형 [numa](http://en.wikipedia.org/wiki/Non-uniform_memory_access) 노드 선택자(selector) 제공한다.
 
-Schematically we can imagine it as:
+도시화 하면 아래와 같다.:
 
 ```
 +---------------------------+   +---------------------------+
@@ -83,9 +82,9 @@ Schematically we can imagine it as:
 +---------------------------+   +---------------------------+
 ```
 
-These three structures: `memblock`, `memblock_type` and `memblock_region` are main in the `Memblock`. Now we know about it and can look at Memblock initialization process.
+이 3개의 구조체: `memblock`, `memblock_type` 그리고 `memblock_region`는 `Memblock`의 주요 자료 구조이다. 이제 자료 구조를 알았으니 Memblock 의 초기화 과정을 살펴보자.
 
-Memblock initialization
+Memblock 초기화
 --------------------------------------------------------------------------------
 
 As all API of the `memblock` are described in the [include/linux/memblock.h](https://github.com/torvalds/linux/blob/master/include/linux/memblock.h) header file, all implementations of these functions are in the [mm/memblock.c](https://github.com/torvalds/linux/blob/master/mm/memblock.c) source code file. Let's look at the top of the source code file and we will see the initialization of the `memblock` structure:

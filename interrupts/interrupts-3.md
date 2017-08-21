@@ -369,7 +369,7 @@ call	sync_regs
 asmlinkage __visible notrace struct pt_regs *sync_regs(struct pt_regs *eregs)
 {
 	struct pt_regs *regs = task_pt_regs(current);
-	*regs = *eregs*; // TODO 마지막 별
+	*regs = *eregs;
 	return regs;
 }
 ```
@@ -377,7 +377,7 @@ asmlinkage __visible notrace struct pt_regs *sync_regs(struct pt_regs *eregs)
 이 함수는 [arch/x86/include/asm/processor.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/processor.h) 헤더 파일에 구현되어 있는 `task_ptr_regs` 매크로의 결과를 받아 스택 포인터에 그것을 저장하고 반환한다. `task_ptr_regs` 매크로는 일반 커널 스택을 가리키고 있는 `thread.sp0` 의 주소를 사용하는 매크로이다.:
 
 ```C
-#define task_pt_regs(tsk)       ((struct pt_regs *)*(tsk)->thread.sp0 - 1) // TODO 괄호 뒤에 별하
+#define task_pt_regs(tsk)       ((struct pt_regs *)(tsk)->thread.sp0 - 1)
 ```
 
 사용자 영역에서 부터 왔으니, 이 것은 real 프로세스 문맥(real process context) 에서 예외 처리 핸들러가 수행된다는 것이다. `sync_regs` 로 부터 스택 포인터를 얻은 후에, 스택을 전환한다.:
@@ -431,10 +431,10 @@ dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code);
 
 사용자 영역에서 발생한 예외를 위해 첫번째 경우를 고려해 보았다. 마지막 2 개도 보자.
 
-An exception with paranoid > 0 occured in kernelspace
+커널 영역에서 발생한 paranoid > 0 의 예외
 --------------------------------------------------------------------------------
 
-In this case an exception was occured in kernelspace and `idtentry` macro is defined with `paranoid=1` for this exception. This value of `paranoid` means that we should use slower way that we saw in the beginning of this part to check do we really came from kernelspace or not. The `paranoid_entry` routing allows us to know this:
+이 경우의 예외는 커널 영역에서 발생했고, `idtentry` 매크로는 이 예외를 위해 `paranoid=1`로 선언되어 있다. `paranoid` 의 값은 이 파트의 초반 부에 다루어졌던 예외가 커널영역에서 부터 온 것인지 아닌지 확인하는 것을 좀 더 느린 방법으로 해야 한다는 의미이다. `paranoid_entry` 루틴은 이 값을 알게 해준다.:
 
 ```assembly
 ENTRY(paranoid_entry)
@@ -452,7 +452,7 @@ ENTRY(paranoid_entry)
 END(paranoid_entry)
 ```
 
-As you may see, this function representes the same that we covered before. We use second (slow) method to get information about previous state of an interrupted task. As we checked this and executed `SWAPGS` in a case if we came from userspace, we should to do the same that we did before: We need to put pointer to a strucutre which holds general purpose registers to the `%rdi` (which will be first parameter of a secondary handler) and put error code if an exception provides it to the `%rsi` (which will be second parameter of a secondary handler):
+당신이 보듯이, 이 함수는 이전에 다루었던 것과 같은것이다. 우리는 인터럽트된 태스크의 이전 상태에 관한 정보를 얻기 위한 두 번째(느린) 방법을 사용한다. 우리가 이 정보를 확인하고 사용자 영역에서 부터 왔을 때 `SWAPGS`를 실행하게 되면, 우리는 이전에 했던 같은 일을 해야만 한다.: 우리는 범용 레지스터들을 갖고 있는 구조테의 포인터를 `%rdi`(두번째 핸들러의 첫번째 인자로 사용될 것이다.) 에 넣어주고 예외가 만약에 에러 코드를 지원하면 에러 코드를 `%rsi`(두 번째 핸들러의 두번째 인자로 사용 될 것이다.)에 넣는다.:
 
 ```assembly
 movq	%rsp, %rdi
@@ -465,7 +465,7 @@ movq	%rsp, %rdi
 .endif
 ```
 
-The last step before a secondary handler of an exception will be called is cleanup of new `IST` stack fram:
+예외처리의 두 번째 핸들러 수행 전에 하는 마지막 단계에서 호출 될 것은 새로운 `IST` 스택 프레임을 정리하는 것이다.:
 
 ```assembly
 .if \shift_ist != -1
@@ -473,37 +473,37 @@ The last step before a secondary handler of an exception will be called is clean
 .endif
 ```
 
-You may remember that we passed the `shift_ist` as argument of the `idtentry` macro. Here we check its value and if its not equal to `-1`, we get pointer to a stack from `Interrupt Stack Table` by `shift_ist` index and setup it.
+당신은 `idtentry` 매크로의 인자로 `shift_ist`를 넘겨 준것을 기억할 것이다. 여기서 우리는 그 값을 확인하고 만약 `-1` 과 같지 않으면 `shift_ist` 인덱스로 `Interrupt Stack Table` 에서 스택을 가리키는 포인터를 얻고 설정할 것이다.
 
-In the end of this second way we just call secondary exception handler as we did it before:
+이 것이 두 번째(느린) 방법의 두 번째 예외 핸들러의 호출 바로 직전까지 하는 일들을 정리했다.:
 
 ```assembly
 call	\do_sym
 ```
 
-The last method is similar to previous both, but an exception occured with `paranoid=0` and we may use fast method determination of where we are from.
+마지막 방법은 이전 두 방법과 비슷하지만, `paranoid=0` 와 예외가 발생하고 빠른 방법으로 어디서 부터 예외가 발생했는지 확인 할 것이다.
 
-Exit from an exception handler
+예외 처리의 종료
 --------------------------------------------------------------------------------
 
-After secondary handler will finish its works, we will return to the `idtentry` macro and the next step will be jump to the `error_exit`:
+두 번째 핸들러가 일을 마무리 한 뒤에, 우리는 `idtentry` 매크로로 부터 복귀할 것이고 다음 단계는 `error_exit` 로 점프하는 것이다.:
 
 ```assembly
 jmp	error_exit
 ```
 
-routine. The `error_exit` function defined in the same [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) assembly source code file and the main goal of this function is to know where we are from (from userspace or kernelspace) and execute `SWPAGS` depends on this. Restore registers to previous state and execute `iret` instruction to transfer control to an interrupted task.
+`error_exit` 함수는 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 어셈블리 소스 파일에 구현되어 있고 이 함수의 주요 목적은 우리가 어디서 부터 왔는지(사용자 영역 또는 커널 영역) 알게 하고, 그것에 의존하여 `SWPAGS` 를 실행한다. 이전 상태의 레지스터들을 복구하고 `iret` 명령어를 실행하여 인터럽트 되었던 태스크로 제어권을 넘겨준다.
 
-That's all.
+이상.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the third part about interrupts and interrupt handling in the Linux kernel. We saw the initialization of the [Interrupt descriptor table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table) in the previous part with the `#DB` and `#BP` gates and started to dive into preparation before control will be transferred to an exception handler and implementation of some interrupt handlers in this part. In the next part we will continue to dive into this theme and will go next by the `setup_arch` function and will try to understand interrupts handling related stuff.
+리눅스 커널의 인터럽트와 인터럽트 처리의 3번째 파트가 마무리되었다. 우리는 이전 파트에서 `#DB`, `#BP` 게이트와 함께 [Interrupt descriptor table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table) 의 초기화를 보았고, 이 파트에서 제어권을 예외 처리 핸들러로 넘기기 전에 준비 작업을 살펴 보고 몇몇의 인터럽트 핸들러의 구현도 보았다. 다음 파트에서는 계속에서 인터럽트와 관련된 내용을 볼 것이다. `setup_arch` 함수의 다음 부분에서 인터럽트 핸들링과 연관된 것들을 이해해보도록 하자.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

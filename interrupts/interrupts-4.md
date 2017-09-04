@@ -29,7 +29,7 @@ do {                                                            \
         _set_gate(n, GATE_INTERRUPT, (void *)addr, 0, 0,        \
                   __KERNEL_CS);                                 \
         _trace_set_gate(n, GATE_INTERRUPT, (void *)trace_##addr,\
-                        0, 0, __KERNEL_CS__);                     \ //TODO 마지막 언더바 두개
+                        0, 0, __KERNEL_CS);                     \
 } while (0)
 ```
 
@@ -51,7 +51,7 @@ enum {
 	...
 	...
 	...
-	X86_TRAP_PF,            /* 14, Page Fault */* // TODO 마지막 별하나
+	X86_TRAP_PF,            /* 14, Page Fault */
 	...
 	...
 	...
@@ -262,16 +262,16 @@ set_intr_gate(X86_TRAP_AC, &alignment_check);
 
 여기서 우리는 다음과 같은 예외 핸들러를 위한 설정을 볼 수 있다.
 
-* `#CSO` or `Coprocessor Segment Overrun` - this exception indicates that math [coprocessor](https://en.wikipedia.org/wiki/Coprocessor) of an old processor detected a page or segment violation. Modern processors do not generate this exception
-* `#TS` or `Invalid TSS` exception - indicates that there was an error related to the [Task State Segment](https://en.wikipedia.org/wiki/Task_state_segment).
-* `#NP` or `Segment Not Present` exception indicates that the `present flag` of a segment or gate descriptor is clear during attempt to load one of `cs`, `ds`, `es`, `fs`, or `gs` register.
-* `#SS` or `Stack Fault` exception indicates one of the stack related conditions was detected, for example a not-present stack segment is detected when attempting to load the `ss` register.
-* `#GP` or `General Protection` exception indicates that the processor detected one of a class of protection violations called general-protection violations. There are many different conditions that can cause general-protection exception. For example loading the `ss`, `ds`, `es`, `fs`, or `gs` register with a segment selector for a system segment, writing to a code segment or a read-only data segment, referencing an entry in the `Interrupt Descriptor Table` (following an interrupt or exception) that is not an interrupt, trap, or task gate and many many more.
-* `Spurious Interrupt` - a hardware interrupt that is unwanted.
-* `#MF` or `x87 FPU Floating-Point Error` exception caused when the [x87 FPU](https://en.wikipedia.org/wiki/X86_instruction_listings#x87_floating-point_instructions) has detected a floating point error.
-* `#AC` or `Alignment Check` exception Indicates that the processor detected an unaligned memory operand when alignment checking was enabled.
+* `#CSO` 또는 `Coprocessor Segment Overrun` - 이 예외는 예전 프로세서의 수치 연산 보조 프로세서가 페이지 또는 세그먼트 위반을 감지했음을 나타낸다. 현대의 프로세서들은 이런 예외는 발생시키지 않는다.
+* `#TS` 또는 `Invalid TSS` 예외 - [Task State5^ Segment](https://en.wikipedia.org/wiki/Task_state_segment) 현관된 에러가 있었다는 것을 나타낸다.
+* `#NP` 또는 `Segment Not Present` 예외 - `cs`, `ds`, `es`, `fs`, 또는 `gs` 레지스터 중 하나가 로드가 시도되는 과정에서 세그먼트나 게이트 디스크립터의 `present flag` 가 클리어 되었음을 나타낸다.
+* `#SS` 또는 `Stack Fault` 예외 - 스택과 관련된 상태가 감지되었을때 발생한다, 예를 들면 `ss` 레지스터가 로드되려 할때, 존재하지 않는 스택 세그먼트가 감지되었을 때 발생한다.
+* `#GP` 또는 `General Protection` 예외 - 일반-보호(general-protection) 위반이라 불리는 보호 계열 중 하나가 감지되었음을 나타낸다. 일반 보호 예외에는 다양한 상태들이 존재한다. 예를 들어 시스템 세그먼크를 위한 세그먼트 셀렉터와 함께 `ss`, `ds`, `es`, `fs`, 또는 `gs` 레지스터를 로딩, 읽기 전용 데이터 세그먼트에 쓰기, 인터럽트가 아닌 상태에서 `Interrupt Descriptor Table` 내에 엔트리를 참조 등이 있다.
+* `Spurious Interrupt` - 원치 않는 하드웨어 인터럽트
+* `#MF` 또는 `x87 FPU Floating-Point Error` 예외 - [x87 FPU](https://en.wikipedia.org/wiki/X86_instruction_listings#x87_floating-point_instructions) 에서 floating point 에러가 검출되면 발생
+* `#AC` 또는 `Alignment Check` 예외 - 정렬 확인(alignment checking) 이 활성화 되어 있을때 정렬되지 않는 메모리 피 연산자가 검출됨을 나타낸다.
 
-After that we setup this exception gates, we can see setup of the `Machine-Check` exception:
+이 예외 게이트들을 설정하고 나면, 우리는 `Machine-Check` 예외를 설정한다.
 
 ```C
 #ifdef CONFIG_X86_MCE
@@ -279,41 +279,41 @@ After that we setup this exception gates, we can see setup of the `Machine-Check
 #endif
 ```
 
-Note that it depends on the `CONFIG_X86_MCE` kernel configuration option and indicates that the processor detected an internal [machine error](https://en.wikipedia.org/wiki/Machine-check_exception) or a bus error, or that an external agent detected a bus error. The next exception gate is for the [SIMD](https://en.wikipedia.org/?title=SIMD) Floating-Point exception:
+`CONFIG_X86_MCE` 커널 구성 옵션에 의존적이라는 것과 내부 [machine error](https://en.wikipedia.org/wiki/Machine-check_exception) 또는 버스 에러(외부 에이전트가 버스 에러를 검출)가 검출하는 것을 알린다. 다음 예외 게이트는 [SIMD](https://en.wikipedia.org/?title=SIMD) floating-point 예외이다.:
 
 ```C
 set_intr_gate(X86_TRAP_XF, &simd_coprocessor_error);
 ```
 
-which indicates the processor has detected an `SSE` or `SSE2` or `SSE3` SIMD floating-point exception. There are six classes of numeric exception conditions that can occur while executing an SIMD floating-point instruction:
+프로세서가 `SSE` or `SSE2` or `SSE3` SIMD floating-point 예외가 검출함을 나타낸다. 여기서 SIMD floating-point 명령어를 수행하는 동안에 발생할 수 있는 숫자의 예외 상태를 가리키는 6개의 클래스가 있다.:
 
-* Invalid operation
-* Divide-by-zero
-* Denormal operand
-* Numeric overflow
-* Numeric underflow
-* Inexact result (Precision)
+* Invalid operation (유효하지 않는 연산)
+* Divide-by-zero (0 으로 나누기)
+* Denormal operand (비정상적 피연산자)
+* Numeric overflow (숫자 오버플로우)
+* Numeric underflow (숫자 언더플로우)
+* Inexact result (Precision) (부정확한 결과)
 
-In the next step we fill the `used_vectors` array which defined in the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/desc.h) header file and represents `bitmap`:
+다음 단계는 [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/desc.h) 헤더 파일에 정의된 `used_vectors` 배열을 채우는데 이는 `bitmap` 의 형태로 관리된다.:
 
 ```C
 DECLARE_BITMAP(used_vectors, NR_VECTORS);
 ```
 
-of the first `32` interrupts (more about bitmaps in the Linux kernel you can read in the part which describes [cpumasks and bitmaps](http://0xax.gitbooks.io/linux-insides/content/Concepts/cpumask.html))
+첫 `32` 개의 인터럽트이다. (리눅스 커널에서 이 비트맵에 관한 자세한 내용은, [cpumask and bitmaps](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/Concepts/cpumask.md) 에서 볼수 있다.)
 
 ```C
 for (i = 0; i < FIRST_EXTERNAL_VECTOR; i++)
 	set_bit(i, used_vectors)
 ```
 
-where `FIRST_EXTERNAL_VECTOR` is:
+`FIRST_EXTERNAL_VECTOR` 은 아래의 값과 같다.:
 
 ```C
 #define FIRST_EXTERNAL_VECTOR           0x20
 ```
 
-After this we setup the interrupt gate for the `ia32_syscall` and add `0x80` to the `used_vectors` bitmap:
+이 다음에는 `ia32_syscall`을 위한 인터럽트 게이트를 설정하고 `used_vectors` 비트맵에 `0x80` 을 더한다.:
 
 ```C
 #ifdef CONFIG_IA32_EMULATION
@@ -322,14 +322,14 @@ After this we setup the interrupt gate for the `ia32_syscall` and add `0x80` to 
 #endif
 ```
 
-There is `CONFIG_IA32_EMULATION` kernel configuration option on `x86_64` Linux kernels. This option provides ability to execute 32-bit processes in compatibility-mode. In the next parts we will see how it works, in the meantime we need only to know that there is yet another interrupt gate in the `IDT` with the vector number `0x80`. In the next step we maps `IDT` to the fixmap area:
+여기서 `CONFIG_IA32_EMULATION` 커널 구성 옵션은 `x86_64` 리눅스 커널에 있는 것이다. 이 옵션은 호완 모드로써 32 비트 프로세스들을 실행할 수 있는 기능을 제공한다. 다음 파트에서 이 것이 어떻게 동작하는지 볼 것이며, 그 동안 우리는 단지 `IDT` 에 벡터 번호 `0x80` 으로 다른 인터럽트 게이트가 있다는 것만 알면된다. 다음 단계에서 우리는 `IDT`를 fixmap 영역으로 맵핑한다.:
 
 ```C
 __set_fixmap(FIX_RO_IDT, __pa_symbol(idt_table), PAGE_KERNEL_RO);
 idt_descr.address = fix_to_virt(FIX_RO_IDT);
 ```
 
-and write its address to the `idt_descr.address` (more about fix-mapped addresses you can read in the second part of the [Linux kernel memory management](http://0xax.gitbooks.io/linux-insides/content/mm/linux-mm-2.html) chapter). After this we can see the call of the `cpu_init` function that defined in the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c). This function makes initialization of the all `per-cpu` state. In the beginning of the `cpu_init` we do the following things: First of all we wait while current cpu is initialized and than we call the `cr4_init_shadow` function which stores shadow copy of the `cr4` control register for the current cpu and load CPU microcode if need with the following function calls:
+그리고 그것의 주소를 `idt_descr.address` 에 넣는다.(fix-mapped 주소에 관련된 내용을 더 읽고 싶다면, [리눅스 커널 메모리 관리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/mm/linux-mm-2.md)의 두번째 파트를 읽어보길 바란다.) 이 다음에는 [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) 에 구현되어 있는 `cpu_init` 함수의 호출을 볼 수 있다. 이 함수는 모든 `per-cpu` 상태의 초기화를 진행한다. `cpu_init` 의 초반에는 다음과 같은 일을 한다: 무엇보다도 먼저 현재 cpu 가 초기화 되는 동안 기다려야 한다. 그다음에 현재 CPU 를 위한 `cr4` 제어 레지스터의 복사본을 저장하는 `cr4_init_shadow` 함수를 호출한다. 그런 다음 이후에 호출되는 함수들이 필요하다면 CPU 마이크로 코드를 로드한다.:
 
 ```C
 wait_for_master_cpu(cpu);
@@ -337,20 +337,20 @@ cr4_init_shadow();
 load_ucode_ap();
 ```
 
-Next we get the `Task State Segment` for the current cpu and `orig_ist` structure which represents origin `Interrupt Stack Table` values with the:
+다음 우리는 현재 cpu 를 위한 `Task State Segment`와 `Interrupt Stack Table` 값을 표현하는 `orig_ist` 를 얻는다.:
 
 ```C
 t = &per_cpu(cpu_tss, cpu);
 oist = &per_cpu(orig_ist, cpu);
 ```
 
-As we got values of the `Task State Segment` and `Interrupt Stack Table` for the current processor, we clear following bits in the `cr4` control register:
+현재 프로세서를 위한 `Task State Segment` 와 `Interrupt Stack Table` 의 값을 얻고 나서, 우리는 `cr4` 제어 레지스터에 있는 특정 비트를 클리어 해줘야한다.:
 
 ```C
 cr4_clear_bits(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
 ```
 
-with this we disable `vm86` extension, virtual interrupts, timestamp ([RDTSC](https://en.wikipedia.org/wiki/Time_Stamp_Counter) can only be executed with the highest privilege) and debug extension. After this we reload the `Global Descriptor Table` and `Interrupt Descriptor table` with the:
+이 클리어하는 비트들은 `vm86` 확장, 가상 인터럽트, 타임스탬프 ([RDTSC](https://en.wikipedia.org/wiki/Time_Stamp_Counter)는 가장 높은 특권에서만 실행될 수 있다.) 그리고 디버그 확장을 위한 것이다. 이 다음에는 `Global Descriptor Table` 와 `Interrupt Descriptor table`를 재 로드한다.:
 
 ```C
 	switch_to_new_gdt(cpu);
@@ -358,7 +358,7 @@ with this we disable `vm86` extension, virtual interrupts, timestamp ([RDTSC](ht
 	load_current_idt();
 ```
 
-After this we setup array of the Thread-Local Storage Descriptors, configure [NX](https://en.wikipedia.org/wiki/NX_bit) and load CPU microcode. Now is time to setup and load `per-cpu` Task State Segments. We are going in a loop through the all exception stack which is `N_EXCEPTION_STACKS` or `4` and fill it with `Interrupt Stack Tables`:
+그런 다음 쓰레드-지역 저장소 기술자(Thread-Local Storage Descriptor) 의 배열을 설정, [NX](https://en.wikipedia.org/wiki/NX_bit) 구성, CPU 마이크로 코드 로드. 이제 `per-cpu` 태스크 상태 세그먼트를 설정하고 로드할 차례이다. 우리는 모든 예외 스택을 순회하며 (`N_EXCEPTION_STACKS` == `4`) `Interrupt Stack Tables`를 채울 것이다.:
 
 ```C
 	if (!oist->ist[0]) {
@@ -374,14 +374,15 @@ After this we setup array of the Thread-Local Storage Descriptors, configure [NX
 	}
 ```
 
-As we have filled `Task State Segments` with the `Interrupt Stack Tables` we can set `TSS` descriptor for the current processor and load it with the:
+이제 `Task State Segments` 를 `Interrupt Stack Tables` 으로 채우고 나면, 현재 프로세서를 위한 `TSS` 기술자(Descriptor)를 설정하고 로드 할 수 있다.:
 
 ```C
 set_tss_desc(cpu, t);
 load_TR_desc();
 ```
 
-where `set_tss_desc` macro from the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h) writes given  descriptor to the `Global Descriptor Table` of the given processor:
+[arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h)에 정의되어 있는 `set_tss_desc` 매크로는 주어진 디스크립터를 주어진 프로세서의 `Global Descriptor Table` 에 쓴다.:
+
 
 ```C
 #define set_tss_desc(cpu, addr) __set_tss_desc(cpu, GDT_ENTRY_TSS, addr)
@@ -396,7 +397,7 @@ static inline void __set_tss_desc(unsigned cpu, unsigned int entry, void *addr)
 }
 ```
 
-and `load_TR_desc` macro expands to the `ltr` or `Load Task Register` instruction:
+그리고 `load_TR_desc` 매크로 호출로 `ltr` 또는 `Load Task Register` 명령어러를 수행한다.:
 
 ```C
 #define load_TR_desc()                          native_load_tr_desc()
@@ -406,7 +407,7 @@ static inline void native_load_tr_desc(void)
 }
 ```
 
-In the end of the `trap_init` function we can see the following code:
+`trap_init` 함수 마지막 부분에는 아래와 같은 코드들을 볼 수 있다.:
 
 ```C
 set_intr_gate_ist(X86_TRAP_DB, &debug, DEBUG_STACK);
@@ -421,18 +422,18 @@ set_system_intr_gate_ist(X86_TRAP_BP, &int3, DEBUG_STACK);
 #endif
 ```
 
-Here we copy `idt_table` to the `nmi_dit_table` and setup exception handlers for the `#DB` or `Debug exception` and `#BR` or `Breakpoint exception`. You can remember that we already set these interrupt gates in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-3.html), so why do we need to setup it again? We setup it again because when we initialized it before in the `early_trap_init` function, the `Task State Segment` was not ready yet, but now it is ready after the call of the `cpu_init` function.
+여기서 우리는 `idt_table` 를 `nmi_dit_table` 로 복사하고 `#DB`(`Debug exception`) 와 `#BR`(`Breakpoint exception`) 를 위한 예외 핸들러를 설정한다. 당신은 우리가 이미 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-3.md)에서 이런 인터럽트 게이트들을 설정하는 것을 보았을 텐데, 왜 이런일을 또 하는 것일까? `early_trap_init` 함수 전에 그것을 초기화 할때, `Task State Segment` 가 아직 준비가 되어 있지 않았기 때문에, 다시 설정하여 `cpu_init` 함수의 호출이후에는 완전히 준비가 되게 한다.
 
-That's all. Soon we will consider all handlers of these interrupts/exceptions.
+끝이다. 이제 우리는 인터럽트/예외의 모든 핸들러를 고려해 볼 것이다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the fourth part about interrupts and interrupt handling in the Linux kernel. We saw the initialization of the [Task State Segment](https://en.wikipedia.org/wiki/Task_state_segment) in this part and initialization of the different interrupt handlers as `Divide Error`, `Page Fault` exception and etc. You can note that we saw just initialization stuff, and will dive into details about handlers for these exceptions. In the next part we will start to do it.
+리눅스 커널의 인터럽트와 인터럽트 핸들러 관련하여 4번째 파트가 끝이 났다. 우리는 이 파트에서 [Task State Segment](https://en.wikipedia.org/wiki/Task_state_segment) 의 초기화를 보았고 `Divide Error`, `Page Fault` 예외 등의 인터럽트 핸들러의 초기화도 보았다. 당신은 단지 초기화 관련해서 본 것이고 이 예외들을 위한 핸들러들의 자세한 사항은 다음 파트에서 시작해볼 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

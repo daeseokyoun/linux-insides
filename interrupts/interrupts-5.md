@@ -1,10 +1,10 @@
-Interrupts and Interrupt Handling. Part 5.
+인터럽트와 인터럽트 핸들링. Part 5.
 ================================================================================
 
-Implementation of exception handlers
+예외 핸들러의 구현
 --------------------------------------------------------------------------------
 
-This is the fifth part about an interrupts and exceptions handling in the Linux kernel and in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-4.html) we stopped on the setting of interrupt gates to the [Interrupt descriptor Table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table). We did it in the `trap_init` function from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c) source code file. We saw only setting of these interrupt gates in the previous part and in the current part we will see implementation of the exception handlers for these gates. The preparation before an exception handler will be executed is in the [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) assembly file and occurs in the [idtentry](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S#L820) macro that defines exceptions entry points:
+이 문서는 리눅스 커널의 인터럽트와 예외 처리를 위한 5번째 파트이고 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-4.md) 에서는 인터럽트 게이트를 [Interrupt descriptor Table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table)에 설정하는 부분에서 마무리되었다. 우리는 그 설정을 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c) 파일의 `trap_init` 함수에서 진행했었다. 우리는 이전 파트에서는 이런 인터럽트의 설정 부분만 보았지만 현재 파트에서는 이런 게이트들을 위한 예외 처리 핸들러의 구현을 보게될 것이다. 예외 처리 핸들러가 수행되기 전의 준비는 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 어셈블리 파일에 있고 예외처리 엔트리 포인트를 정의하는 [idtentry](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S#L820) 매크로에서 발생한다.:
 
 ```assembly
 idtentry divide_error			        do_divide_error			       has_error_code=0
@@ -21,7 +21,7 @@ idtentry alignment_check		        do_alignment_check		       has_error_code=1
 idtentry simd_coprocessor_error		    do_simd_coprocessor_error	   has_error_code=0
 ```
 
-The `idtentry` macro does following preparation before an actual exception handler (`do_divide_error` for the `divide_error`, `do_overflow` for the `overflow` and etc.) will get control. In another words the `idtentry` macro allocates place for the registers ([pt_regs](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/ptrace.h#L43) structure) on the stack, pushes dummy error code for the stack consistency if an interrupt/exception has no error code, checks the segment selector in the `cs` segment register and switches depends on the previous state(userspace or kernelspace). After all of these preparations it makes a call of an actual interrupt/exception handler:
+`idtentry` 매크로는 실제 예외 핸들러가 제어를 넘겨 받기 전에 다음과 같은 준비를 한다.(`divide_error`를 위한 `do_divide_error`,`overflow`를 위한 `do_overflow`과 같은) 그 준비 작업은 스택에 레지스터 저장을 위한 공간을 할당, 만약 인터럽트/예외가 에러코드를 가지지 않는다면, 스택 일관성(stack consistency)을 위해 가짜의 에러코드를 넣고, `cs` 세그먼트 레지스터에 세그머트 셀렉터를 확인 그리고 이전 상태의 의존적인 전환을 하게 된다.(사용자 영역 또는 커널 영역) 이 모든 준비 후에 실제 인터럽트/예외 핸들러의 호출을 가능하게 한다.:
 
 ```assembly
 .macro idtentry sym do_sym has_error_code:req paranoid=0 shift_ist=-1
@@ -37,7 +37,7 @@ END(\sym)
 .endm
 ```
 
-After an exception handler will finish its work, the `idtentry` macro restores stack and general purpose registers of an interrupted task and executes [iret](http://x86.renejeschke.de/html/file_module_x86_id_145.html) instruction:
+예외 핸들러가 자신의 일을 마무리하고 나면, `idtentry` 매크로는 인터럽트된 태스크의 스택과 범용 레지스터를 복구하고 [iret](http://x86.renejeschke.de/html/file_module_x86_id_145.html) 명령어를 수행한다.:
 
 ```assembly
 ENTRY(paranoid_exit)
@@ -51,7 +51,7 @@ ENTRY(paranoid_exit)
 END(paranoid_exit)
 ```
 
-where `INTERRUPT_RETURN` is:
+`INTERRUPT_RETURN` 는 아래와 같이 선언:
 
 ```assembly
 #define INTERRUPT_RETURN	jmp native_iret
@@ -62,7 +62,7 @@ native_irq_return_iret:
 iretq
 ```
 
-More about the `idtentry` macro you can read in the third part of the [http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-3.html](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-3.html) chapter. Ok, now we saw the preparation before an exception handler will be executed and now time to look on the handlers. First of all let's look on the following handlers:
+`idtentry` 매크로에 대해 조금더 자세한 사항은 [3번째 파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-3.md)를 읽어보길 바란다. 좋다. 우리는 예외 핸들러가 수행하기 전에 준비작업을 살펴보았고 이제 핸들러 내부를 보도록 하자. 우리는 다음과 같은 핸들러를 살펴 볼것이다.:
 
 * divide_error
 * overflow
@@ -73,7 +73,7 @@ More about the `idtentry` macro you can read in the third part of the [http://0x
 * stack_segment
 * alignment_check
 
-All these handlers defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) source code file with the `DO_ERROR` macro:
+이 모든 핸들러들은 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c)에 `DO_ERROR` 매크로로 선언되어 있다.
 
 ```C
 DO_ERROR(X86_TRAP_DE,     SIGFPE,  "divide error",                divide_error)
@@ -84,16 +84,16 @@ DO_ERROR(X86_TRAP_TS,     SIGSEGV, "invalid TSS",                 invalid_TSS)
 DO_ERROR(X86_TRAP_NP,     SIGBUS,  "segment not present",         segment_not_present)
 DO_ERROR(X86_TRAP_SS,     SIGBUS,  "stack segment",               stack_segment)
 DO_ERROR(X86_TRAP_AC,     SIGBUS,  "alignment check",             alignment_check)
-``` 
+```
 
-As we can see the `DO_ERROR` macro takes 4 parameters:
+`DO_ERROR` 는 4개의 인자를 받는다.:
 
-* Vector number of an interrupt;
-* Signal number which will be sent to the interrupted process;
-* String which describes an exception;
-* Exception handler entry point.
+* 인터럽트 벡터 번호
+* 인터럽트된 프로세스에게 보내어질 시그널 번호
+* 예외를 설명하는 문자열
+* 예외 핸들러의 엔트리 포인트
 
-This macro defined in the same source code file and expands to the function with the `do_handler` name:
+이 매크로는 같은 소스파일에 있으며, `do_<핸들러 이름>` 으로 확장된다.:
 
 ```C
 #define DO_ERROR(trapnr, signr, str, name)                              \
@@ -103,7 +103,7 @@ dotraplinkage void do_##name(struct pt_regs *regs, long error_code)     \
 }
 ```
 
-Note on the `##` tokens. This is special feature - [GCC macro Concatenation](https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html#Concatenation) which concatenates two given strings. For example, first `DO_ERROR` in our example will expands to the:
+`##` 토큰에 주목해보자. 이것은 주어진 두개의 문자열을 연결하는 [GCC macro Concatenation](https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html#Concatenation) 이다. 예를 들어, 우리의 경우에서 첫 `DO_ERROR` 를 예제로 들면:
 
 ```C
 dotraplinkage void do_divide_error(struct pt_regs *regs, long error_code)     \
@@ -112,12 +112,12 @@ dotraplinkage void do_divide_error(struct pt_regs *regs, long error_code)     \
 }
 ```
 
-We can see that all functions which are generated by the `DO_ERROR` macro just make a call of the `do_error_trap` function from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c). Let's look on implementation of the `do_error_trap` function.
+우리는 `DO_ERROR` 매크로로 생성된 모든 함수는 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c)에 있는 `do_error_trap` 함수를 호출한다는 것을 알 수 있다. `do_error_trap` 함수의 구현을 살펴보자.
 
-Trap handlers
+트랩 핸들러(Trap handlers)
 --------------------------------------------------------------------------------
 
-The `do_error_trap` function starts and ends from the two following functions:
+`do_error_trap` 함수는 아래 두 함수를 시작과 끝에 사용한다.:
 
 ```C
 enum ctx_state prev_state = exception_enter();
@@ -127,7 +127,7 @@ enum ctx_state prev_state = exception_enter();
 exception_exit(prev_state);
 ```
 
-from the [include/linux/context_tracking.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking.h). The context tracking in the Linux kernel subsystem which provide kernel boundaries probes to keep track of the transitions between level contexts with two basic initial contexts: `user` or `kernel`. The `exception_enter` function checks that context tracking is enabled. After this if it is enabled, the `exception_enter` reads previous context and compares it with the `CONTEXT_KERNEL`. If the previous context is `user`, we call `context_tracking_exit` function from the [kernel/context_tracking.c](https://github.com/torvalds/linux/blob/master/kernel/context_tracking.c) which inform the context tracking subsystem that a processor is exiting user mode and entering the kernel mode:
+이 두 함수는 [include/linux/context_tracking.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking.h) 에 선언되어 있다. 커널 경계를 제공하는 리눅스 커널내의 문맥 추적은 `사용자` 혹은 `커널` 과 같은 기본적인 문맥에서 레벨 문맥 사이의 전환의 추적을 유지하기 위한것이다. `exception_enter` 함수는 문맥 추적 기능이 활성화 되어 있는지 확인한다. 만약 그것이 활성화 되어 있다면, `exception_enter` 는 이전 문맥을 읽고 `CONTEXT_KERNEL` 와 비교한다. 만약 이전 문맥이 `사용자` 문맥이라면, 우리는 프로세서가 사용자 영역을 빠져나와 커널 영역으로 진입한다는 것을 문맥 추적 서브 시스템에 알려주는 [kernel/context_tracking.c](https://github.com/torvalds/linux/blob/master/kernel/context_tracking.c) 소스 코드에 구현된 `context_tracking_exit` 함수를 호출한다.:
 
 ```C
 if (!context_tracking_is_enabled())
@@ -140,7 +140,7 @@ if (prev_ctx != CONTEXT_KERNEL)
 return prev_ctx;
 ```
 
-If previous context is non `user`, we just return it. The `pre_ctx` has `enum ctx_state` type which defined in the [include/linux/context_tracking_state.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking_state.h) and looks as:
+만약 이전 문맥이 `사용자`가 아니라면, 우리는 그냥 그 문맥을 반환한다. `pre_ctx` 은 [include/linux/context_tracking_state.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking_state.h) 에 선언된 `enum ctx_state` 타입을 갖고 있으며, 아래와 같다.:
 
 ```C
 enum ctx_state {
@@ -150,7 +150,7 @@ enum ctx_state {
 } state;
 ```
 
-The second function is `exception_exit` defined in the same [include/linux/context_tracking.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking.h) file and checks that context tracking is enabled and call the `contert_tracking_enter` function if the previous context was `user`:
+두 번째 함수는 [include/linux/context_tracking.h](https://github.com/torvalds/linux/tree/master/include/linux/context_tracking.h) 에 구현된 `exception_exit` 이고 문맥 추적이 활성화 되어 있는지 확인하고 이전 문맥이 `사용자`였다면 `context_tracking_enter` 함수를 호출한다.:
 
 ```C
 static inline void exception_exit(enum ctx_state prev_ctx)
@@ -162,7 +162,7 @@ static inline void exception_exit(enum ctx_state prev_ctx)
 }
 ```
 
-The `context_tracking_enter` function informs the context tracking subsystem that a processor is going to enter to the user mode from the kernel mode. We can see the following code between the `exception_enter` and `exception_exit`:
+`context_tracking_enter` 함수는 프로세서가 커널 모드에서 사용자 모드로 진입할 것이라는 것을 문맥 추적 서브시스템에 알려준다. 우리는 `exception_enter` 와 `exception_exit` 사이에 아래와 같은 코드가 있는 것을 볼 수 있다.:
 
 ```C
 if (notify_die(DIE_TRAP, str, regs, error_code, trapnr, signr) !=
@@ -173,7 +173,7 @@ if (notify_die(DIE_TRAP, str, regs, error_code, trapnr, signr) !=
 }
 ```
 
-First of all it calls the `notify_die` function which defined in the [kernel/notifier.c](https://github.com/torvalds/linux/tree/master/kernel/notifier.c). To get notified for [kernel panic](https://en.wikipedia.org/wiki/Kernel_panic), [kernel oops](https://en.wikipedia.org/wiki/Linux_kernel_oops), [Non-Maskable Interrupt](https://en.wikipedia.org/wiki/Non-maskable_interrupt) or other events the caller needs to insert itself in the `notify_die` chain and the `notify_die` function does it. The Linux kernel has special mechanism that allows kernel to ask when something happens and this mechanism called `notifiers` or `notifier chains`. This mechanism used for example for the `USB` hotplug events (look on the [drivers/usb/core/notify.c](https://github.com/torvalds/linux/tree/master/drivers/usb/core/notify.c)), for the memory [hotplug](https://en.wikipedia.org/wiki/Hot_swapping) (look on the [include/linux/memory.h](https://github.com/torvalds/linux/tree/master/include/linux/memory.h), the `hotplug_memory_notifier` macro and etc...), system reboots and etc. A notifier chain is thus a simple, singly-linked list. When a Linux kernel subsystem wants to be notified of specific events, it fills out a special `notifier_block` structure and passes it to the `notifier_chain_register` function. An event can be sent with the call of the `notifier_call_chain` function. First of all the `notify_die` function fills `die_args` structure with the trap number, trap string, registers and other values:
+첫 번째로 보이는 호출은 `notify_die` 함수인데 [kernel/notifier.c](https://github.com/torvalds/linux/tree/master/kernel/notifier.c) 에 구현되어 있다. [kernel panic](https://en.wikipedia.org/wiki/Kernel_panic), [kernel oops](https://en.wikipedia.org/wiki/Linux_kernel_oops), [Non-Maskable Interrupt](https://en.wikipedia.org/wiki/Non-maskable_interrupt) 또는 다른 이벤트의 호출자를 위한 알림을 받기 위해서는 `notify_die` 체인을 직접 넣어줄 필요가 있고 `notify_die` 함수가 그 일을 해준다. 리눅스 커널은 어떤 일이 언제 일어났는지 커널에게 요청하는 것을 허용하는 특별한 매커니즘이 있고 이를 `notifiers` 혹은 `notifier chains` 이라 부른다. 이 매커니즘을 위한 가장 좋은 예제는 `USB` hotplug 이벤트, ([drivers/usb/core/notify.c](https://github.com/torvalds/linux/tree/master/drivers/usb/core/notify.c)를 보면 된다.), 메모리 [hotplug](https://en.wikipedia.org/wiki/Hot_swapping) -([include/linux/memory.h](https://github.com/torvalds/linux/tree/master/include/linux/memory.h) 을 보면, `hotplug_memory_notifier` 매크로 등등이 있다.), 시스템 리부팅 등이 있다. notifier chain 은 간단하며, 단일 연결리스트이다. 리눅스 커널 서브시스템이 특정 이벤트의 알림을 받기 원할 때, 그것은 `notifier_block` 구조체에 내요을 채우고 `notifier_chain_register` 함수로 넘겨준다. 하나의 이벤트는 `notifier_call_chain` 의 호출과 함께 전달 될 수 있다. `notify_die` 함수는 트랩 번호, 레지스터들과 다른 몇몇의 값을 `die_args`에 채운다.:
 
 ```C
 struct die_args args = {
@@ -185,23 +185,23 @@ struct die_args args = {
 }
 ```
 
-and returns the result of the `atomic_notifier_call_chain` function with the `die_chain`:
+그리고 `die_chain` 과 함께 `atomic_notifier_call_chain` 함수의 결과를 반환한다.:
 
 ```C
 static ATOMIC_NOTIFIER_HEAD(die_chain);
 return atomic_notifier_call_chain(&die_chain, val, &args);
 ```
 
-which just expands to the `atomic_notifier_head` structure that contains lock and `notifier_block`:
+이것은 단순히 lock 과 `notifier_block`을 가지는 `atomic_notifier_head` 구조체를 확장한다.:
 
 ```C
 struct atomic_notifier_head {
         spinlock_t lock;
-        struct notifier_block __rcu *head;
+        struct notifier_block __rcu__ *head*; // TODO rcu 뒤에 언더바 두개, head 뒤에 별하나
 };
 ```
 
-The `atomic_notifier_call_chain` function calls each function in a notifier chain in turn and returns the value of the last notifier function called. If the `notify_die` in the `do_error_trap` does not return `NOTIFY_STOP` we execute `conditional_sti` function from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) that checks the value of the [interrupt flag](https://en.wikipedia.org/wiki/Interrupt_flag) and enables interrupt depends on it:
+`atomic_notifier_call_chain` 함수는 차례로 notifier chain 에 있는 각 함수들을 호출하고 마지막 호출된 notifier 함수의 값을 반환한다. 만약 `do_error_trap` 내에 `notify_die` 가 `NOTIFY_STOP` 를 반환하지 않는다면, 우리는 [interrupt flag](https://en.wikipedia.org/wiki/Interrupt_flag) 값을 확인하고 필요하다면 인터럽트를 활성화하는 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c)에 구현된 `conditional_sti` 함수를 수행한다.:
 
 ```C
 static inline void conditional_sti(struct pt_regs *regs)
@@ -211,7 +211,7 @@ static inline void conditional_sti(struct pt_regs *regs)
 }
 ```
 
-more about `local_irq_enable` macro you can read in the second [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-2.html) of this chapter. The next and last call in the `do_error_trap` is the `do_trap` function. First of all the `do_trap` function defined the `tsk` variable which has `task_struct` type and represents the current interrupted process. After the definition of the `tsk`, we can see the call of the `do_trap_no_signal` function:
+`local_irq_enable` 매크로에 대해 더 자세히 알고 싶다면 인터럽트 두번째 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-2.md) 를 읽어보길 바란다. `do_error_trap` 함수에서 마지막으로 호출되는 `do_trap` 함수를 보자. `do_trap` 함수는 `task_struct` 구조체 타입인 `tsk`를 선언하고 현재 인터럽트된 프로세스를 할당한다. `tsk`의 선언 후에는, `do_trap_no_signal` 함수의 호출을 볼 수 있다.:
 
 ```C
 struct task_struct *tsk = current;
@@ -220,10 +220,10 @@ if (!do_trap_no_signal(tsk, trapnr, str, regs, error_code))
 	return;
 ```
 
-The `do_trap_no_signal` function makes two checks:
+`do_trap_no_signal` 함수는 두가지의 확인을 한다.:
 
-* Did we come from the [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) mode;
-* Did we come from the kernelspace.
+* [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) 모드에서 부터 왔는지
+* 커널 영역에서 부터 왔는지
 
 ```C
 if (v8086_mode(regs)) {
@@ -237,7 +237,7 @@ if (!user_mode(regs)) {
 return -1;
 ```
 
-We will not consider first case because the [long mode](https://en.wikipedia.org/wiki/Long_mode) does not support the [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) mode. In the second case we invoke `fixup_exception` function which will try to recover a fault and `die` if we can't:
+우리는 첫 번째 확인은 고려하지 않을 것이다. 왜냐하면 [long mode](https://en.wikipedia.org/wiki/Long_mode) 는 [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) 를 지원하지 않기 때문이다. 두 번째 경우는 fault 를 복구하려고 시도하고 복구가 안된다면 `die`를 호출하는 `fixup_exception` 함수를 실행한다.:
 
 ```C
 if (!fixup_exception(regs)) {
@@ -247,14 +247,14 @@ if (!fixup_exception(regs)) {
 }
 ```
 
-The `die` function defined in the [arch/x86/kernel/dumpstack.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/dumpstack.c) source code file, prints useful information about stack, registers, kernel modules and caused kernel [oops](https://en.wikipedia.org/wiki/Linux_kernel_oops). If we came from the userspace the `do_trap_no_signal` function will return `-1` and the execution of the `do_trap` function will continue. If we passed through the `do_trap_no_signal` function and did not exit from the `do_trap` after this, it means that previous context was - `user`.  Most exceptions caused by the processor are interpreted by Linux as error conditions, for example division by zero, invalid opcode and etc. When an exception occurs the Linux kernel sends a [signal](https://en.wikipedia.org/wiki/Unix_signal) to the interrupted process that caused the exception to notify it of an incorrect condition. So, in the `do_trap` function we need to send a signal with the given number (`SIGFPE` for the divide error, `SIGILL` for the overflow exception and etc...). First of all we save error code and vector number in the current interrupts process with the filling `thread.error_code` and `thread_trap_nr`:
+`die` 함수는 [arch/x86/kernel/dumpstack.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/dumpstack.c) 소스 코드 파일에 구현되어 있고, 스택, 레지스터, 커널 모듈들과 야기된 커널 [oops](https://en.wikipedia.org/wiki/Linux_kernel_oops) 관련 유용한 정보를 출력한다. 만약 사용자 영역으로 부터 왔다면, `do_trap_no_signal` 함수는 `-1`을 반환할 것이고 `do_trap` 함수의 실행을 계속할 것이다. 만약 우리가 `do_trap_no_signal` 함수를 지나왔고 `do_trap`으로 부터 빠져나오지 않았다면, 그것은 이전 문맥이 `사용자`였다는 것을 의미한다. 프로세서에 의해 야기된 대부분의 예외는 에러 상태의 리눅스에 의해 처리 될 수 있는데, 예를 들면 0으로 나누기, 유효하지 않는 명령코드(opcode) 등이 있다. 예외가 발생할 때, 리눅스 커널은 [signal](https://en.wikipedia.org/wiki/Unix_signal) 을 예외가 발생한 인터럽트된 프로세스에게 전달하여 적절치 않은 상태에 대한 통보를 한다. 그래서, `do_trap`함수에서 주어진 번호와 함께 시그널을 전달할 필요가 있다.(0으로 나누기에 대한 `SIGFPE`, 오버플로우 예외를 위한 `SIGILL` 등) 무엇보다도 먼저 `thread.error_code` 와 `thread_trap_nr` 을 값을 현재 인터럽트된 프로세스에 에러 코드와 벡터 번호를 저장한다.:
 
 ```C
 tsk->thread.error_code = error_code;
 tsk->thread.trap_nr = trapnr;
 ```
 
-After this we make a check do we need to print information about unhandled signals for the interrupted process. We check that `show_unhandled_signals` variable is set, that `unhandled_signal` function from the [kernel/signal.c](https://github.com/torvalds/linux/blob/master/kernel/signal.c) will return unhandled signal(s) and [printk](https://en.wikipedia.org/wiki/Printk) rate limit:
+우리는 `show_unhandled_signals` 설정되어 있는지 확인, [kernel/signal.c](https://github.com/torvalds/linux/blob/master/kernel/signal.c) 에 있는 처리하지 못한 시그널(들)을 반환하는 `unhandled_signal` 함수가 반환하는 값 확인 그리고 [printk](https://en.wikipedia.org/wiki/Printk) rate 제한을 확인하여 인터럽트된 프로세스를 위해 처리하지 못한 시그널에 관련된 정보를 출력한다.:
 
 ```C
 #ifdef CONFIG_X86_64
@@ -269,13 +269,13 @@ After this we make a check do we need to print information about unhandled signa
 #endif
 ```
 
-And send a given signal to interrupted process:
+그리고 주어진 시그널을 인터럽트된 프로세스에게 전달한다.:
 
 ```C
 force_sig_info(signr, info ?: SEND_SIG_PRIV, tsk);
 ```
 
-This is the end of the `do_trap`. We just saw generic implementation for eight different exceptions which are defined with the `DO_ERROR` macro. Now let's look on another exception handlers.
+`do_trap`가 마무리 되었다. 우리는 단지 위에서 `DO_ERROR` 매크로로 선언한 8 개의 다른 예외를 위한 일반적인 구현을 보았다. 이제 다른 예외 처리 핸들러를 살펴보자.
 
 Double fault
 --------------------------------------------------------------------------------

@@ -280,26 +280,26 @@ force_sig_info(signr, info ?: SEND_SIG_PRIV, tsk);
 Double fault
 --------------------------------------------------------------------------------
 
-The next exception is `#DF` or `Double fault`. This exception occurs when the processor detected a second exception while calling an exception handler for a prior exception. We set the trap gate for this exception in the previous part:
+다음 예외는 `#DF`/`Double fault` 이다. 이 예외는 프로세서가 이전 예외 처리를 하는 동안에 두 번째 예외가 발견되면 발생한다. 우리는 이전 파트에서 이 예외를 위한 트랩 게이트를 설정했다.:
 
 ```C
 set_intr_gate_ist(X86_TRAP_DF, &double_fault, DOUBLEFAULT_STACK);
 ```
 
-Note that this exception runs on the `DOUBLEFAULT_STACK` [Interrupt Stack Table](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks) which has index - `1`:
+이 예외는 인덱스가 `1` 인 `DOUBLEFAULT_STACK` [Interrupt Stack Table](https://www.kernel.org/doc/Documentation/x86/x86_64/kernel-stacks) 에서 수행된다.:
 
 ```C
 #define DOUBLEFAULT_STACK 1
 ```
 
-The `double_fault` is handler for this exception and defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c). The `double_fault` handler starts from the definition of two variables: string that describes exception and interrupted process, as other exception handlers:
+`double_fault` 는 이 예외를 위한 핸들러이고 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c)에 구현되어 있다. `double_fault` 핸들러는 두 개의 변수를 선언하는 것부터 시작한다.: 예외를 기술하는 문자열과 현재 인터럽트된 프로세스:
 
 ```C
 static const char str[] = "double fault";
 struct task_struct *tsk = current;
 ```
 
-The handler of the double fault exception split on two parts. The first part is the check which checks that a fault is a `non-IST` fault on the `espfix64` stack. Actually the `iret` instruction restores only the bottom `16` bits when returning to a `16` bit segment. The `espfix` feature solves this problem. So if the `non-IST` fault on the espfix64 stack we modify the stack to make it look like `General Protection Fault`:
+double fault 예외의 핸들러는 두 부분으로 분리된다. 첫 번째 부분은 발생한 폴트가 `espfix64` 스택에서 일어나는 `non-IST` 폴트인지 확인한다. 실제 `iret` 명령어는 `16` 비트 세그먼트로 반환될 때, 단지 하위 `16` 비트만을 복구한다. `espfix` 기능은 이 문제를 해결할 수 있다. 그래서 만약 espfix64 스택의 `non-IST` 폴트라면, 우리는 스택을 수정하여 그것을 `General Protection Fault` 로 보이게 한다.:
 
 ```C
 struct pt_regs *normal_regs = task_pt_regs(current);
@@ -311,20 +311,20 @@ regs->sp = (unsigned long)&normal_regs->orig_ax;
 return;
 ```
 
-In the second case we do almost the same that we did in the previous exception handlers. The first is the call of the `ist_enter` function that discards previous context, `user` in our case:
+두 번째 경우는 이전 예외 핸들러 내에서 했던 것과 거의 같은 일을 한다. 첫번째는 이전 문맥을 버리는 `ist_enter` 함수의 호출이 있다. 우리의 경우는 `사용자` 문맥이다.:
 
 ```C
 ist_enter(regs);
 ```
 
-And after this we fill the interrupted process with the vector number of the `Double fault` exception and error code as we did it in the previous handlers:
+그리고 나서 우리는 이전 핸들러내에서 했던 것과 같은 `Double fault` 예외의 벡터 번호와 에러코드를 인터럽트된 프로세스에 채운다.:
 
 ```C
 tsk->thread.error_code = error_code;
 tsk->thread.trap_nr = X86_TRAP_DF;
 ```
 
-Next we print useful information about the double fault ([PID](https://en.wikipedia.org/wiki/Process_identifier) number, registers content):
+다음에는 double fault 에 관련된 유용한 정보를 출력한다.([PID](https://en.wikipedia.org/wiki/Process_identifier) 번호, 레지스터 내용):
 
 ```C
 #ifdef CONFIG_DOUBLEFAULT
@@ -332,25 +332,25 @@ Next we print useful information about the double fault ([PID](https://en.wikipe
 #endif
 ```
 
-And die:
+그리고 die 를 호출한다.:
 
 ```
 	for (;;)
 		die(str, regs, error_code);
 ```
 
-That's all.
+이상이다.
 
-Device not available exception handler
+장치가 가용하지 않을 때 발생하는 예외 핸들러
 --------------------------------------------------------------------------------
 
-The next exception is the `#NM` or `Device not available`. The `Device not available` exception can occur depending on these things:
+다음 살펴볼 예외는 `#NM`/`Device not available`. `Device not available` 예외는 아래와 같은 것들에 의존적으로 발생할 수 있다.:
 
-* The processor executed an [x87 FPU](https://en.wikipedia.org/wiki/X87) floating-point instruction while the EM flag in [control register](https://en.wikipedia.org/wiki/Control_register) `cr0` was set;
-* The processor executed a `wait` or `fwait` instruction while the `MP` and `TS` flags of register `cr0` were set;
-* The processor executed an [x87 FPU](https://en.wikipedia.org/wiki/X87), [MMX](https://en.wikipedia.org/wiki/MMX_%28instruction_set%29) or [SSE](https://en.wikipedia.org/wiki/Streaming_SIMD_Extensions) instruction while the `TS` flag in control register `cr0` was set and the `EM` flag is clear.
+* [control register](https://en.wikipedia.org/wiki/Control_register) `cr0` 에 EM 플래그가 설정되어 있는 상태에서 [x87 FPU](https://en.wikipedia.org/wiki/X87)  floating-point 명령이 프로세서에서 실행되는 경우.
+* `cr0` 레지스터에서 `MP`와 `TS` 플래그가 설정되어 있는데, `wait` 또는 `fwait` 명령이 프로세서에서 수행될 때
+* `cr0` 레지스터에서 `TS` 플래그가 설정되어 있고 `EM` 플래그가 설정되어 있지 않는 상태에서 [x87 FPU](https://en.wikipedia.org/wiki/X87), [MMX](https://en.wikipedia.org/wiki/MMX_%28instruction_set%29) 나 [SSE](https://en.wikipedia.org/wiki/Streaming_SIMD_Extensions) 명령이 프로세서에서 수행될 때
 
-The handler of the `Device not available` exception is the `do_device_not_available` function and it defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c) source code file too. It starts and ends from the getting of the previous context, as other traps which we saw in the beginning of this part:
+`Device not available` 예외의 핸들러는 `do_device_not_available` 함수이고 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c) 소스 파일에 구현되어 있다. 그것은 이 파트의 앞부분에서 보았던 이전 문맥을 얻는 것에서 부터 시작하고 끝내는 것을 아래와 같이 한다.:
 
 ```C
 enum ctx_state prev_state;
@@ -361,7 +361,7 @@ prev_state = exception_enter();
 exception_exit(prev_state);
 ```
 
-In the next step we check that `FPU` is not eager:
+다음 단계는 FPU 의 사용이 eagar(열망하는) 한지 아닌지 확인한다.:
 
 ```C
 BUG_ON(use_eager_fpu());

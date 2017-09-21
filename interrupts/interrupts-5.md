@@ -367,7 +367,7 @@ exception_exit(prev_state);
 BUG_ON(use_eager_fpu());
 ```
 
-When we switch into a task or interrupt we may avoid loading the `FPU` state. If a task will use it, we catch `Device not Available exception` exception. If we loading the `FPU` state during task switching, the `FPU` is eager. In the next step we check `cr0` control register on the `EM` flag which can show us is `x87` floating point unit present (flag clear) or not (flag set):
+우리가 태스크나 인터럽트로의 전환이 될 때, `FPU` 상태의 로딩을 피하고 싶은 것이다. 만약 태스가 그것을 사용하고 있다면, 우리는 `Device not Available exception` 예외를 받을 것이다. 만약 태스크 전환중에 `FPU` 상태를 로드하면, `FPU`는 `eager` 상태이다. 다음 단계는 `cr0` 제어 레지스터를 확인하여 `x87` floating point 유닛의 상태를 보여주는 `EM` 플래그가 설정되어 있는지 아닌지 본다.:
 
 ```C
 #ifdef CONFIG_MATH_EMULATION
@@ -384,7 +384,7 @@ When we switch into a task or interrupt we may avoid loading the `FPU` state. If
 #endif
 ```
 
-If the `x87` floating point unit not presented, we enable interrupts with the `conditional_sti`, fill the `math_emu_info` (defined in the [arch/x86/include/asm/math_emu.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/math_emu.h)) structure with the registers of an interrupt task and call `math_emulate` function from the [arch/x86/math-emu/fpu_entry.c](https://github.com/torvalds/linux/tree/master/arch/x86/math-emu/fpu_entry.c). As you can understand from function's name, it emulates `X87 FPU` unit (more about the `x87` we will know in the special chapter). In other way, if `X86_CR0_EM` flag is clear which means that `x87 FPU` unit is presented, we call the `fpu__restore` function from the [arch/x86/kernel/fpu/core.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/fpu/core.c) which copies the `FPU` registers from the `fpustate` to the live hardware registers. After this `FPU` instructions can be used:
+만약 `x87` floating point 유닛이 작동하지 않는다면, 우리는 `conditional_sti` 로 인터럽트를 활성화 하고, `math_emu_info` 구조체([arch/x86/include/asm/math_emu.h](https://github.com/torvalds/linux/tree/master/arch/x86/include/asm/math_emu.h) 에 선언)를 인터럽트 태스크의 레지스터로 채우고, [arch/x86/math-emu/fpu_entry.c](https://github.com/torvalds/linux/tree/master/arch/x86/math-emu/fpu_entry.c) 에 있는 `math_emulate` 함수를 호출한다. 함수 이름에서 부터 유추 가능할 것인 이 함수는 `X87 FPU` 유닛을 에뮬레이트한다. 다른 말로는, 만약 `X87 FPU` 유닛이 사용상태인 `X86_CR0_EM` 플래그가 설정되어 있지 않는다면, 우리는 `fpustate` 로 `FPU` 레지스터를 실제 하드웨어 레지스터에 복사하는 [arch/x86/kernel/fpu/core.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/fpu/core.c)에 구현되어 있는 `fpu__restore` 함수를 호출한다. 이후에 `FPU` 명령어는 사용 가능하다.:
 
 ```C
 fpu__restore(&current->thread.fpu);

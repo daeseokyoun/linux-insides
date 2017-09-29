@@ -390,17 +390,17 @@ BUG_ON(use_eager_fpu());
 fpu__restore(&current->thread.fpu);
 ```
 
-General protection fault exception handler
+일반 보호 실패(General protection fault) 예외 처리
 --------------------------------------------------------------------------------
 
-The next exception is the `#GP` or `General protection fault`. This exception occurs when the processor detected one of a class of protection violations called `general-protection violations`. It can be:
+다음 살펴볼 예외는 `#GP` / `General protection fault` 이다. 이 예외는 프로세서가 `general-protection violations` 라 불리는 보호 위반의 하나를 감지 했을 때 발생한다.:
 
-* Exceeding the segment limit when accessing the `cs`, `ds`, `es`, `fs` or `gs` segments;
-* Loading the `ss`, `ds`, `es`, `fs` or `gs` register with a segment selector for a system segment.;
-* Violating any of the privilege rules;
-* and other...
+* `cs`, `ds`, `es`, `fs` 또는 `gs` 세그먼트들을 접근할 때, 세그먼트 제한을 초과하여 접근하려고 했을 때
+* 시스템 세그먼트를 위해 세그먼트 셀렉터를 `ss`, `ds`, `es`, `fs` 또는 `gs` 레지스터에 로드 하려고 했을 때
+* 특권 레벨사용에 대한 규칙을 어겼을 때
+* 몇몇의 규칙 위반?
 
-The exception handler for this exception is the `do_general_protection` from the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c). The `do_general_protection` function starts and ends as other exception handlers from the getting of the previous context:
+이 예외를 위한 핸들러는 [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/tree/master/arch/x86/kernel/traps.c)에 구현된 `do_general_protection` 함수이다. `do_general_protection` 함수는 다른 예외들 처럼 첫부분과 끝부분에 이전 문맥을 얻어오기 위해 다음과 같은 구조로 되어 있다.:
 
 ```C
 prev_state = exception_enter();
@@ -408,7 +408,7 @@ prev_state = exception_enter();
 exception_exit(prev_state);
 ```
 
-After this we enable interrupts if they were disabled and check that we came from the [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) mode:
+여기서는 [Virtual 8086](https://en.wikipedia.org/wiki/Virtual_8086_mode) 모드가 확인이 되고 만약 인터럽트들이 비활성화 되어 있다면, 인터럽트를 활성화 시킨다.
 
 ```C
 conditional_sti(regs);

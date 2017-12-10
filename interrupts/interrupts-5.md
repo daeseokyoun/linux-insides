@@ -420,7 +420,7 @@ if (v8086_mode(regs)) {
 }
 ```
 
-As long mode does not support this mode, we will not consider exception handling for this case. In the next step check that previous mode was kernel mode and try to fix the trap. If we can't fix the current general protection fault exception we fill the interrupted process with the vector number and error code of the exception and add it to the `notify_die` chain:
+long 모드는 이 모드를 지원하지 않기 때문에, 우리는 이 경우를 위한 예외 처리를 고려하지 않을 것이다. 다음 단계는 이전 모드가 커널 모드였는지 확인하고 트랩을 고친다. 만약 현재 general protection fault 예외가 고쳐질 수 없다면, 우리는 인터럽트된 프로세스를 벡터번호, 예외의 에러코드를 함께 채우고 `notify_die` 체인에 추가해준다.:
 
 ```C
 if (!user_mode(regs)) {
@@ -436,14 +436,14 @@ if (!user_mode(regs)) {
 }
 ```
 
-If we can fix exception we go to the `exit` label which exits from exception state:
+만약 우리가 예외를 고칠수 있다면 우리는 에외 상태로 부터 빠져나가는 `exit` 라벨로 이동한다.:
 
 ```C
 exit:
 	exception_exit(prev_state);
 ```
 
-If we came from user mode we send `SIGSEGV` signal to the interrupted process from user mode as we did it in the `do_trap` function:
+만약 우리가 사용자 모드에서 왔다면 우리는 `SIGSEGV` 시그널을 사용자 모드로 부터 `do_trap` 함수 내에서 한것과 같이 인터럽트된 프로세스에게 전달한다: 
 
 ```C
 if (show_unhandled_signals && unhandled_signal(tsk, SIGSEGV) &&
@@ -458,16 +458,16 @@ if (show_unhandled_signals && unhandled_signal(tsk, SIGSEGV) &&
 force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 ```
 
-That's all.
+끝이다.
 
-Conclusion
+결론
 --------------------------------------------------------------------------------
 
-It is the end of the fifth part of the [Interrupts and Interrupt Handling](http://0xax.gitbooks.io/linux-insides/content/interrupts/index.html) chapter and we saw implementation of some interrupt handlers in this part. In the next part we will continue to dive into interrupt and exception handlers and will see handler for the [Non-Maskable Interrupts](https://en.wikipedia.org/wiki/Non-maskable_interrupt), handling of the math [coprocessor](https://en.wikipedia.org/wiki/Coprocessor) and [SIMD](https://en.wikipedia.org/wiki/SIMD) coprocessor exceptions and many many more.
+이 파트는 [인터럽트와 인터럽트 처리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/README.md) 챕터의 5째 파트였고, 인터럽트 핸러의 구현을 살펴 보았다. 다음 파트에서는 인터럽트와 예외 처리에 관련해서 더욱더 자세히 살펴 볼텐데, 그것은 [Non-Maskable Interrupts](https://en.wikipedia.org/wiki/Non-maskable_interrupt), 수학 [coprocessor](https://en.wikipedia.org/wiki/Coprocessor) 그리고 [SIMD](https://en.wikipedia.org/wiki/SIMD) coprocessor 예외들 및 다양한 것들이 될 것이다.
 
-If you have any questions or suggestions write me a comment or ping me at [twitter](https://twitter.com/0xAX).
+어떤 질문이나 제안이 있다면, twitter [0xAX](https://twitter.com/0xAX), [email](anotherworldofworld@gmail.com) 또는 [issue](https://github.com/0xAX/linux-insides/issues/new) 를 만들어 주길 바란다.
 
-**Please note that English is not my first language, And I am really sorry for any inconvenience. If you find any mistakes please send me PR to [linux-insides](https://github.com/0xAX/linux-insides).**
+**나는 영어권의 사람이 아니고 이런 것에 대해 매우 미안해 하고 있다. 만약 어떤 실수를 발견한다면, 나에게 PR을 [linux-insides](https://github.com/0xAX/linux-internals)을 보내줘**
 
 Links
 --------------------------------------------------------------------------------

@@ -1,33 +1,33 @@
-Interrupts and Interrupt Handling. Part 6.
+인터럽트와 인터럽트 핸들링. Part 6.
 ================================================================================
 
-Non-maskable interrupt handler
+Non-maskable 인터럽트 핸들러
 --------------------------------------------------------------------------------
 
-It is sixth part of the [Interrupts and Interrupt Handling in the Linux kernel](http://0xax.gitbooks.io/linux-insides/content/interrupts/index.html) chapter and in the previous [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-5.html) we saw implementation of some exception handlers for the [General Protection Fault](https://en.wikipedia.org/wiki/General_protection_fault) exception, divide exception, invalid [opcode](https://en.wikipedia.org/wiki/Opcode) exceptions and etc. As I wrote in the previous part we will see implementations of the rest exceptions in this part. We will see implementation of the following handlers:
+이 파트는 [인터럽트와 인터럽트 처리](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/README.md)의 6번째이고 이전 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-5.md) 에서 [General Protection Fault](https://en.wikipedia.org/wiki/General_protection_fault) 예외, 0으로 나누기 예외, 유효하지 않는 [opcode](https://en.wikipedia.org/wiki/Opcode) 예외를 위한 핸들러의 구현을 보았다. 이전 파트에서 언급했지만, 우리는 이 파트에서 나머지 예외의 구현에 대해 볼 것이다. 우리가 볼 핸들러의 구현은 다음과 같다:
 
-* [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt) interrupt;
-* [BOUND](http://pdos.csail.mit.edu/6.828/2005/readings/i386/BOUND.htm) Range Exceeded Exception;
-* [Coprocessor](https://en.wikipedia.org/wiki/Coprocessor) exception;
-* [SIMD](https://en.wikipedia.org/wiki/SIMD) coprocessor exception.
+* [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt) 인터럽트;
+* [BOUND](http://pdos.csail.mit.edu/6.828/2005/readings/i386/BOUND.htm) 범위 초과 예외;
+* [Coprocessor](https://en.wikipedia.org/wiki/Coprocessor) 예외;
+* [SIMD](https://en.wikipedia.org/wiki/SIMD) coprocessor 예외.
 
-in this part. So, let's start.
+시작해보자.
 
-Non-Maskable interrupt handling
+Non-Maskable(넌 마스커블) 인터럽트 핸들러
 --------------------------------------------------------------------------------
 
-A [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt) interrupt is a hardware interrupt that cannot be ignored by standard masking techniques. In a general way, a non-maskable interrupt can be generated in either of two ways:
+하나의 [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt) 인터럽트는 표준의 마스킹 기술들에 의해 무시될 수 없는 하드웨어 인터럽트이다. 일반적인 방법으로, non-maskable 인터럽트는 두 가지 방법으로 생성될 수 있다.:
 
-* External hardware asserts the non-maskable interrupt [pin](https://en.wikipedia.org/wiki/CPU_socket) on the CPU.
-* The processor receives a message on the system bus or the APIC serial bus with a delivery mode `NMI`.
+* 외부 하드웨어 자원들이 CPU 의 non-maskable 인터럽트 [pin](https://en.wikipedia.org/wiki/CPU_socket) 으로 발생된다.
+* 그 프로세서는 시스템 버스나 배달(delivery) 모드 `NMI` 와 함께 APIC 시리얼 버스로 부터 받는다.
 
-When the processor receives a `NMI` from one of these sources, the processor handles it immediately by calling the `NMI` handler pointed to by interrupt vector which has number `2` (see table in the first [part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-1.html)). We already filled the [Interrupt Descriptor Table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table) with the [vector number](https://en.wikipedia.org/wiki/Interrupt_vector_table), address of the `nmi` interrupt handler and `NMI_STACK` [Interrupt Stack Table entry](https://github.com/torvalds/linux/blob/master/Documentation/x86/kernel-stacks):
+프로세서가 위에서 설명한 것 중에 하나로 부터 `NMI` 를 받으면, 프로세서는 인터럽트 벡터 2번이 가리키는 `NMI` 핸들러를 호출 함으로써 즉시 처리한다.(인터럽트 번호는 인터럽트의 첫번째 [파트](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/interrupts/interrupts-1.md)에서 확인하자) 우리는 이미 [Interrupt Descriptor Table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table)를 [vector number](https://en.wikipedia.org/wiki/Interrupt_vector_table), `nmi` 인터럽트 핸들러의 주소와 `NMI_STACK` [Interrupt Stack Table entry](https://github.com/torvalds/linux/blob/master/Documentation/x86/kernel-stacks)로 채웠다:
 
 ```C
 set_intr_gate_ist(X86_TRAP_NMI, &nmi, NMI_STACK);
 ```
 
-in the `trap_init` function which defined in the [arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) source code file. In the previous [parts](http://0xax.gitbooks.io/linux-insides/content/interrupts/index.html) we saw that entry points of the all interrupt handlers are defined with the:
+[arch/x86/kernel/traps.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/traps.c) 소스 코드 파일에 정의된 `trap_init` 함수내에서 수행한다. 이전 파트들에서 우리는 모든 인터럽트 핸들러의 엔트리 포인트들이 아래와 같이 선언되어 있었다는 것을 살펴 보았었다.:
 
 ```assembly
 .macro idtentry sym do_sym has_error_code:req paranoid=0 shift_ist=-1
@@ -39,7 +39,7 @@ END(\sym)
 .endm
 ```
 
-macro from the [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) assembly source code file. But the handler of the `Non-Maskable` interrupts is not defined with this macro. It has own entry point:
+매크로는 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 어셈블리 소스 파일에 있다. 하지만, `Non-Maskable` 인터럽트 핸들러는 이 매크로와 정의되지 않았다. 그것은 자신만의 엔트리 포인트를 가진다.:
 
 ```assembly
 ENTRY(nmi)
@@ -49,26 +49,26 @@ ENTRY(nmi)
 END(nmi)
 ```
 
-in the same [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) assembly file. Lets dive into it and will try to understand how `Non-Maskable` interrupt handler works. The `nmi` handlers starts from the call of the:
+같은 [arch/x86/entry/entry_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/entry/entry_64.S) 어셈블리 파일에 있다. 이제 어떻게 `Non-Maskable` 인터럽트 핸들러가 동작하는지 더 자세히 살펴보도록 하자. `nmi` 핸들러는 아래의 호출로 부터 시작한다.:
 
 ```assembly
 PARAVIRT_ADJUST_EXCEPTION_FRAME
 ```
 
-macro but we will not dive into details about it in this part, because this macro related to the [Paravirtualization](https://en.wikipedia.org/wiki/Paravirtualization) stuff which we will see in another chapter. After this save the content of the `rdx` register on the stack:
+우리는 이 부분에 대해서는 더 자세히 살펴보지 않을 것이다. 이유는 이 매크로는 다른 챕터에서 볼 [Paravirtualization](https://en.wikipedia.org/wiki/Paravirtualization)에 관련된 것이기 때문이다. 이 호출 다음에 `rdx` 레지스터의 내용을 스택에 저장한다.:
 
 ```assembly
 pushq	%rdx
 ```
 
-And allocated check that `cs` was not the kernel segment when an non-maskable interrupt occurs:
+그리고 non-maskable 인터럽트가 발생했을 때, `cs` 가 커널 세그먼트인지 검사한다.:
 
 ```assembly
 cmpl	$__KERNEL_CS, 16(%rsp)
 jne	first_nmi
 ```
 
-The `__KERNEL_CS` macro defined in the [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) and represented second descriptor in the [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table):
+`__KERNEL_CS` 는 [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) 에 선언되어 있고 [Global Descriptor Table](https://en.wikipedia.org/wiki/Global_Descriptor_Table) 에서 두 번째 디스크립터를 나타낸다.:
 
 ```C
 #define GDT_ENTRY_KERNEL_CS	2
@@ -261,7 +261,7 @@ Now let's look on the `do_nmi` exception handler. This function defined in the [
 * error code.
 
 as all exception handlers. The `do_nmi` starts from the call of the `nmi_nesting_preprocess` function and ends with the call of the `nmi_nesting_postprocess`. The `nmi_nesting_preprocess` function checks that we likely do not work with the debug stack and if we on the debug stack set the `update_debug_stack` [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) variable to `1` and call the `debug_stack_set_zero` function from the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c). This function increases the `debug_stack_use_ctr` per-cpu variable and loads new `Interrupt Descriptor Table`:
- 
+
 ```C
 static inline void nmi_nesting_preprocess(struct pt_regs *regs)
 {
@@ -434,7 +434,7 @@ After this we check the signal code and if it is non-zero we return:
 if (!info.si_code)
 	return;
 ```
-		
+
 Or send the `SIGFPE` signal in the end:
 
 ```C
@@ -457,7 +457,7 @@ Links
 
 * [General Protection Fault](https://en.wikipedia.org/wiki/General_protection_fault)
 * [opcode](https://en.wikipedia.org/wiki/Opcode)
-* [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt) 
+* [Non-Maskable](https://en.wikipedia.org/wiki/Non-maskable_interrupt)
 * [BOUND instruction](http://pdos.csail.mit.edu/6.828/2005/readings/i386/BOUND.htm)
 * [CPU socket](https://en.wikipedia.org/wiki/CPU_socket)
 * [Interrupt Descriptor Table](https://en.wikipedia.org/wiki/Interrupt_descriptor_table)
@@ -474,7 +474,7 @@ Links
 * [stack frame](https://en.wikipedia.org/wiki/Call_stack)
 * [Model Specific regiser](https://en.wikipedia.org/wiki/Model-specific_register)
 * [percpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html)
-* [RCU](https://en.wikipedia.org/wiki/Read-copy-update) 
+* [RCU](https://en.wikipedia.org/wiki/Read-copy-update)
 * [MPX](https://en.wikipedia.org/wiki/Intel_MPX)
 * [x87 FPU](https://en.wikipedia.org/wiki/X87)
 * [Previous part](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-5.html)

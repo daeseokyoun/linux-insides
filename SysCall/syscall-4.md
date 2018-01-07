@@ -1,39 +1,39 @@
-System calls in the Linux kernel. Part 4.
+리눅스 커널에서 시스템 콜. Part 4.
 ================================================================================
 
-How does the Linux kernel run a program
+리눅스 커널은 어떻게 프로그램을 수행할까?
 --------------------------------------------------------------------------------
 
-This is the fourth part of the [chapter](http://0xax.gitbooks.io/linux-insides/content/SysCall/index.html) that describes [system calls](https://en.wikipedia.org/wiki/System_call) in the Linux kernel and as I wrote in the conclusion of the [previous](http://0xax.gitbooks.io/linux-insides/content/SysCall/syscall-3.html) - this part will be last in this chapter. In the previous part we stopped at the two new concepts:
+리눅스 커널에서 [system calls](https://en.wikipedia.org/wiki/System_call)을 기술하는 4번째 [챕터](https://github.com/daeseokyoun/linux-insides/blob/korean-trans/SysCall/README.md)이고 이전 챕터에서 두 가지 개념을 언급하고 마무리 하였다.:
 
 * `vsyscall`;
 * `vDSO`;
 
-that are related and very similar on system call concept.
+시스템 콜 개념과 매우 유사하며 연관된 것들이다.
 
-This part will be last part in this chapter and as you can understand from the part's title - we will see what does occur in the Linux kernel when we run our programs. So, let's start.
+이 파트는 이 챕터의 마지막 파트가 될 것이고 너는 이 파트의 제목과 같은 내용을 이해할 수 있을 것이다. - 우리는 리눅스 커널에서 프로그램이 수행 될 때를 살펴 볼 것이다. 자, 시작해보자.
 
-how do we launch our programs?
+어떻게 우리의 프로그램이 시작되는가?
 --------------------------------------------------------------------------------
 
-There are many different ways to launch an application from a user perspective. For example we can run a program from the [shell](https://en.wikipedia.org/wiki/Unix_shell) or double-click on the application icon. It does not matter. The Linux kernel handles application launch regardless how we do launch this application.
+사용자 관점에서 응용 프로그램을 시작하는 방법은 다양하게 많다. 예를 들어, [shell](https://en.wikipedia.org/wiki/Unix_shell)에서 수행시키거나, 응용 프로그램의 아이콘을 더블 클릭 함으로써 시작할 수 있을 것이다. 그것은 중요치 않다. 리눅스 커널은 우리가 어떻게 응용 프로긓램을 수행하는 지는 상관없이 응용 프로그램을 시하게 해준다.
 
-In this part we will consider the way when we just launch an application from the shell. As you know, the standard way to launch an application from shell is the following: We just launch a [terminal emulator](https://en.wikipedia.org/wiki/Terminal_emulator) application and just write the name of the program and pass or not arguments to our program, for example:
+이 파트에서 우리는 shell 에서 응용프로그램을 단지 수행할 때만을 고려할 것이다. 이미 알겠지만, 일반적으로 shell 에서 응용프로그램을 수행하는 방법은 다음과 같다.: 우리는 단지 [터미널 애뮬레이터](https://en.wikipedia.org/wiki/Terminal_emulator) 을 실행하고, 단지 우리가 실행하고자 하는 프로그램의 이름을 타이핑하고 인자가 필요하다면 어주면 끝이다. 예를 들면,:
 
 ![ls shell](http://s14.postimg.org/d6jgidc7l/Screenshot_from_2015_09_07_17_31_55.png)
 
-Let's consider what does occur when we launch an application from the shell, what does shell do when we write program name, what does Linux kernel do etc. But before we will start to consider these interesting things, I want to warn that this book is about the Linux kernel. That's why we will see Linux kernel insides related stuff mostly in this part. We will not consider in details what does shell do, we will not consider complex cases, for example subshells etc.
+shell 에서 응용프로그램을 수행했을 때, 프로그램 이름을 쓰면 shell 은 무엇을 하고, 리눅스 커널은 무엇을 하는지 고려해보자. 하지만 그전에, 우리는 흥미로운 몇가지를 먼저 살펴 볼 것이다. 이 책은 리눅스 커널에 관련된 내용을 기술한다는 것을 잊지 말아줬으면 한다. 그래서 리눅스 커널과 가장 관련 깊은 내용을 위주로 볼 것이라는 것도 말이다. 우리는 shell 이 무엇을 하고, 복잡한 상황에 대한-예를 들면 subshell 등- 내용은 고려하지 않을 것이다.
 
-My default shell is - [bash](https://en.wikipedia.org/wiki/Bash_%28Unix_shell%29), so I will consider how do bash shell launches a program. So let's start. The `bash` shell as well as any program that written with [C](https://en.wikipedia.org/wiki/C_%28programming_language%29) programming language starts from the [main](https://en.wikipedia.org/wiki/Entry_point) function. If you will look on the source code of the `bash` shell, you will find the `main` function in the [shell.c](https://github.com/bminor/bash/blob/master/shell.c#L357) source code file. This function makes many different things before the main thread loop of the `bash` started to work. For example this function:
+나의 기본 shell은 [bash](https://en.wikipedia.org/wiki/Bash_%28Unix_shell%29) 이다. 그리고 나는 어떻게 bash shell 이 프로그램을 수행하는지 고려할 것이다. 시작해보자. `bash` shell 은 어떤 C 언어로 작성된 프로그램의 [main](https://en.wikipedia.org/wiki/Entry_point) 함수에서 시작하게 해준다. 만약 당신이 `bash` shell 의 소스 코드를 보길 원한다면, 당신은 [shell.c](https://github.com/bminor/bash/blob/master/shell.c#L357) 소스 코드의 `main`함수를 찾아야 할 것이다. 이 함수는 `bash` 가 수행하기 시작하여 main thread loop 을 수행하기 전에 많은 일을 한다. 예를 들어, 이 함수는:
 
-* checks and tries to open `/dev/tty`;
-* check that shell running in debug mode;
-* parses command line arguments;
-* reads shell environment;
-* loads `.bashrc`, `.profile` and other configuration files;
-* and many many more.
+* `/dev/tty` 을 확인하고 연다;
+* debug 모드에서 shell 이 수되는지 확인한다.;
+* 커맨드 라인의 인자들을 넘겨준다.;
+* shell 환경 값을 읽는다.;
+* `.bashrc`, `.profile` 와 다른 설정 파일을 로드한다.;
+* 그리고 다른 많은 일...
 
-After all of these operations we can see the call of the `reader_loop` function. This function defined in the [eval.c](https://github.com/bminor/bash/blob/master/eval.c#L67) source code file and represents main thread loop or in other words it reads and executes commands. As the `reader_loop` function made all checks and read the given program name and arguments, it calls the `execute_command` function from the [execute_cmd.c](https://github.com/bminor/bash/blob/master/execute_cmd.c#L378) source code file. The `execute_command` function through the chain of the functions calls:
+모든 일들을 다 수행하면, 우리는 `reader_loop` 함수의 호출을 볼 수 있다. 이 함수는 [eval.c](https://github.com/bminor/bash/blob/master/eval.c#L67) 소스 파일에 정의되어 있으며, main thread loop 혹은 다른 말로 명령어를 읽고 수행한다는 것이다. `reader_loop` 함수는 프로그램 이름과 인자를 확인하고 읽는다, 그것은 [execute_cmd.c](https://github.com/bminor/bash/blob/master/execute_cmd.c#L378) 소스 파일에 있는 `execute_command` 함수를 호출한다. `execute_command` 함수는 함수들의 호출의 연결고를 통해 수행된다.:
 
 ```
 execute_command
@@ -43,19 +43,19 @@ execute_command
 --------> shell_execve
 ```
 
-makes different checks like do we need to start `subshell`, was it builtin `bash` function or not etc. As I already wrote above, we will not consider all details about things that are not related to the Linux kernel. In the end of this process, the `shell_execve` function calls the `execve` system call:
+`subshell` 를 수행하기 위해 필요한 을 하는 것처럼 내부 `bash` 함수인지 아닌지 등의 많은 확인들을 한다. 이미 언급했듯이, 우리는 리눅스 커널과 관련된 내용을 자세히 살펴 보지 않을 것이다. 이 과정의 마지막에는  `shell_execve` 함수에서 `execve` 시스템 콜을 호출하는 것이다.:
 
 ```C
 execve (command, args, env);
 ```
 
-The `execve` system call has the following signature:
+`execve` 시스템 콜은 다음과 같은 signature 를 가진다.:
 
 ```
 int execve(const char *filename, char *const argv [], char *const envp[]);   
 ```
 
-and executes a program by the given filename, with the given arguments and [environment variables](https://en.wikipedia.org/wiki/Environment_variable). This system call is the first in our case and only, for example:
+그리고 주어진 파일 이름으로 프로그램을 주어진 인자와 [환경변수](https://en.wikipedia.org/wiki/Environment_variable) 함께 실행한다. 이 시스템 콜은 우리의 경우에만 적용된다.:
 
 ```
 $ strace ls
@@ -68,12 +68,12 @@ $ strace uname
 execve("/bin/uname", ["uname"], [/* 62 vars */]) = 0
 ```
 
-So, a user application (`bash` in our case) calls the system call and as we already know the next step is Linux kernel.
+그래서, 사용자 응용프로그은(`bash`) 시스템 콜을 호출하고, 이 다음은 아시다시피 리눅스 커널에서 수행된다.
 
 execve system call
 --------------------------------------------------------------------------------
 
-We saw preparation before a system call called by a user application and after a system call handler finished its work in the second [part](http://0xax.gitbooks.io/linux-insides/content/SysCall/syscall-2.html) of this chapter. We stopped at the call of the `execve` system call in the previous paragraph. This system call defined in the [fs/exec.c](https://github.com/torvalds/linux/blob/master/fs/exec.c) source code file and as we already know it takes three arguments:
+우리는 사용자 응용 프로그램에 의해 호출되는 시스템콜이 불리기 전에 준비사항과 시스템콜이 완료되는 과정을 두번째 파트에서 살펴 보았다. 우리는 이전 단계에서 `execve` 호출에서 멈추었다. 이 시스템 콜은 [fs/exec.c](https://github.com/torvalds/linux/blob/master/fs/exec.c) 소스 코드에 구현되어 있고, 3개의 인자를 받는다.:
 
 ```
 SYSCALL_DEFINE3(execve,
@@ -85,12 +85,12 @@ SYSCALL_DEFINE3(execve,
 }
 ```
 
-Implementation of the `execve` is pretty simple here, as we can see it just returns the result of the `do_execve` function. The `do_execve` function defined in the same source code file and do the following things:
+`execve` 의 구현은 단순하다. 단지 `do_execve` 함수의 결과를 반환해주는 일만 한다. `do_execve` 함수는 같은 소스 파일에 구현되어 있으며, 다음과 같은 일을 한다.:
 
-* Initialize two pointers on a userspace data with the given arguments and environment variables;
-* return the result of the `do_execveat_common`.
+* 주어진 인자들과 환경 변수들과 같은 사용자 영역의 데이터를 두개의 포인터로 할당 및 초기화 한다.
+* `do_execveat_common` 함수의 결과를 반환한다.
 
-We can see its implementation:
+그것의 구현을 보자.:
 
 ```C
 struct user_arg_ptr argv = { .ptr.native = __argv };
@@ -98,9 +98,9 @@ struct user_arg_ptr envp = { .ptr.native = __envp };
 return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 ```
 
-The `do_execveat_common` function does main work - it executes a new program. This function takes similar set of arguments, but as you can see it takes five arguments instead of three. The first argument is the file descriptor that represent directory with our application, in our case the `AT_FDCWD` means that the given pathname is interpreted relative to the current working directory of the calling process. The fifth argument is flags. In our case we passed `0` to the `do_execveat_common`. We will check in a next step, so will see it latter.
+`do_execveat_common` 함수는 주요 일을 한다 - 그것은 새로운 프로그램을 실행한다. 이 함수는 비슷한 인자들을 받는다, 하지만 3개가 아니라 5개인 것을 확인할 수 있을 것이다. 이 다섯 개 인자중 첫번째는 실행된 응용 프로그램의 디렉토리를 표현하는 파일 디스크립터이다. 그리고 우리의 경우, `AT_FDCWD` 을 사용했는데, 이것의 의미는 주어진 경로 이름은 현재 호출 한 프로세스의 working 디렉토리를 기준으로 상대적으로 번역된다는 것이다. 5번째 인자는 플래그이다. 우리의 경우는 `0` 이다. 우리는 다음 단계에서 살펴 보도록 한다.:
 
-First of all the `do_execveat_common` function checks the `filename` pointer and returns if it is `NULL`. After this we check flags of the current process that limit of running processes is not exceed:
+ `do_execveat_common` 함수는 첫번째로 `filename` 포인터를 확인하고, 만약 그것이 `NULL` 이라면 종료한다. 이 다음에서는 수행중인 프로세서들이 제한의 개수를 넘지 않았는지  플래그을 확인한다.:
 
 ```C
 if (IS_ERR(filename))
@@ -115,7 +115,7 @@ if ((current->flags & PF_NPROC_EXCEEDED) &&
 current->flags &= ~PF_NPROC_EXCEEDED;
 ```
 
-If these two checks were successful we unset `PF_NPROC_EXCEEDED` flag in the flags of the current process to prevent fail of the `execve`. You can see that in the next step we call the `unshare_files` function that defined in the [kernel/fork.c](https://github.com/torvalds/linux/blob/master/kernel/fork.c) and unshares the files of the current task and check the result of this function:
+만약 이 두가지 경우가 성공적으로 확인이 되면, `execve`의 수행 실패를 방지하기 위해 현재 프로세스의 플래그 중에 `PF_NPROC_EXCEEDED` 플래그를 설정되지 않은 상태로 한다. 당신은 다음으로 호출된 `unshare_files` 함수는 [kernel/fork.c](https://github.com/torvalds/linux/blob/master/kernel/fork.c) 에 구현되어 있고, 현재 태스크의 파일디스크립터를 공유하는 것을 중지한다.:
 
 ```C
 retval = unshare_files(&displaced);
@@ -123,9 +123,9 @@ if (retval)
 	goto out_ret;
 ```
 
-We need to call this function to eliminate potential leak of the execve'd binary's [file descriptor](https://en.wikipedia.org/wiki/File_descriptor). In the next step we start preparation of the `bprm` that represented by the `struct linux_binprm` structure (defined in the [include/linux/binfmts.h](https://github.com/torvalds/linux/blob/master/linux/binfmts.h) header file). The `linux_binprm` structure is used to hold the arguments that are used when loading binaries. For example it contains `vma` field which has `vm_area_struct` type and represents single memory area over a contiguous interval in a given address space where our application will be loaded, `mm` field which is memory descriptor of the binary, pointer to the top of memory and many other different fields.
+우리는 execve 된 바이너리의 [file descriptor](https://en.wikipedia.org/wiki/File_descriptor) 의 잠재적인 누수(leak)를 제거하기 위해 이 함수를 호출한다. 다음 단계에서 우리는  `struct linux_binprm` 구조체([include/linux/binfmts.h](https://github.com/torvalds/linux/blob/master/linux/binfmts.h) 선언됨)인 `bprm` 의 준비를 시작한다. `linux_binprm` 구조체는 바이너리들이 로딩될 때 사용되는 인자들을 갖고 있기 위해 사용된다. 예를 들어, 그것은 `vm_area_struct` 타입인 `vma` 항목을 가지고 우리가 실행하여야 할 프로그램이 로드되기 위한 주어진 주소 공간내에서 연속적인 간격을 단일 메모리 공간으로 표현, `mm` 항목은 바이너리의 메모리 디스크립터, 메모리의 최상위를 가리키거나 다른 메모리 영역을 표시한다.
 
-First of all we allocate memory for this structure with the `kzalloc` function and check the result of the allocation:
+우선 우리는 이 구조체를 위한 메모리를 `kzalloc` 함수를 통해 할당하고, 할당이 잘되었는지 확인한다.:
 
 ```C
 bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
@@ -133,7 +133,7 @@ if (!bprm)
 	goto out_files;
 ```
 
-After this we start to prepare the `binprm` credentials with the call of the `prepare_bprm_creds` function:
+이 다음에는 `prepare_bprm_creds` 함수 호출로 `binprm` credentials 을 준비한다.: 
 
 ```C
 retval = prepare_bprm_creds(bprm);
@@ -144,9 +144,9 @@ check_unsafe_exec(bprm);
 current->in_execve = 1;
 ```
 
-Initialization of the `binprm` credentials in other words is initialization of the `cred` structure that stored inside of the `linux_binprm` structure. The `cred` structure contains the security context of a task for example [real uid](https://en.wikipedia.org/wiki/User_identifier#Real_user_ID) of the task, real [guid](https://en.wikipedia.org/wiki/Globally_unique_identifier) of the task, `uid` and `guid` for the [virtual file system](https://en.wikipedia.org/wiki/Virtual_file_system) operations etc. In the next step as we executed preparation of the `bprm` credentials we check that now we can safely execute a program with the call of the `check_unsafe_exec` function and set the current process to the `in_execve` state.
+`binprm` credentials 의 초기화는 다른 말로 `linux_binprm` 구조체의 내부에 저장된 `cred` 구조체의 초기화를 하겠다는 것이다. `cred` 구조체는 태스크의 보안 문맥(security context)를 포함한다. 예를 들어, 태스크의 [real uid](https://en.wikipedia.org/wiki/User_identifier#Real_user_ID), 태스크의 real [guid](https://en.wikipedia.org/wiki/Globally_unique_identifier),  [virtual file system](https://en.wikipedia.org/wiki/Virtual_file_system) 수행을 위한 `uid` 그리고 `guid` 같은 것이다. 다음 단계는 `bprm` credentials 의 준비가 수행되면, 우리는 이제 `check_unsafe_exec` 함수를 통해 안전하게 프로그램을 실행 할 수 있고, 현재 프로세스를 `in_execve` 상태로 한다.
 
-After all of these operations we call the `do_open_execat` function that checks the flags that we passed to the `do_execveat_common` function (remember that we have `0` in the `flags`) and searches and opens executable file on disk, checks that our we will load a binary file from `noexec` mount points (we need to avoid execute a binary from filesystems that do not contain executable binaries like [proc](https://en.wikipedia.org/wiki/Procfs) or [sysfs](https://en.wikipedia.org/wiki/Sysfs)), initializes `file` structure and returns pointer on this structure. Next we can see the call the `sched_exec` after this:
+이 모든 수행이 끝나면, 우리는 `do_execveat_common` 함수로 부터 넘어온 플래그들을 확인하는 `do_open_execat` 수를 호출 하고,(`flags` 부분에 우리는 `0` 을 넘겨줬다는 것을 기억하자.) 디스크에서 실행가능한 파일을 찾아 열고, `noexec` 마운트 포인트로 부터 바이너리 파일이 로드될 것인지 확인(우리는 실행 가능한 바이너리를 포함할 수 없는 [proc](https://en.wikipedia.org/wiki/Procfs) 또는 [sysfs](https://en.wikipedia.org/wiki/Sysfs)에서 실행을 회피하기 위한 확인이 필요하다), `file` 구조체를 초기화 그리고 이 구조체의 포인터를 반환한다. 다음은 `sched_exec` 의 호출을 볼 수 있다.:
 
 ```C
 file = do_open_execat(fd, filename, flags);
@@ -157,12 +157,11 @@ if (IS_ERR(file))
 sched_exec();
 ```
 
-The `sched_exec` function is used to determine the least loaded processor that can execute the new program and to migrate the current process to it.
+`sched_exec` 함수는 새로운 프로그램이 실행할 가능한 최근 로드된 프로세서를 결정하고 현재 프로세스를 그곳으로 옮긴다.
 
-After this we need to check [file descriptor](https://en.wikipedia.org/wiki/File_descriptor) of the give executable binary. We try to check does the name of the our binary file starts from the `/` symbol or does the path of the given executable binary is interpreted relative to the current working directory of the calling process or in other words file descriptor is `AT_FDCWD` (read above about this).
+이 다음에 우리는 주어진 실행 바이너리의 [file descriptor](https://en.wikipedia.org/wiki/File_descriptor) 를 확인한다. 우리는 우리의 바이너리 일이 `/` 심볼로 시작하는지 확인하거나 주어진 실행 바이너리의 경로가 호출된 프로세스에서 현재 working 디렉토리에 상대적인 경로로 해석되어야 하는지 확인한다.(즉 `AT_FDCWD` 인지 확인)
 
-If one of these checks is successful we set the binary parameter filename:
-
+만얀 이 중 하나라도 확인이 된다면, 우리는 바이너리 파라미터의 파일이름을 설정한다.:
 ```C
 bprm->file = file;
 
@@ -171,7 +170,7 @@ if (fd == AT_FDCWD || filename->name[0] == '/') {
 }
 ```
 
-Otherwise if the filename is empty we set the binary parameter filename to the `/dev/fd/%d` or `/dev/fd/%d/%s` depends on the filename of the given executable binary which means that we will execute the file to which the file descriptor refers:
+그렇지 않다면, 만약 파일 이름이 비어 있어서 우리가 바이너리 파라미터 파일 이름을 주어진 파일 디스크립터가 참조하는 실행 파일의 실행을 의미하는 주어진 실행 바이너리의 파일이름에 의존적인 `/dev/fd/%d` 나 `/dev/fd/%d/%s` 로 설정해야 한다.:  
 
 ```C
 } else {
@@ -191,7 +190,7 @@ Otherwise if the filename is empty we set the binary parameter filename to the `
 bprm->interp = bprm->filename;
 ```
 
-Note that we set not only the `bprm->filename` but also `bprm->interp` that will contain name of the program interpreter. For now we just write the same name there, but later it will be updated with the real name of the program interpreter depends on binary format of a program. You can read above that we already prepared `cred` for the `linux_binprm`. The next step is initialization of other fields of the `linux_binprm`.  First of all we call the `bprm_mm_init` function and pass the `bprm` to it:
+우리는 `bprm->filename` 만 아니라 프로그램 인터프리테의 이름을 포함하는 `bprm->interp` 에도 해줘야 한다는 것을 확인하자. 이제, 우리는 같은 이름을 써놓았는데, 나중에 프로그램의 바이너리 포멧에 의존적인 프로그램 인터프리터의 진짜 이름으로 업데이트 해야 할 것이다. 당신은 우리가 이미 `linux_binprm` 을 위해 `cred` 를 이미 준비했다는 것을 봤을 것이다. 다음 단계는 `linux_binprm` 다른 항목들의 초기화이다. 첫번째로 `bprm_mm_init` 함수를 호출하고 `bprm` 를 그 함수로 넘겨준다.:
 
 ```C
 retval = bprm_mm_init(bprm);
@@ -199,9 +198,9 @@ if (retval)
 	goto out_unmark;
 ```
 
-The `bprm_mm_init` defined in the same source code file and as we can understand from the function's name, it makes initialization of the memory descriptor or in other words the `bprm_mm_init` function initializes `mm_struct` structure. This structure defined in the [include/linux/mm_types.h](https://github.com/torvalds/linux/blob/master/include/mm_types.h) header file and represents address space of a process. We will not consider implementation of the `bprm_mm_init` function because we do not know many important stuff related to the Linux kernel memory manager, but we just need to know that this function initializes `mm_struct` and populate it with a temporary stack `vm_area_struct`.
+`bprm_mm_init` 함수의 구현은 같은 소스 파일에 있으며, 함수 이름으로 그 역할을 짐작할 수 있다. 그것은 메모리 디스크립터, 즉 `mm_struct` 을 초기화를 진행한다. 이 구조체는 [include/linux/mm_types.h](https://github.com/torvalds/linux/blob/master/include/mm_types.h) 에 선언되어 있으며, 프로세스의 주소공간을 표현한다. 우리는 `bprm_mm_init` 함수의 구현을 살펴보지 않을 것이다. 이유는, 리눅스 커널 메모리 관리와 연관된 중요한 많은 부분에 대해 모르기 때문이다. 하지만 우리는 이 함수가 `mm_struct` 를 초기화 하고 임시 스택인 `vm_area_struct` 를 만든다는 정도만 알아두자.
 
-After this we calculate the count of the command line arguments which are were passed to the our executable binary, the count of the environment variables and set it to the `bprm->argc` and `bprm->envc` respectively:
+이 다음에는 우리가 실행 바이너리에게 넘겨준 명령라인 인자의 개수, 환경 변수들의 개수를 계산하고 각 각 `bprm->argc` 와 `bprm->envc` 에 설정한다.:
 
 ```C
 bprm->argc = count(argv, MAX_ARG_STRINGS);
@@ -213,13 +212,13 @@ if ((retval = bprm->envc) < 0)
 	goto out;
 ```
 
-As you can see we do this operations with the help of the `count` function that defined in the [same](https://github.com/torvalds/linux/blob/master/fs/exec.c) source code file and calculates the count of strings in the `argv` array. The `MAX_ARG_STRINGS` macro defined in the [include/uapi/linux/binfmts.h](https://github.com/torvalds/linux/blob/master/include/uapi/linux/binfmts.h) header file and as we can understand from the macro's name, it represents maximum number of strings that were passed to the `execve` system call. The value of the `MAX_ARG_STRINGS`:
+[같은](https://github.com/torvalds/linux/blob/master/fs/exec.c) 파일에 정의되어 있는 `count` 함수의 도움으로 이와 관련된 일을 수행 할 수 있고, `argv` 배열의 문자열의 개수도 계산다. `MAX_ARG_STRINGS` 매크로는 [include/uapi/linux/binfmts.h](https://github.com/torvalds/linux/blob/master/include/uapi/linux/binfmts.h) 에 선언되어 있으며, 매크로의 이름으로 그 역할을 짐작할 수 있다. 그것은 `execve` 시스템 로 넘어오는 문자열의 최대 개수를 지한다.:
 
 ```C
 #define MAX_ARG_STRINGS 0x7FFFFFFF
 ```
 
-After we calculated the number of the command line arguments and environment variables, we call the `prepare_binprm` function. We already call the function with the similar name before this moment. This function is called `prepare_binprm_cred` and we remember that this function initializes `cred` structure in the `linux_bprm`. Now the `prepare_binprm` function:
+우리가 명령 인자들과 환경 변수들의 수를 계산한 다음에, 우리는  `prepare_binprm` 함수를 호출한다. 우리는 이미 이전에 이와 비슷한 함수의 호출을 했다. 그 함수는 `prepare_binprm_cred` 였고 우리는 이 함수가 `linux_bprm` 에 있는 `cred` 구조체를 초기화 했다는 것을 기억 할 것이다. 이제  `prepare_binprm` 함수를 보자:
 
 ```C
 retval = prepare_binprm(bprm);
@@ -227,7 +226,7 @@ if (retval < 0)
 	goto out;
 ```
 
-fills the `linux_binprm` structure with the `uid` from [inode](https://en.wikipedia.org/wiki/Inode) and read `128` bytes from the binary executable file. We read only first `128` from the executable file because we need to check a type of our executable. We will read the rest of the executable file in the later step. After the preparation of the `linux_bprm` structure we copy the filename of the executable binary file, command line arguments and environment variables to the `linux_bprm` with the call of the `copy_strings_kernel` function:
+`linux_binprm` 구조체에 [inode](https://en.wikipedia.org/wiki/Inode) 로 부터 `uid`를 채우고 실행 바이너리로 부터 `128` 바이트를 읽다. 우리는 첫 `128` 바이트를 읽어 우리의 실행 파일의 타입을 확인할 것이다. 우리는 나중에 실행 파일의 나머지를 읽어 볼 것이다.  `linux_bprm` 구조체를 준비하고 나서 우리는 실행 바이너리 파의 파일 이름, 명령라인 인자들 그리고 경 변수들을 복사하여 `copy_strings_kernel` 함수 호출로 `linux_bprm` 에게 복사한다.:
 
 ```C
 retval = copy_strings_kernel(1, &bprm->filename, bprm);
@@ -243,15 +242,15 @@ if (retval < 0)
 	goto out;
 ```
 
-And set the pointer to the top of new program's stack that we set in the `bprm_mm_init` function:
+그리고 새로운 프로그램 스택의 맨 위를 가리키는 포인터를 `bprm_mm_init` 함수에서 설정한다.:
 
 ```C
 bprm->exec = bprm->p;
 ```
 
-The top of the stack will contain the program filename and we store this fileneme to the `exec` field of the `linux_bprm` structure.
+스택의 맨 꼭대기는 프로그램의 파일이름을 포함하고 우리는 이 파일이름을 `linux_bprm` 구조체의 `exec` 목에 저장한다.
 
-Now we have filled `linux_bprm` structure, we call the `exec_binprm` function:
+이제 우리는 `linux_bprm` 구조체를 채웠다, 우리는 `exec_binprm` 함수를 호출할 것이다.:
 
 ```C
 retval = exec_binprm(bprm);
@@ -259,7 +258,7 @@ if (retval < 0)
 	goto out;
 ```
 
-First of all we store the [pid](https://en.wikipedia.org/wiki/Process_identifier) and `pid` that seen from the [namespace](https://en.wikipedia.org/wiki/Cgroups) of the current task in the `exec_binprm`:
+첫번째로 우리는 [pid](https://en.wikipedia.org/wiki/Process_identifier) 를 저장하고 `exec_binprm` 에서 현재 태스크의 [namespace](https://en.wikipedia.org/wiki/Cgroups 로 부터 보여지는 `pid` 도 저장한다.:
 
 ```C
 old_pid = current->pid;
@@ -268,13 +267,13 @@ old_vpid = task_pid_nr_ns(current, task_active_pid_ns(current->parent));
 rcu_read_unlock();
 ```
 
-and call the:
+그리고 아래의 함수를 수행:
 
 ```C
 search_binary_handler(bprm);
 ```
 
-function. This function goes through the list of handlers that contains different binary formats. Currently the Linux kernel supports following binary formats:
+이 함수는 다른 바이너리 포멧을 포함하는 핸들러의 리스트를 확인한다. 현재 리눅스 커널은 다음과 같은 바이너리 포멧을 지원한다.:
 
 * `binfmt_script` - support for interpreted scripts that are starts from the [#!](https://en.wikipedia.org/wiki/Shebang_%28Unix%29) line;
 * `binfmt_misc` - support different binary formats, according to runtime configuration of the Linux kernel;

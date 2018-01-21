@@ -95,7 +95,7 @@ first_nmi:
 +------------------------+
 ```
 
-and also an error code if an exception has it. So, after all of these manipulations our stack frame will look like this:
+그리고 만약 예외가 에러코드를 허용한다면 그것도 넣어준다. 이 모든 처리가 끝나면 우리의 스택 프레임은 아래와 같을 것이다.:
 
 ```
 +------------------------+
@@ -109,13 +109,13 @@ and also an error code if an exception has it. So, after all of these manipulati
 +------------------------+
 ```
 
-In the next step we allocate yet another `40` bytes on the stack:
+다음 단계에서 우리는 스택에 `40` 바이트의 공간을 확보한다.:
 
 ```assembly
 subq	$(5*8), %rsp
 ```
 
-and pushes the copy of the original stack frame after the allocated space:
+그리고 이전 스택 프레임의 복사본을 새로 할당된 공간에 넣는다.:
 
 ```C
 .rept 5
@@ -123,7 +123,7 @@ pushq	11*8(%rsp)
 .endr
 ```
 
-with the [.rept](http://tigcc.ticalc.org/doc/gnuasm.html#SEC116) assembly directive. We need in the copy of the original stack frame. Generally we need in two copies of the interrupt stack. First is `copied` interrupts stack: `saved` stack frame and `copied` stack frame. Now we pushes original stack frame to the `saved` stack frame which locates after the just allocated `40` bytes (`copied` stack frame). This stack frame is used to fixup the `copied` stack frame that a nested NMI may change. The second - `copied` stack frame modified by any nested `NMIs` to let the first `NMI` know that we triggered a second `NMI` and we should repeat the first `NMI` handler. Ok, we have made first copy of the original stack frame, now time to make second copy:
+[.rept](http://tigcc.ticalc.org/doc/gnuasm.html#SEC116) 지시자를 사용한다. 우리는 원래 스택 프레임의 복사본이 필요로 한다. 일반적으로 우리는 두개의 인터럽트 스택의 복사본을 가져야 할 필요가 있다. 첫번째는 `복사된(copied)` 인터럽트 스택: `저장된(saved)` 스택 프레임과 `복사된(copied)` 스택 프레임 이다. 이제 우리는 원본 스택 프레임을 `40` 바이트 바로 뒤에 위치하는 `saved` 스택 프레임에 넣어둔다. 이 스택 프레임은 nested NMI 가 변경되는 경우에 `copied` 스택 프레임을 수정 변경하기 위해 사용된다. 두 번째는 - nested NIM 에 의해 변경되는 `copied` 스택 프레임이고 첫번째 `NMI` 가 두번째 `NMI`가 시작되음은 알게 하고 첫번째 `NMI` 핸들러를 반복해야 한다. 이제, 우리는 원본 스택 프레임의 첫번째 복사를 만드는 것을 알아보았다. 이제 두 번째 복사를 만들어 보자.:
 
 ```assembly
 addq	$(10*8), %rsp
@@ -134,7 +134,7 @@ pushq	-6*8(%rsp)
 subq	$(5*8), %rsp
 ```
 
-After all of these manipulations our stack frame will be like this:
+이 모든 처리가 끝나면 우리의 스택 프레임은 아래 처럼 된다:
 
 ```
 +-------------------------+
@@ -162,14 +162,14 @@ After all of these manipulations our stack frame will be like this:
 +-------------------------+
 ```
 
-After this we push dummy error code on the stack as we did it already in the previous exception handlers and allocate space for the general purpose registers on the stack:
+다음에 우리는 이전 예외 핸들러에서 이미 했듯이 dummy 에러 코드를 스택에 넣고, 범용 레지스터를 위한 공간을 스택에 할당한다.: 
 
 ```assembly
 pushq	$-1
 ALLOC_PT_GPREGS_ON_STACK
 ```
 
-We already saw implementation of the `ALLOC_PT_GREGS_ON_STACK` macro in the third part of the interrupts [chapter](http://0xax.gitbooks.io/linux-insides/content/interrupts/interrupts-3.html). This macro defined in the [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) and yet another allocates `120` bytes on stack for the general purpose registers, from the `rdi` to the `r15`:
+우리는 이미 인터럽트 3번째 파트에서 `ALLOC_PT_GREGS_ON_STACK` 매크로의 구현을 알아보았다. 이 매크로는 [arch/x86/entry/calling.h](https://github.com/torvalds/linux/blob/master/arch/x86/entry/calling.h) 에 정의 되어 있으며, 범용 레지스터를 위해 스택에 `120` 바이트를 할당한다. `rdi` 에서 `r15`까지:
 
 ```assembly
 .macro ALLOC_PT_GPREGS_ON_STACK addskip=0
@@ -177,13 +177,13 @@ addq	$-(15*8+\addskip), %rsp
 .endm
 ```
 
-After space allocation for the general registers we can see call of the `paranoid_entry`:
+범용 레지스터들을 위한 공간 할당 이후에 우리는 `paranoid_entry` 의 호출을 할 수 있다.:
 
 ```assembly
 call	paranoid_entry
 ```
 
-We can remember from the previous parts this label. It pushes general purpose registers on the stack, reads `MSR_GS_BASE` [Model Specific register](https://en.wikipedia.org/wiki/Model-specific_register) and checks its value. If the value of the `MSR_GS_BASE` is negative, we came from the kernel mode and just return from the `paranoid_entry`, in other way it means that we came from the usermode and need to execute `swapgs` instruction which will change user `gs` with the kernel `gs`:
+우리는 이전 파트에서 이 라벨에 대해 기억할 것이다. 그것은 범용 레지스터들을 스택에 넣고, `MSR_GS_BASE` [Model Specific register](https://en.wikipedia.org/wiki/Model-specific_register) 를 읽고, 그 값을 확인한다. 만약 `MSR_GS_BASE` 의 값이 음수라면, 우리는 커널 모드로 부터 왔다는 것이고 `paranoid_entry` 를 그냥 끝낸다. 다른 경우에는 그것은 사용자 모드에서 왔다는 의미이고 커널 `gs`와 함께 사용자 `gs`를 바꾸는 `swapgs` 명령어를 실행한다.:
 
 ```assembly
 ENTRY(paranoid_entry)
@@ -201,13 +201,13 @@ ENTRY(paranoid_entry)
 END(paranoid_entry)
 ```
 
-Note that after the `swapgs` instruction we zeroed the `ebx` register. Next time we will check content of this register and if we executed `swapgs` than `ebx` must contain `0` and `1` in other way. In the next step we store value of the `cr2` [control register](https://en.wikipedia.org/wiki/Control_register) to the `r12` register, because the `NMI` handler can cause `page fault` and corrupt the value of this control register:
+`swapgs` 명령어 수행 이후에 우리는 `ebx` 레지스터를 `0`으로 채운다. 다음에 우리는 이 레지스터의 내용을 확인하고, 만약 `swapgs`가 실행되었다면, `ebx`는 반드시 `0`으로 채워져야 한다. 다음 단계에서 우리는 `cr2` [control register](https://en.wikipedia.org/wiki/Control_register) 의 값을 `r12` 레지스터에 저장한다. 이유는 `NMI` 핸들러는 `page fault` 를 일으킬 수 있고 `cr2` 레지스터를 변경 할 수 있기 때문이다.:
 
 ```C
 movq	%cr2, %r12
 ```
 
-Now time to call actual `NMI` handler. We push the address of the `pt_regs` to the `rdi`, error code to the `rsi` and call the `do_nmi` handler:
+이제 실제 `NMI` 핸들러를 호출해볼 차례이다. 우리는 `pt_regs`의 주소를 `rdi`에 넣고, 에러 코드를 `rsi`에 넣은 뒤 `do_nmi` 핸들러를 호출한다.:
 
 ```assembly
 movq	%rsp, %rdi
@@ -215,7 +215,7 @@ movq	$-1, %rsi
 call	do_nmi
 ```
 
-We will back to the `do_nmi` little later in this part, but now let's look what occurs after the `do_nmi` will finish its execution. After the `do_nmi` handler will be finished we check the `cr2` register, because we can got page fault during `do_nmi` performed and if we got it we restore original `cr2`, in other way we jump on the label `1`. After this we test content of the `ebx` register (remember it must contain `0` if we have used `swapgs` instruction and `1` if we didn't use it) and execute `SWAPGS_UNSAFE_STACK` if it contains `1` or jump to the `nmi_restore` label. The `SWAPGS_UNSAFE_STACK` macro just expands to the `swapgs` instruction. In the `nmi_restore` label we restore general purpose registers, clear allocated space on the stack for this registers, clear our temporary variable and exit from the interrupt handler with the `INTERRUPT_RETURN` macro:
+우리는 이 파트에서 조금 나중에 `do_nmi` 를 볼 것이다. 먼저 `do_nmi` 가 그 실행을 끝내고 나서 어떤 일이 일어날지 살펴 보자. `do_nmi` 핸들러 이후에는 `cr2` 레지스터를 확인할 것이다. 이유는 `do_nmi` 를 수행하는 중에 page fault 를 받았는지 확인하고 만약 그렇다면은 저장해둔 `cr2` 값을 복구하야 하기 때문이다. 만약 page fault 가 발생하지 않다면 라 벨 `1`로 점프한다. 이 다음에는 `ebx` 레지스터의 내용을 확인하고(만약 `swapgs` 명령어가 수행되다면 `0` 이어야하고, 아니라면 `1` 이어야 한다는 것을 기억하자.) 만약 `ebx`값이 `1` 이라면 `SWAPGS_UNSAFE_STACK` 를 실행하고 아니라면 `nmi_restore` 라벨로 점프한다. `SWAPGS_UNSAFE_STACK` 매크로는 `swapgs` 명령어를 단지 수행한다. `nmi_restore` 라벨에서 우리는 범용 레지스터를 복구하고, 이 레지스터를 위한 스택에 할당했던 공간을 정리, 임시 변수들도 정리하고 `INTERRUPT_RETURN` 와 함께 인터럽트 핸들러로 부터 빠져 나온다.:
 
 ```assembly
 	movq	%cr2, %rcx

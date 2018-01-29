@@ -162,7 +162,7 @@ subq	$(5*8), %rsp
 +-------------------------+
 ```
 
-다음에 우리는 이전 예외 핸들러에서 이미 했듯이 dummy 에러 코드를 스택에 넣고, 범용 레지스터를 위한 공간을 스택에 할당한다.: 
+다음에 우리는 이전 예외 핸들러에서 이미 했듯이 dummy 에러 코드를 스택에 넣고, 범용 레지스터를 위한 공간을 스택에 할당한다.:
 
 ```assembly
 pushq	$-1
@@ -237,23 +237,23 @@ nmi_restore:
 	INTERRUPT_RETURN
 ```
 
-where `INTERRUPT_RETURN` is defined in the [arch/x86/include/irqflags.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/irqflags.h) and just expands to the `iret` instruction. That's all.
+`INTERRUPT_RETURN` 은 [arch/x86/include/irqflags.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/irqflags.h) 에 정의 되어 있고, 그것은 단지 `iret` 명령어를 호출하는 것이다.
 
-Now let's consider case when another `NMI` interrupt occurred when previous `NMI` interrupt didn't finish its execution. You can remember from the beginning of this part that we've made a check that we came from userspace and jump on the `first_nmi` in this case:
+이제 다른 `NMI` 인터럽트가 발생했을 했고, 이전 `NMI` 인터럽트가 그 실행을 마무리 하지 못했을 경우를 고려해 보자. 당신은 이 파트의 초반에서 본 사용자 영역에서 왔는지 확인하고 사용자 영역에서 왔다면 `first_nmi` 로 점프했던 내용을 기억할 것이다.:
 
 ```assembly
 cmpl	$__KERNEL_CS, 16(%rsp)
 jne	first_nmi
 ```
 
-Note that in this case it is first `NMI` every time, because if the first `NMI` catched page fault, breakpoint or another exception it will be executed in the kernel mode. If we didn't come from userspace, first of all we test our temporary variable:
+만약 첫 번째 `NMI` 가 page fault, breakpoint 나 커널 모드에서 실행될 것인 다른 예외 였다면, 그 `NMI` 는 첫번째 였을 것이다. 만얀 사용자 영역으로 부터 오지 않았다면, 무엇보다도 우리는 우리의 임시 변수를 확인 했을 것이다.:
 
 ```assembly
 cmpl	$1, -8(%rsp)
 je	nested_nmi
 ```
 
-and if it is set to `1` we jump to the `nested_nmi` label. If it is not `1`, we test the `IST` stack. In the case of nested `NMIs` we check that we are above the `repeat_nmi`. In this case we ignore it, in other way we check that we above than `end_repeat_nmi` and jump on the `nested_nmi_out` label.
+그리고 만약 그것이 `1` 로 설정되어 있다면, 우리는 `nested_nmi` 라벨로 점프할 것이다. 만약 `1` 이 아니라면, 우리는 `IST` 스택을 확인 할 것이다. nested `NMI` 인 경우에 우리는 `repeat_nmi` 에 있는지 확인해야 한다. 그것을 무시하는 경우라면, 다른 말로  `end_repeat_nmi` 보다 이전 것을 확인하고, `nested_nmi_out` 라벨로 점프 할 것이다.
 
 Now let's look on the `do_nmi` exception handler. This function defined in the [arch/x86/kernel/nmi.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/nmi.c) source code file and takes two parameters:
 

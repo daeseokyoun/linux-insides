@@ -51,7 +51,7 @@ CS base     0xffff0000
 '0x10ffef'
 ```
 
-[A20 라인](https://sites.google.com/site/simplicitydrivendevelopment/un-yeongcheje/x86-un-yeongcheje-guhyeon/interrupt-and-exception)이 켜지기 전에 real mode 에서는 단지 1MB 만 접근이 가능하므로, `0x10ffef`의 주소는 `0x00ffef` 가 될 것이다.
+[A20 라인](https://sites.google.com/site/simplicitydrivendevelopment/un-yeongcheje/x86-un-yeongcheje-guhyeon/interrupt-and-exception)이 켜지기 전에 real mode 에서는 단지 64KB 만 접근이 가능하므로, `0x10ffef`의 주소는 `0x00ffef` 가 될 것이다.
 
 이제 우리는 real mode 와 메모리 주소지정에 대해 알아보았다. 이제 리셋 이후의 레지스터 값에 대한 논의로 돌아가자.:
 

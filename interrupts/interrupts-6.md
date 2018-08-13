@@ -255,10 +255,10 @@ je	nested_nmi
 
 그리고 만약 그것이 `1` 로 설정되어 있다면, 우리는 `nested_nmi` 라벨로 점프할 것이다. 만약 `1` 이 아니라면, 우리는 `IST` 스택을 확인 할 것이다. nested `NMI` 인 경우에 우리는 `repeat_nmi` 에 있는지 확인해야 한다. 그것을 무시하는 경우라면, 다른 말로  `end_repeat_nmi` 보다 이전 것을 확인하고, `nested_nmi_out` 라벨로 점프 할 것이다.
 
-Now let's look on the `do_nmi` exception handler. This function defined in the [arch/x86/kernel/nmi.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/nmi.c) source code file and takes two parameters:
+이제 'do_nmi' 예외 처리를 살펴보자. 이 함수는 [arch/x86/kernel/nmi.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/nmi.c) 에 정의되어 있다. 그리고 2개의 인자를 받는다:
 
-* address of the `pt_regs`;
-* error code.
+* `pt_regs` 의 주소;
+* 에러 코드
 
 as all exception handlers. The `do_nmi` starts from the call of the `nmi_nesting_preprocess` function and ends with the call of the `nmi_nesting_postprocess`. The `nmi_nesting_preprocess` function checks that we likely do not work with the debug stack and if we on the debug stack set the `update_debug_stack` [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) variable to `1` and call the `debug_stack_set_zero` function from the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c). This function increases the `debug_stack_use_ctr` per-cpu variable and loads new `Interrupt Descriptor Table`:
 

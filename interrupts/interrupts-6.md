@@ -260,7 +260,7 @@ je	nested_nmi
 * `pt_regs` 의 주소;
 * 에러 코드
 
-as all exception handlers. The `do_nmi` starts from the call of the `nmi_nesting_preprocess` function and ends with the call of the `nmi_nesting_postprocess`. The `nmi_nesting_preprocess` function checks that we likely do not work with the debug stack and if we on the debug stack set the `update_debug_stack` [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) variable to `1` and call the `debug_stack_set_zero` function from the [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c). This function increases the `debug_stack_use_ctr` per-cpu variable and loads new `Interrupt Descriptor Table`:
+모든 예외 처리가 그러하듯, 2개의 인자를 가지고 수행된다. `do_nmi` 는 `nmi_nesting_preprocess` 함수의 호출로 부터 시작되고 `nmi_nesting_postprocess` 함수 호출로 마무리 된다. `nmi_nesting_preprocess` 함수는 debug stack 과 함께 동작하는지 확인하는데, 만약 `update_debug_stack` [per-cpu](http://0xax.gitbooks.io/linux-insides/content/Concepts/per-cpu.html) 의 값이 `1`로 설정되어 있고, [arch/x86/kernel/cpu/common.c](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/common.c) 에 있는 `debug_stack_set_zero` 함수가 호출이 된다면 우리는 debug 스택을 사용하는 것이다. 이 함수는 `debug_stack_use_ctr` per-cpu 값을 증가 시키고, 새로운 `Interrupt Descriptor Table` 로드 한다.:
 
 ```C
 static inline void nmi_nesting_preprocess(struct pt_regs *regs)
@@ -272,7 +272,7 @@ static inline void nmi_nesting_preprocess(struct pt_regs *regs)
 }
 ```
 
-The `nmi_nesting_postprocess` function checks the `update_debug_stack` per-cpu variable which we set in the `nmi_nesting_preprocess` and resets debug stack or in another words it loads origin `Interrupt Descriptor Table`. After the call of the `nmi_nesting_preprocess` function, we can see the call of the `nmi_enter` in the `do_nmi`. The `nmi_enter` increases `lockdep_recursion` field of the interrupted process, update preempt counter and informs the [RCU](https://en.wikipedia.org/wiki/Read-copy-update) subsystem about `NMI`. There is also `nmi_exit` function that does the same stuff as `nmi_enter`, but vice-versa. After the `nmi_enter` we increase `__nmi_count` in the `irq_stat` structure and call the `default_do_nmi` function. First of all in the `default_do_nmi` we check the address of the previous nmi and update address of the last nmi to the actual:
+`nmi_nesting_postprocess` 함수는 `nmi_nesting_preprocess` 에서 설정한 `update_debug_stack` per-cpu 값과 debug 스택을 초기화, 즉 원래 `Interrupt Descriptor Table`을 다시 로드 하는 일을 해야하는지 확인한다. `nmi_nesting_preprocess` 호출된 이후에는, `do_nmi` 에서 `nmi_enter` 호출을 볼 수 있다. `nmi_enter` 는 인터럽트된 프로세스의 `lockdep_recursion` 항목을 증가시키고, 선점 카운터(preempt counter) 를 갱신하고, [RCU](https://en.wikipedia.org/wiki/Read-copy-update) 서브시스템으로 `NMI` 관한 정보를 알려준다. `do_nmi` 에 `nmi_exit` 함수도 보이는데, 이 함수는 `nmi_enter` 와 같은 일을 한다. 하지만, 반대로 진행한다. `nmi_enter` 호출 이후에, `irq_stat` 구조체의 `__nmi_count` 를 증가시키고, `default_do_nmi` 를 호출한다. `default_do_nmi` 는 우선적으로 이전 nmi 의 주소와 마지막 nmi 의 갱신된 주소를 확인한다.:
 
 ```C
 if (regs->ip == __this_cpu_read(last_nmi_rip))
